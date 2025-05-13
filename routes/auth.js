@@ -2,6 +2,7 @@ import express from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
+import authRoutes from '../routes/auth.js';
 
 //define the router. This will handle the routes and be used to handle requests from the frontend.
 const router = express.Router();
@@ -60,8 +61,10 @@ router.post('/login', async (req, res) => {
         
         
         }
-        const token = jwt.sign({ id: user._id, email : user.email},
-        process.env.JWT_SECRET,
+        const token = jwt.sign({ id: user._id, email : user.email}, //sign the token. This will be used to authenticate the user in the future.
+       //payload is the data that will be stored in the token, in this case the user id and email.
+       //this is the very secret key that will be used to sign the token. Keep it secret, keep it safe.
+            process.env.JWT_SECRET,
         { expiresIn: '2h' })
 
         res.status(200).json({token, message: "Logged in successfully!"})
@@ -78,5 +81,6 @@ router.post('/login', async (req, res) => {
 
 });
 
+//return the router. This will be used in the server.js file to handle the routes and to handle the requests from the front end.
 export default router;
 
