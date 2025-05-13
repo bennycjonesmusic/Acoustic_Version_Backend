@@ -1,7 +1,7 @@
 import express from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import User from '../models/User.js;'
+import User from '../models/User.js';
 
 //define the router. This will handle the routes and be used to handle requests from the frontend.
 const router = express.Router();
@@ -47,15 +47,36 @@ router.post('/login', async (req, res) => {
     try {
 
         const {email, password} = req.body; //destructuring again. how repetitive. 
+        const user = await User.findOne({email}); //find the user in the database. Will return user if found, otherwise null.
+        if (!user) {
 
+            return res.status(400).json({ message: "Invalid email or password" });
+            //400 means naughty request. User not found. No cake for you.
+        }
+
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) {
+            return res.status(400).json({message: "Invalid email or password" })
+        
+        
+        }
+        const token = jwt.sign({ id: user._id, email : user.email},
+        process.env.JWT_SECRET,
+        { expiresIn: '2h' })
+
+        res.status(200).json({token, message: "Logged in successfully!"})
 
 
     } catch (error) {
-
+        console.error('Error logging in:', error);
+        res.status(500).json({ message: "Internal server error" });
+        //500 means error on the server side.
     }
 
 
 
 
-} )
+});
+
+export default router;
 
