@@ -1,11 +1,15 @@
 import jwt from 'jsonwebtoken'; 
+import dotenv from 'dotenv';
 
 // Middleware is a function that has access to the request (req), response (res), and next().
 // It can read or modify the request (e.g. check if a user is authenticated),
 // and either respond to the client or pass control to the next middleware or route handler.
 
+   
 const authMiddleware = (req, res, next) => {
-    const token = req.header('Authorization'); //pull http header from the request. 
+    const authHeader = req.header('Authorization'); //pull http header from the request. 
+    
+    const token = authHeader.split(' ')[1];  //was getting an error in postman. Let us try this.
     if (! token) {
 
         //if token does not exist, return 401.

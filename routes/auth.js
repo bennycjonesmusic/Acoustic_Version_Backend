@@ -2,7 +2,8 @@ import express from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
-import authRoutes from '../routes/auth.js';
+import dotenv from 'dotenv';
+
 
 //define the router. This will handle the routes and be used to handle requests from the frontend.
 const router = express.Router();
@@ -12,7 +13,7 @@ router.post('/register', async (req, res) => {
 
     //try first so if there is an error, it will be caught and handled like a pro.
     try {
-    const {email, password} = req.body; //destructure. this makes code cleaner rather than writing req.body.email e.t.c
+    const {email, password, role = "user"} = req.body; //destructure. this makes code cleaner rather than writing req.body.email e.t.c
     const existingUser = await User.findOne({ email });
 
     if (existingUser){
@@ -61,9 +62,11 @@ router.post('/login', async (req, res) => {
         
         
         }
-        const token = jwt.sign({ id: user._id, email : user.email}, //sign the token. This will be used to authenticate the user in the future.
+        const token = jwt.sign({ id: user._id, email : user.email, role: user.role}, //sign the token. This will be used to authenticate the user in the future.
        //payload is the data that will be stored in the token, in this case the user id and email.
        //this is the very secret key that will be used to sign the token. Keep it secret, keep it safe.
+
+       //role is used to determine if the user is an artist or not. This will be used in the future to protect song upload routes e.t.c
             process.env.JWT_SECRET,
         { expiresIn: '2h' })
 
