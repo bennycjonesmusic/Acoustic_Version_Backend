@@ -19,6 +19,7 @@ try {
     }
 
     req.user = decoded;
+    req.userId = decoded.id; //store the user ID in request object
 
     next(); //call route handler
 

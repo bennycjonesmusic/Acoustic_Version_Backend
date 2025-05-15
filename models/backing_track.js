@@ -29,7 +29,8 @@ const backingTrackSchema = new mongoose.Schema({
   createdAt: {
     type: Date,
     default: Date.now
-  }
+  },
+  s3Key: { type: String, required: true }
 });
 
 // Create the model

@@ -7,6 +7,7 @@ import mongoose from 'mongoose'; // This module is used to connect to MongoDB. F
 import authRoutes from './routes/auth.js';
 import authMiddleware from './middleware/customer_auth.js';
 import artistAuthMiddleware from './middleware/artist_auth.js';
+import clearS3 from './routes/clear_s3.js';
 
 
 
@@ -29,6 +30,7 @@ app.use(express.json());
 
 //When /auth is hit, use the authRoutes. 
 app.use("/auth", authRoutes);
+app.use("/admin", clearS3);
 app.get('/', (req, res) =>{
 
     res.send('Testicles');

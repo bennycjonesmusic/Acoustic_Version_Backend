@@ -10,6 +10,8 @@ import backingTrack from "../models/backing_track.js";
 import upload from '../middleware/song_upload.js';
 import authMiddleware from '../middleware/customer_auth.js';
 import artistAuthMiddleware from '../middleware/artist_auth.js';
+import { DeleteObjectCommand } from '@aws-sdk/client-s3'
+
 
 //define the router. This will handle the routes and be used to handle requests from the frontend.
 const router = express.Router();
@@ -90,7 +92,7 @@ router.post('/login', async (req, res) => {
 
 });
 
-//now we handle the upload of backing tracks.
+//now we handle the upload of backing tracks. Create, Read, Update and Delete Operations. For now though, create and delete will suffice.
 
 router.post('/upload', authMiddleware, upload.single('file'), async (req, res) => {
     try {
@@ -119,7 +121,8 @@ router.post('/upload', authMiddleware, upload.single('file'), async (req, res) =
         const data = await new Upload({
             client: s3Client,
             params: uploadParams,
-        }).done();
+        }).done(); //file uploaded to S3
+        console.log('File uploaded successfully', data)
 
         // Save metadata to MongoDB
         const newTrack = new backingTrack({
@@ -146,6 +149,125 @@ router.post('/upload', authMiddleware, upload.single('file'), async (req, res) =
     }
 });
 
+router.delete('/delete/:id', authMiddleware, async(req, res) => { 
+
+    try{
+
+        const Track = await backingTrack.findById(req.params.id); //query the mongo database for the track with the corresponding id.
+
+        if (!Track) {
+
+            return res.status(404).json({ message: "Track not found."});
+            //404 = not found. I know I keep writing this, but I want to make sure I remember.
+        }
+
+        if (Track.user.toString() !== req.userId) { //if the user id of the track does not match, forbid it!
+
+            return res.status(403).json({ message: "You are not authorized to delete this track."});
+            //403 = forbidden. Naughty, naughty.
+        }
+
+           if (!Track.s3Key) {
+      return res.status(400).json({ message: "Track does not have an associated s3Key." });
+    }
+        const s3Client = new S3Client({
+            region: process.env.AWS_REGION,
+            credentials: {
+                accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+                secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+            },
+        }); //ensure s3 file is deleted, this simply opens the s3 client. Now we need to delete the file.
+
+        const deleteParameters = {
+
+            Bucket: process.env.AWS_BUCKET_NAME,
+            Key: Track.s3Key, //upload key. Connected with schema. 
+
+        };
+
+        await s3Client.send(new DeleteObjectCommand(deleteParameters)); //delete from s3.
+
+        await backingTrack.findByIdAndDelete(req.params.id); //delete from mongo.
+
+        res.status(200).json({ message: 'Track and file deleted' });
+
+    }catch(error) {
+
+        console.error('There was an error deleting track:', error);
+        res.status(500).json({ message: 'Internal server error' });
+        //500 = internal server error. These codes are not sticking in my head. 
+
+
+    }
+    
+
+
+
+
+
+
+})
+
+router.get('/tracks', authMiddleware, async (req, res) => {
+
+    try { 
+        const tracks = await backingTrack.find({ user: req.userId }).sort({ createdAt: -1 });
+        res.status(200).json(tracks); "Success!!"
+    } catch (error) {
+
+        console.error('Error fetching tracks:', error);
+        res.status(500).json({ message: 'Internal server error' });
+        //500 ONCE again means internal server error.
+    }
+
+
+
+})
 //return the router. This will be used in the server.js file to handle the routes and to handle the requests from the front end.
+
+
+//update S3 File for ID's that were not initially added.
+router.put('/updateS3/:id', authMiddleware, async (req, res) => {
+
+try{
+
+const track = await backingTrack.findById(req.params.id);
+
+if (!track) {
+
+    return res.status(404).json({ message: "Track not found."});
+  
+
+}
+
+if (track.user.toString() !== req.userId) {
+
+
+    return res.status(403).json({ message: "You are not authorized to update this track."});
+    
+}
+
+const updatedTrack = await backingTrack.findByIdAndUpdate(
+    req.params.id,
+    { s3Key: req.body.s3Key },
+    { new: true } //
+)
+
+
+res.status(200).json({ message: 'S3 Key updated successfully', track: updatedTrack });
+}catch(error) {
+
+console.error('Error updating s3Key:', error);
+  res.status(500).json({ message: 'Internal server error' });
+
+}
+
+
+
+
+
+
+});
+
 export default router;
 
