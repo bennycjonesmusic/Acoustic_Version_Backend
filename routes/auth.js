@@ -1,9 +1,15 @@
 import express from 'express';
+import fs from 'fs';
+import { S3Client } from '@aws-sdk/client-s3';  // AWS SDK v3 for S3
+import { Upload } from '@aws-sdk/lib-storage';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import dotenv from 'dotenv';
-
+import backingTrack from "../models/backing_track.js";
+import upload from '../middleware/song_upload.js';
+import authMiddleware from '../middleware/customer_auth.js';
+import artistAuthMiddleware from '../middleware/artist_auth.js';
 
 //define the router. This will handle the routes and be used to handle requests from the frontend.
 const router = express.Router();
@@ -82,6 +88,62 @@ router.post('/login', async (req, res) => {
 
 
 
+});
+
+//now we handle the upload of backing tracks.
+
+router.post('/upload', authMiddleware, upload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ message: 'No file uploaded' });
+        }
+
+        // Stream the file from local disk to S3
+        const fileStream = fs.createReadStream(req.file.path);
+
+        const s3Client = new S3Client({
+            region: process.env.AWS_REGION,
+            credentials: {
+                accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+                secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+            },
+        });
+
+        const uploadParams = {
+            Bucket: process.env.AWS_BUCKET_NAME,
+            Key: `songs/${Date.now()}-${req.file.originalname}`,
+            Body: fileStream,
+            ACL: 'private',
+        };
+
+        const data = await new Upload({
+            client: s3Client,
+            params: uploadParams,
+        }).done();
+
+        // Save metadata to MongoDB
+        const newTrack = new backingTrack({
+            title: req.body.title || req.file.originalname,
+            description: req.body.description || 'No description provided',
+            fileUrl: data.Location,
+            s3Key: uploadParams.Key,
+            price: parseFloat(req.body.price) || 0,
+            user: req.userId, 
+        });
+
+        await newTrack.save();
+
+        
+        fs.unlinkSync(req.file.path);
+
+        res.status(200).json({
+            message: 'File uploaded successfully!',
+            track: newTrack,
+        });
+    } catch (error) {
+        console.error('Error uploading backing track:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
 });
 
 //return the router. This will be used in the server.js file to handle the routes and to handle the requests from the front end.

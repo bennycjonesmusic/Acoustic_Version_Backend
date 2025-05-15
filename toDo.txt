@@ -1,0 +1,79 @@
+/*
+
+to do: only accept certain file types. MP3, WAV e.t.c
+
+add a file size limit. Reasonable size for a backing track is 10MB (apparently) 
+
+Make sure users and customers have permanent access to their files. Offer a premium subscription 
+for higher quality files. 
+
+Number of downloads per song. Popular songs will be near the top of the list.
+Offer a featured backing track section on front page for those who pay for it.
+
+Make sure that file names are non-offensive. No weird names. Do correct REGEX so that usernames e.t.c 
+are friendly for all ages. Screen for offensive words.
+
+Profile pictures will need to be non offensive. AWS Rekognition can help with this.
+
+is cover===true then input original song artist. We need a way to easily copyright. 
+Might be better to get users to copyright their own? if not then Audio.
+
+licensingStatus: 'pending' for example in mongodb
+
+licensingStatus: 'licensed'
+licensedBy: 'admin'
+licenseDate: Date
+
+Add a checkbox during upload:
+
+☑️ “I confirm that I either own this recording or am submitting it for licensing via this platform.”
+
+
+🔸 Audd.io
+Music recognition API, but not for licensing.
+
+Can tell you what song it is — useful for flagging content
+
+
+
+Form Fields:
+
+Track Title
+
+Original Artist
+
+Composer
+
+Copyright Declaration:
+
+Are they the original composer or performer?
+
+Do they have rights to distribute this track (license declaration)?
+
+License Information (optional, for tracks that need a license)
+
+License Type (if applicable: e.g., cover song license, public domain, etc.)
+
+License ID (from MCPS or other rights holders)
+
+Where This Goes:
+
+Store the metadata and license status in your MongoDB database.
+
+You could use a backingTrack schema with fields like licenseType, licenseVerified, licenseId, etc.
+
+hen a user downloads a backing track, you’ll want to:
+
+Track the download in your database (e.g., increase a downloadCount or downloads field).
+
+Associate the download with the correct licensing status to ensure you're compliant with the law.
+
+Set the track’s license status to “pending” initially, and once verified (manually or automatically), change it to “licensed” in the system.
+
+You could build an admin panel for yourself to audit and verify the licenses for tracks that need to be checked manually (e.g., if the track is a cover song).
+
+Create a Terms of Service or License Agreement
+
+
+audition musicians to post
+*/
