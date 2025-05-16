@@ -77,3 +77,11 @@ Create a Terms of Service or License Agreement
 
 audition musicians to post
 */
+
+
+
+import express from 'express';
+import User from '../models/User.js';
+
+const router = express.Router();
+

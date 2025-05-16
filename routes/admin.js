@@ -70,6 +70,19 @@ router.delete('/delete-all-users', async (req, res) => {
 });
 
 
+router.get('/users', async (req, res) => {
+
+    try {
+    const users = await User.find() .select('-password -__v') //exclude password and version. 
+      .populate('uploadedTracks', 'title fileUrl');
+
+      res.status(200).json(users);
+}catch(error) {
+    console.error('Problem fetching users:', error);
+    res.status(500).json({ message: "Error getting users" });
+}
+
+})
 
 
 export default router;
