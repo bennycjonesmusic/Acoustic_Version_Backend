@@ -207,7 +207,7 @@ router.delete('/delete/:id', authMiddleware, async(req, res) => {
 
 
 })
-
+//get tracks from the user. This will be used to display the tracks on the front end.
 router.get('/tracks', authMiddleware, async (req, res) => {
 
     try { 

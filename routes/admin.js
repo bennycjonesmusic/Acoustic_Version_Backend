@@ -2,11 +2,13 @@ import { S3Client, ListObjectsCommand, DeleteObjectsCommand } from '@aws-sdk/cli
 import { Router } from 'express';
 import authMiddleware from '../middleware/customer_auth.js'
 import dotenv from 'dotenv';
+import User from '../models/User.js';
 
 //import necessary modules
 
 const router = Router(); 
 
+//delete all songs in the S3 bucket. Need to make sure this route is protected.
 router.delete('/clear-s3', authMiddleware, async (req, res) => {
 
 try {
@@ -50,6 +52,24 @@ try {
 
 
 });
+
+// Route to delete all users
+router.delete('/delete-all-users', async (req, res) => {
+  try {
+    const result = await User.deleteMany({}); // Delete all users using Mongoose method
+    if (result.deletedCount === 0) {
+        return res.status(404).json({ message: 'No users found to delete' });     //if no users...
+    }
+
+
+    res.status(200).json({ message: `${result.deletedCount} users deleted` });
+  } catch (error) {
+    console.error('Error deleting all users:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+
 
 
 export default router;
