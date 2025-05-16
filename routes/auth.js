@@ -134,8 +134,14 @@ router.post('/upload', authMiddleware, upload.single('file'), async (req, res) =
             user: req.userId, 
         });
 
-        await newTrack.save();
 
+
+        await newTrack.save();
+        const updateUser = await User.findByIdAndUpdate(req.userId, {$push: {uploadedTracks: newTrack._id } },  { new: true } ); //push the new track to the user.
+        if (!updateUser) {
+
+            return res.status(404).json({ message: "User not found."}); //I don't want the song to be uploaded if user is not found.
+        }
         
         fs.unlinkSync(req.file.path);
 
@@ -185,6 +191,7 @@ router.delete('/delete/:id', authMiddleware, async(req, res) => {
 
         };
 
+        await User.findByIdAndUpdate(req.userId, { $pull: {uploadedTracks: req.params.id } }, { new: true } ); //delete the track from the user. Nice.
         await s3Client.send(new DeleteObjectCommand(deleteParameters)); //delete from s3.
 
         await backingTrack.findByIdAndDelete(req.params.id); //delete from mongo.
