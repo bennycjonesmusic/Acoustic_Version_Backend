@@ -19,8 +19,8 @@ const authMiddleware = (req, res, next) => {
 
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET); //verify the token. This will check for token validity.
-        req.user = decoded;  //if token is valid, set the user to the decoded token. can now access user through protected routes.
-        req.userId = decoded.id; 
+        req.user = decoded;  //if token is valid, set the user to the decoded token. 
+        req.userId = decoded.id; //we do this so that we can access the user ID in further middleware, because decoded id gives us the user ID.
        
         next(); //call the next middleware function. 
     } catch (error) {
