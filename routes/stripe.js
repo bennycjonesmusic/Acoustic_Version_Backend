@@ -1,7 +1,9 @@
 import express from 'express';
 import stripe from 'stripe';
-import authMiddleware from '../middleware/customer_auth';
+import authMiddleware from '../middleware/customer_auth.js';
 import User from '../models/User.js';
+import BackingTrack from '../models/backing_track.js';
+
 
 const stripeClient = stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -9,7 +11,10 @@ const router = express.Router();
 
 router.post('/create-checkout-session', authMiddleware, async (req, res) => {
 try {
-
+    const track = await BackingTrack.getById(req.body.trackId);
+    if (!track) {
+        return res.status(404).json({ error: 'Track not found' });
+    }
     const {amount } = req.body;
     const session = await stripeClient.checkout.sessions.create({
         payment_method_types: ['card'],
@@ -28,6 +33,10 @@ try {
         mode: 'payment',
         success_url: `${process.env.CLIENT_URL}/success`,
         cancel_url: `${process.env.CLIENT_URL}/cancel`,
+         metadata: {
+                userId: req.userId, // Add userId to metadata
+                trackId: track._id.toString(), // Add trackId to metadata
+            }
 
     });
      if (! session) {
@@ -102,6 +111,11 @@ router.post('/checkout/artist/:trackId', authMiddleware, async (req, res) => {
         }
         const price = track.price * 100; // convert to pence
 
+           if (req.userId === track.user.toString()) {
+    return res.status(400).json({ error: 'You cannot purchase your own track.' });
+}
+     
+
         const session = await stripeClient.checkout.sessions.create({
             payment_method_types: ['card'],
             line_items: [
@@ -120,7 +134,7 @@ router.post('/checkout/artist/:trackId', authMiddleware, async (req, res) => {
                 },
             ],
             mode: 'payment',
-            success_url: `${process.env.CLIENT_URL}/success?session_id={CHECKOUT_SESSION_ID}`,
+            success_url: `${process.env.CLIENT_URL}/success?session_id={CHECKOUT_SESSION_ID}`, //session id will be used to retrieve the session from frontend
             cancel_url: `${process.env.CLIENT_URL}/cancel`,
             payment_intent_data: {
                 application_fee_amount: Math.round(price * 0.1), // 10% fee

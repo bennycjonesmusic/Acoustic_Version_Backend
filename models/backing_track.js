@@ -30,7 +30,17 @@ const backingTrackSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   },
-  s3Key: { type: String, required: true }
+  s3Key: { type: String, required: true },
+  purchaseCount: { type: Number, default: 0 },
+  licenseStatus: {
+    type: String,
+    enum: ['unlicensed', 'licensed', 'pending'],
+    default: 'pending',
+  }, downloadCount: {
+    type: Number,
+    default: 0,
+  }
+
 });
 
 // Create the model

@@ -1,19 +1,23 @@
-import mongoose from 'mongoose'; // Import mongoose to use the schema
+import mongoose from 'mongoose';
 
 const userSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
-  role: {type: String, default: 'user'},
+  password: { type: String, required: true }, //perhaps use bcrypt here
+  role: { type: String, default: 'user' }, // 
+  stripeAccountId: { type: String, required: false }, // 
   uploadedTracks: [{
-    type: mongoose.Schema.Types.ObjectId, // ObjectId type for linking to another model
-    ref: 'BackingTrack', // This references the 'BackingTrack' model
-    required: false // Not required for user creation
-
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'BackingTrack',
+    required: false
+  }],
+  boughtTracks: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'BackingTrack',
+    required: false
   }]
- 
 }, {
-  timestamps: true, // Automatically adds createdAt and updatedAt fields
+  timestamps: true, // 
 });
 
-const User = mongoose.model('User', userSchema); // Create the model. This will be used to create the usernames and passwords in the database.
-export default User; // Export the model for use elsewhere in the app.
+const User = mongoose.model('User', userSchema);
+export default User;

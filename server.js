@@ -8,7 +8,8 @@ import authRoutes from './routes/auth.js';
 import authMiddleware from './middleware/customer_auth.js';
 import artistAuthMiddleware from './middleware/artist_auth.js';
 import adminRoutes from './routes/admin.js';
-
+import stripeRoutes from './routes/Stripe.js';
+import webhookRoutes from './routes/webhook.js';
 
 
 
@@ -31,6 +32,8 @@ app.use(express.json());
 //When /auth is hit, use the authRoutes. 
 app.use("/auth", authRoutes);
 app.use("/admin", adminRoutes);
+app.use('/stripe', stripeRoutes);
+app.use('/webhook', webhookRoutes);
 app.get('/', (req, res) =>{
 
     res.send('Testicles');
@@ -53,4 +56,4 @@ app.listen(port, () => {
 console.log(`Server is running on http://localhost:${port}`); //check the console to see if server is running
 });
 
- //check aws has loaded properly. 
+ //check aws has loaded properly.
