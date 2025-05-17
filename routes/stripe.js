@@ -9,13 +9,20 @@ const stripeClient = stripe(process.env.STRIPE_SECRET_KEY);
 
 const router = express.Router();
 
+//create checkout session for backing track purchase
 router.post('/create-checkout-session', authMiddleware, async (req, res) => {
 try {
     const track = await BackingTrack.getById(req.body.trackId);
     if (!track) {
         return res.status(404).json({ error: 'Track not found' });
     }
-    const {amount } = req.body;
+    const {amount } = req.body; //get the amount from the request body using destructuring
+    
+    if (!amount || isNaN(amount)) {
+        return res.status(400).json({ error: "Track price is not valid" });
+    }
+
+
     const session = await stripeClient.checkout.sessions.create({
         payment_method_types: ['card'],
         line_items: [
@@ -34,7 +41,7 @@ try {
         success_url: `${process.env.CLIENT_URL}/success`,
         cancel_url: `${process.env.CLIENT_URL}/cancel`,
          metadata: {
-                userId: req.userId, // Add userId to metadata
+                userId: req.userId.toString(), // Add userId to metadata
                 trackId: track._id.toString(), // Add trackId to metadata
             }
 
@@ -58,7 +65,7 @@ try {
 
 });
 
-
+//create account link for Stripe onboarding.
 router.post('/create-account-link', authMiddleware, async (req, res) => {
     try {
         const user = await User.findById(req.userId);

@@ -9,8 +9,8 @@ import { DeleteObjectCommand } from '@aws-sdk/client-s3';
 
 export const register = async (req, res) => {
     try {
-        const { email, password, role = "user" } = req.body;
-        const existingUser = await User.findOne({ email });
+        const { username, email, password, role = "user" } = req.body;
+        const existingUser = await User.findOne({ $or: [ {email } , { username } ] });
         if (existingUser) {
             return res.status(400).json({ message: "User already exists!" });
         }
@@ -26,8 +26,8 @@ export const register = async (req, res) => {
 
 export const login = async (req, res) => {
     try {
-        const { email, password } = req.body;
-        const user = await User.findOne({ email });
+        const { login, password } = req.body;
+        const user = await User.findOne({$or: [{email: login}, {username: login}]});
         if (!user) {
             return res.status(400).json({ message: "Invalid email or password" });
         }

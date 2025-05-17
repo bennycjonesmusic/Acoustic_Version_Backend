@@ -6,6 +6,8 @@ import BackingTrack from '../models/backing_track.js';
 const router = express.Router();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
+//webhook is used to send data from stripe to my server
+
 //no json for webhook 
 router.post('/', express.raw({ type: 'application/json' }), async (req, res) => {
   const sig = req.headers['stripe-signature'];
@@ -23,7 +25,7 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
     const session = event.data.object;
 
     try {
-      // You can include metadata during session creation to track user & track ID
+     
       const userId = session.metadata.userId;
       const trackId = session.metadata.trackId;
 
@@ -37,6 +39,11 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
 
         // Optionally increment download or purchase count
         track.purchaseCount = (track.purchaseCount || 0) + 1;
+        const artist = await User.findById(track.user);
+        if (artist) {
+          artist.amountOfTracksSold += 1;
+          await artist.save();
+        }
         await track.save();
 
         console.log(`Purchase recorded for ${user.email}`);
@@ -51,4 +58,3 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
 
 export default router;
 
-//generated with AI.

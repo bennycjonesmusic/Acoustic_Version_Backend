@@ -26,6 +26,17 @@ const backingTrackSchema = new mongoose.Schema({
     ref: 'User', // This references the 'User' model
     required: true // Ensure that the track is always linked to a user
   },
+  genre: {
+    type: String,
+    required: false,
+
+  }, qualityValidated: {
+    type: String,
+    enum: ['yes', 'no'],
+    default: 'no',
+
+
+  },
   createdAt: {
     type: Date,
     default: Date.now
