@@ -50,9 +50,13 @@ const backingTrackSchema = new mongoose.Schema({
   }, downloadCount: {
     type: Number,
     default: 0,
-  }
+  },
+  reviews: [reviewSchema]
+
 
 });
+
+backingTrackSchema.index({ name: 'text' });
 
 // Create the model
 const BackingTrack = mongoose.model('BackingTrack', backingTrackSchema);
