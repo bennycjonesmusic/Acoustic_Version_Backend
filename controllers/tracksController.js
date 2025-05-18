@@ -1,6 +1,6 @@
 import { ListObjectsV2Command, S3Client } from '@aws-sdk/client-s3';
 import BackingTrack from '../models/backing_track.js';
-import { parseKeySignature } from './utils';  
+import { parseKeySignature } from '../utils/parseKeySignature.js';  
 
 export const listS3 = async (req, res) => {
     const s3 = new S3Client({

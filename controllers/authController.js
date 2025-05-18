@@ -6,6 +6,9 @@ import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import backingTrack from '../models/backing_track.js';
 import { DeleteObjectCommand } from '@aws-sdk/client-s3';
+import ProfanityFilter from 'profanity-filter';//package to prevent profanity
+import zxcvbn from 'zxcvbn'; //package for password strength
+import { validateEmail } from '../utils/emailValidator.js';
 
 export const register = async (req, res) => {
     try {
@@ -13,6 +16,26 @@ export const register = async (req, res) => {
         const existingUser = await User.findOne({ $or: [ {email } , { username } ] });
         if (existingUser) {
             return res.status(400).json({ message: "User already exists!" });
+        }
+
+        const profanity = new ProfanityFilter();
+        
+        if (profanity.isProfane(username)){
+
+            return res.status(400).json({message: "Vulgar language detected. Please use nice words."})
+
+        }
+        const isEmailValid = await validateEmail(email);
+
+        if (! isEmailValid){
+
+        return res.status(400).json({message: "Invalid email, please try a different email"});
+        }
+
+        const passwordStrength = zxcvbn(password);
+        if (passwordStrength.score < 3){
+
+            return res.status(400).json({message: "Password is too weak. Needs more power."});
         }
         const hashedPassword = await bcrypt.hash(password, 10);
         const newUser = new User({ username, email, password: hashedPassword });

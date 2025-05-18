@@ -30,33 +30,32 @@ const backingTrackSchema = new mongoose.Schema({
   //define key signature, will be used in querying.
   key: {
     enum: ["A", "B", "C", "D", "E", "F", "G"],
-    required: false,
-
+  
     
 
   },
     isFlat: {
     type: Boolean,
     default: false,
-    required: false,
+
   },
 
   isSharp: {
     type: Boolean,
     default: false,
-    required: false,
+
   },
 
   vocalRange: {
 
     type: String,
     enum: ["Soprano", "Mezzo-Soprano", "Contralto", "Countertenor", "Tenor", "Baritone", "Bass;"],
-    required: false,
+  
   },
  
   genre: {
     type: String,
-    required: false,
+  
 
   }, qualityValidated: {
     type: String,
