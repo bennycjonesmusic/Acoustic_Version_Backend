@@ -10,6 +10,7 @@ import artistAuthMiddleware from './middleware/artist_auth.js';
 import adminRoutes from './routes/admin.js';
 import stripeRoutes from './routes/Stripe.js';
 import webhookRoutes from './routes/webhook.js';
+import tracksRoutes from './routes/tracks.js';
 
 
 
@@ -34,6 +35,7 @@ app.use("/auth", authRoutes);
 app.use("/admin", adminRoutes);
 app.use('/stripe', stripeRoutes);
 app.use('/webhook', webhookRoutes);
+app.use('/tracks', tracksRoutes);
 app.get('/', (req, res) =>{
 
     res.send('Testicles');

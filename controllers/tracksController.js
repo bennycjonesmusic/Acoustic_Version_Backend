@@ -1,5 +1,5 @@
 import { ListObjectsV2Command, S3Client } from '@aws-sdk/client-s3';
-import BackingTrack from '../models/backing_track';
+import BackingTrack from '../models/backing_track.js';
 
 export const listS3 = async (req, res) => {
     const s3 = new S3Client({

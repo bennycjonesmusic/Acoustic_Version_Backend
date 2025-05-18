@@ -51,12 +51,12 @@ const backingTrackSchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
-  reviews: [reviewSchema]
+  //reviews: [reviewSchema] //need to make review schema
 
 
 });
 
-backingTrackSchema.index({ name: 'text' });
+backingTrackSchema.index({ title: 'text' });
 
 // Create the model
 const BackingTrack = mongoose.model('BackingTrack', backingTrackSchema);

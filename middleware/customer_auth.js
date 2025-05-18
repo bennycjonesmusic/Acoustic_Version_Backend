@@ -9,6 +9,9 @@ import dotenv from 'dotenv';
 const authMiddleware = (req, res, next) => {
     const authHeader = req.header('Authorization'); //pull http header from the request. 
     
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ message: 'Unauthorized: No token provided' });
+  }
     const token = authHeader.split(' ')[1];  //was getting an error in postman. Let us try this. split the token, access it via index[1]
     if (! token) {
 
