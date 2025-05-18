@@ -17,8 +17,27 @@ const s3Client = new S3Client({
     },
 });
 
+const storage = multer.memoryStorage();
 // Setup multer for temporary file storage
-const upload = multer({ dest: 'uploads/' }); // Store files temporarily on disk
+
+const fileFilter = (req, file, cb) => {
+
+    if (file.mimetype !== 'audio'){
+        return cb(new Error('Only audio files allowed!'), false);
+    };
+
+    if (file.size > 50 * 1024 * 1024){
+        return cb(new Error('File larger than 50mb'), false);
+    }
+
+    cb(null, true);
+}
+const upload = multer({ 
+    storage: storage,
+    fileFilter: fileFilter
+
+
+}); // Store files temporarily on disk
 
 // Export the upload middleware as default
 export default upload;
