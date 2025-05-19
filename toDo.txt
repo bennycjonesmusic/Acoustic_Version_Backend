@@ -1,5 +1,7 @@
 /*
 
+Work and on and personalise Email Authentication as generated with AI to create a quick boilerplate.
+
 to do: only accept certain file types. MP3, WAV e.t.c
 
 add a file size limit. Reasonable size for a backing track is 10MB (apparently) 

@@ -1,5 +1,5 @@
 import express from 'express';
-import { verifyEmail } from '../controllers/authController.js';
+import { verifyEmail } from '../controllers/emailAuthController.js';
 import upload from '../middleware/song_upload.js';
 import authMiddleware from '../middleware/customer_auth.js';
 import artistAuthMiddleware from '../middleware/artist_auth.js';
