@@ -1,3 +1,5 @@
+import dotenv from 'dotenv'; 
+dotenv.config(); 
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import { sendVerificationEmail } from '../utils/emailAuthentication.js';
@@ -32,7 +34,7 @@ export const verifyEmail = async (req, res) => {
         }
 
         // Mark the user as verified
-        user.isVerified = true;
+        user.verified = true;
         await user.save();
 
         res.status(200).json({ message: "Email successfully verified!" });
@@ -79,6 +81,10 @@ export const resendEmail = async(req, res) => { //controller to resend verificat
         );
 
         await sendVerificationEmail(user.email, token);
+
+
+        user.verified = true;
+        await user.save(); //should fix bug
 
 
         return res.status(200).json({message: "Verification email successfully sent"});
