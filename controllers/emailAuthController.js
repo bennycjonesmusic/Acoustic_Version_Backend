@@ -29,7 +29,7 @@ export const verifyEmail = async (req, res) => {
         }
 
         // If the user is already verified, return a message
-        if (user.isVerified) {
+        if (user.verified) {
             return res.status(200).json({ message: "Email already verified." });
         }
 

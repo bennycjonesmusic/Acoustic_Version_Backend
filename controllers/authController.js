@@ -6,6 +6,7 @@ import jwt from 'jsonwebtoken'; //going to use in register as well, to authentic
 import User from '../models/User.js';
 import backingTrack from '../models/backing_track.js';
 import { DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { GetObjectCommand } from '@aws-sdk/client-s3';
 import * as Filter from 'bad-words'; //package to prevent profanity
 import zxcvbn from 'zxcvbn'; //package for password strength
 import { validateEmail } from '../utils/emailValidator.js';
@@ -182,7 +183,7 @@ export const updateS3Key = async (req, res) => {
     }
 };
 
-export const downLoadTrack = async (req, res) => {
+export const downloadTrack = async (req, res) => {
 
 try {
 
@@ -190,6 +191,19 @@ try {
     if (!track) {
         return res.status(404).json({message: "Track not found."});
     }
+
+    const userId = req.userId;
+
+    const user = await User.findById(userId); //find the user wanting to download track
+
+    const hasBought = user.boughtTracks.some(id => id.equals(track._id)); //had to use .some so we can access the .equals method. .includes used strict equality === which is not correct here.
+    const hasUploaded = user.uploadedTracks.some(id => id.equals(track._id));
+
+    if (!hasBought && !hasUploaded){
+    
+        return res.status(403).json({message: "You are not allowed to download this track. Please purchase"})
+    }
+
 
      const s3Client = new S3Client({
             region: process.env.AWS_REGION,
@@ -201,7 +215,7 @@ try {
 
           const createParameters = {
             Bucket: process.env.AWS_BUCKET_NAME,
-            Key: Track.s3Key,
+            Key: track.s3Key,
         };
 
         const command = new GetObjectCommand(createParameters);
