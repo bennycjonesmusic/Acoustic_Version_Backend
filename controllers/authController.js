@@ -9,7 +9,7 @@ import { DeleteObjectCommand } from '@aws-sdk/client-s3';
 import ProfanityFilter from 'profanity-filter';//package to prevent profanity
 import zxcvbn from 'zxcvbn'; //package for password strength
 import { validateEmail } from '../utils/emailValidator.js';
-
+import { sendVerificationEmail } from '../utils/emailAuthentication.js';
 export const register = async (req, res) => {
     try {
         const { username, email, password, role = "user" } = req.body;
@@ -40,6 +40,14 @@ export const register = async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, 10);
         const newUser = new User({ username, email, password: hashedPassword });
         await newUser.save();
+
+        const token = jwt.sign(
+        { userId: newUser._id },
+         process.env.EMAIL_VERIFICATION_SECRET,
+        { expiresIn: '1d' }
+        );
+
+await sendVerificationEmail(email, token);
         res.status(201).json({ message: "User has been registered!" });
     } catch (error) {
         console.error('Error checking for existing user:', error);
