@@ -4,6 +4,10 @@ const userSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true },
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true }, //perhaps use bcrypt here
+  verified: {
+  type: Boolean,
+  default: false
+}, //verify email
   role: { type: String, default: 'user' }, // 
   stripeAccountId: { type: String, required: false }, // 
   uploadedTracks: [{

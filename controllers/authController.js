@@ -2,7 +2,7 @@ import fs from 'fs';
 import { S3Client } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
 import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
+import jwt from 'jsonwebtoken'; //going to use in register as well, to authenticate email
 import User from '../models/User.js';
 import backingTrack from '../models/backing_track.js';
 import { DeleteObjectCommand } from '@aws-sdk/client-s3';
