@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
+import { sendVerificationEmail } from '../utils/emailAuthentication.js';
 
 //generated with ai come BACK to this!
 
@@ -41,3 +42,55 @@ export const verifyEmail = async (req, res) => {
         res.status(500).json({ message: "Failed to verify email." });
     }
 };
+
+export const resendEmail = async(req, res) => { //controller to resend verification email
+
+    const { email } = req.body; //destructure email from body
+
+    if (! email){ //check for email
+
+        return res.status(400).json({message: "Email is required"})
+    }
+
+
+    try {
+
+        const user = await User.findOne({email}); //clean way of writing email: email.. email being the email destructured from req.body
+
+        if (! user){
+
+            return res.status(404).json({message: "User not found"});
+        }
+
+        if (user.verified) {
+
+            return res.status(400).json({message: "Email already verified"})
+
+        }
+
+        const token = jwt.sign(
+
+            {userId: user._id},
+            process.env.EMAIL_VERIFICATION_SECRET,
+            {expiresIn: '24h'}
+
+
+
+        );
+
+        await sendVerificationEmail(user.email, token);
+
+
+        return res.status(200).json({message: "Verification email successfully sent"});
+
+
+    } catch (error){
+
+        console.error("Error resending verification email", error);
+        return res.status(500).json({message: "Failed to resend email. Server error"});
+
+
+    }
+
+
+}

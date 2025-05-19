@@ -11,8 +11,9 @@ const transporter = nodemailer.createTransport({
 });
 
 export const sendVerificationEmail = async (email, token) => {
-  const verifyUrl = `${process.env.BASE_URL}/api/auth/verify-email?token=${token}`;
+  const verifyUrl = `${process.env.BASE_URL}/auth/verify-email?token=${token}`; //build the url
 
+  //temp email for testing
   const mailOptions = {
     from: `"Your App Name" <${process.env.EMAIL_USER}>`,
     to: email,

@@ -6,7 +6,7 @@ import jwt from 'jsonwebtoken'; //going to use in register as well, to authentic
 import User from '../models/User.js';
 import backingTrack from '../models/backing_track.js';
 import { DeleteObjectCommand } from '@aws-sdk/client-s3';
-import ProfanityFilter from 'profanity-filter';//package to prevent profanity
+import * as Filter from 'bad-words'; //package to prevent profanity
 import zxcvbn from 'zxcvbn'; //package for password strength
 import { validateEmail } from '../utils/emailValidator.js';
 import { sendVerificationEmail } from '../utils/emailAuthentication.js';
@@ -18,7 +18,7 @@ export const register = async (req, res) => {
             return res.status(400).json({ message: "User already exists!" });
         }
 
-        const profanity = new ProfanityFilter();
+        const profanity = new Filter.Filter();
         
         if (profanity.isProfane(username)){
 
