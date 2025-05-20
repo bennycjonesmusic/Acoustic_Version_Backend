@@ -11,6 +11,7 @@ import adminRoutes from './routes/admin.js';
 import stripeRoutes from './routes/Stripe.js';
 import webhookRoutes from './routes/webhook.js';
 import tracksRoutes from './routes/tracks.js';
+import userRoutes from './routes/users.js';
 
 
 
@@ -36,6 +37,7 @@ app.use("/admin", adminRoutes);
 app.use('/stripe', stripeRoutes);
 app.use('/webhook', webhookRoutes);
 app.use('/tracks', tracksRoutes);
+app.use('/users', userRoutes);
 app.get('/', (req, res) =>{
 
     res.send('Testicles');

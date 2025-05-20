@@ -30,15 +30,33 @@ const userSchema = new mongoose.Schema({
 });
 
 //sanitize for security purposes
+
 userSchema.set('toJSON', {
-  transform: (doc, ret) => {
+  transform: (doc, ret, options) => {
     ret.id = ret._id.toString();
     delete ret._id;
     delete ret.__v;
     delete ret.password;
+
+    const viewerRole = options?.viewerRole || 'user';
+    const viewerId = options?.viewerId || null;
+
+    const isAdmin = viewerRole === 'admin';
+    const isSelf = viewerId && viewerId.toString() === ret.id;
+
+    //show less details if not admin or self
+    if (viewerRole === 'public' || (!isAdmin && !isSelf)) {
+      delete ret.email;
+      delete ret.stripeAccountId;
+      delete ret.amountOfTracksSold;
+      delete ret.amountOfFollowers;
+    }
+
     return ret;
   }
 });
+
+userSchema.index({username: "text"}); //add index to search for username
 
 const User = mongoose.model('User', userSchema);
 export default User;

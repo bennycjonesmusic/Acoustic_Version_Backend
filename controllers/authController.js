@@ -193,16 +193,22 @@ export const getUserProfile = async(req, res) =>
 
     try{
 
-        const user = await User.findById(req.userId).select('-password'); //exclude password for security reasons
+        const user = await User.findById(req.userId).select('-password').populate('boughtTracks').populate('uploadedTracks'); //exclude password for security reasons
 
         if (! user){
+
 
             return res.status(404).json({message: "User not found"});
         }
 
 
 
-        return res.status(200).json({user});
+      return res.status(200).json({
+  user: user.toJSON({
+    viewerRole: user.role,
+    viewerId: req.userId
+  })
+});
 
 
 

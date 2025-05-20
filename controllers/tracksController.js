@@ -157,9 +157,9 @@ export const searchTracks = async (req, res) => {
     const skip = (page - 1) * limit; //how many items to skip
 
     const tracks = await BackingTrack.find({$text: {$search : query}}).sort({score: {$meta: 'textScore'}})
-    .skip(skip).limit(limit).select({ score: { $meta: 'textScore' } }); ;
+    .skip(skip).limit(limit).select({ score: { $meta: 'textScore' } }); 
 
-    res.status(200).json(tracks);
+    
 }catch(error){
 
     res.status(500).json({message: "server error querying tracks"});
