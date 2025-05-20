@@ -4,11 +4,14 @@ import { Upload } from '@aws-sdk/lib-storage';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken'; //going to use in register as well, to authenticate email
 import User from '../models/User.js';
-import backingTrack from '../models/backing_track.js';
+import BackingTrack from '../models/backing_track.js';
 import * as Filter from 'bad-words'; //package to prevent profanity
 import zxcvbn from 'zxcvbn'; //package for password strength
 import { validateEmail } from '../utils/emailValidator.js';
 import { sendVerificationEmail } from '../utils/emailAuthentication.js';
+
+
+//Create...
 export const register = async (req, res) => {
     try {
         const { username, email, password, role = "user" } = req.body;
@@ -54,6 +57,7 @@ await sendVerificationEmail(email, token);
     }
 };
 
+//Read... need more read functions such as displaying your profile details e.t.c
 export const login = async (req, res) => {
     try {
         const { login, password } = req.body;
@@ -75,17 +79,17 @@ export const login = async (req, res) => {
 
 
 
-
+//Part of update
 export const updateS3Key = async (req, res) => {
     try {
-        const track = await backingTrack.findById(req.params.id);
+        const track = await BackingTrack.findById(req.params.id);
         if (!track) {
             return res.status(404).json({ message: "Track not found." });
         }
         if (track.user.toString() !== req.userId) {
             return res.status(403).json({ message: "You are not authorized to update this track." });
         }
-        const updatedTrack = await backingTrack.findByIdAndUpdate(
+        const updatedTrack = await BackingTrack.findByIdAndUpdate(
             req.params.id,
             { s3Key: req.body.s3Key },
             { new: true }
@@ -96,3 +100,36 @@ export const updateS3Key = async (req, res) => {
         res.status(500).json({ message: 'Internal server error' });
     }
 };
+
+
+//Delete
+
+export const deleteAccount = async(req, res) => {
+
+    try {
+
+    const user =  await User.findById(req.userId);
+
+    if (! user){
+
+        return res.status(404).json({message: "Error fetching user/user not found"});
+    }
+   const {password} = req.body;
+
+    const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) {
+            return res.status(400).json({ message: "Invalid password"});
+        }
+   
+   
+    await User.findByIdAndDelete(req.userId);
+
+    return res.status(200).json({message: "Account successfully deleted"});
+    }catch(error){
+        console.error("Error deleting account:", error);
+
+        return res.status(500).json({message: "There has been an error with deleting your account"});
+    }
+
+
+}

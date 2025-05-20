@@ -4,6 +4,10 @@ import { Upload } from '@aws-sdk/lib-storage'; // for streaming uploads to S3
 import BackingTrack from '../models/backing_track.js';
 import User from '../models/User.js'; // assuming you’re using user logic
 import { parseKeySignature } from '../utils/parseKeySignature.js';
+
+
+
+
 export const uploadTrack = async (req, res) => {
     try {
         if (!req.file) {
