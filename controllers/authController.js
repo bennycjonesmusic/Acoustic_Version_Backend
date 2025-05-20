@@ -133,3 +133,93 @@ export const deleteAccount = async(req, res) => {
 
 
 }
+
+
+export const changePassword = async(req, res) => { //export function to change password
+
+try {
+
+    const user = await User.findById(req.userId); //find user by JW token id from authmiddleware.
+
+    if (! user){
+
+        return res.status(404).json({message: "User not found. Please login again"})
+    }
+
+     const {password, newPassword} = req.body;
+
+      const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) {
+            return res.status(400).json({ message: "Invalid password"});
+        }
+
+         if (password === newPassword) {
+            return res.status(400).json({ message: "New password must be different from the current password" });
+        }
+
+
+         const passwordStrength = zxcvbn(newPassword);
+        if (passwordStrength.score < 3){
+
+            return res.status(400).json({message: "Password is too weak. Needs more power."});
+        }
+         const salt = await bcrypt.genSalt(10);
+        user.password = await bcrypt.hash(newPassword, salt);
+        await user.save();
+
+        return res.status(200).json({message: "Successfully changed password"});
+
+
+
+}
+catch(error) {
+
+return res.status(500).json({message: "Internal server error. Oops"})
+
+
+};
+
+
+
+
+
+
+
+};
+
+
+export const getUserProfile = async(req, res) =>
+{
+
+    try{
+
+        const user = await User.findById(req.userId).select('-password'); //exclude password for security reasons
+
+        if (! user){
+
+            return res.status(404).json({message: "User not found"});
+        }
+
+
+
+        return res.status(200).json({user});
+
+
+
+
+
+
+
+
+    } catch(error){
+
+
+        return res.status(500).json({message: "Internal server error"});
+
+
+
+    }
+
+
+
+}
