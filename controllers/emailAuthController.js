@@ -48,6 +48,10 @@ export const verifyEmail = async (req, res) => {
 export const resendEmail = async(req, res) => { //controller to resend verification email
 
     const { email } = req.body; //destructure email from body
+    const validateUser = req.userId;
+
+
+   
 
     if (! email){ //check for email
 
@@ -59,6 +63,10 @@ export const resendEmail = async(req, res) => { //controller to resend verificat
 
         const user = await User.findOne({email}); //clean way of writing email: email.. email being the email destructured from req.body
 
+       if (validateUser.toString() !== user._id.toString()){
+
+            return res.status(403).json({message: "You are not authorized to do this"})
+        }
         if (! user){
 
             return res.status(404).json({message: "User not found"});

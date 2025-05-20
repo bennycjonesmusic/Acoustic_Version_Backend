@@ -82,6 +82,8 @@ export const listS3 = async (req, res) => {
 };
 
 //controller for sorting tracks by popularity amongst other things
+
+//public route
 export const queryTracks = async (req, res) => {
     try {
         const { orderBy, page = 1, limit = 10, keySig, "vocal-range": vocalRange } = req.query; //destructuring the page. Because this is my first project, query is a way of getting data from the url. for example.. /tracks?page=1&... e.t.c
@@ -138,6 +140,8 @@ export const queryTracks = async (req, res) => {
 };
 //controller for querying tracks on my website via name
 
+
+//public route
 export const searchTracks = async (req, res) => {
 
     try{
@@ -166,6 +170,8 @@ export const searchTracks = async (req, res) => {
 
 }
 
+
+//delete a track by id
 export const deleteTrack = async (req, res) => {
     try {
         const Track = await BackingTrack.findById(req.params.id);
@@ -203,17 +209,17 @@ export const getTrack = async (req, res) => {
 
 try {
 
- const { trackId } = req.params;
+ const track =  await BackingTrack.findById(req.params.id);
 
 
- if (! trackId){
+ if (! req.params.id){
 
-return res.status(400).json({message: 'User not authenticated'});
+return res.status(400).json({message: 'Please insert a trackId'});
 
 
  };
 
- const track = await BackingTrack.findOne({_id: trackId});
+
 
  if (! track){
 
@@ -241,7 +247,9 @@ return res.status(400).json({message: 'User not authenticated'});
 
 }
 
-export const getTracks = async (req, res) => {
+
+//get tracks from user
+export const getUploadedTracks = async (req, res) => {
     try {
         const tracks = await BackingTrack.find({ user: req.userId }).sort({ createdAt: -1 });
         res.status(200).json(tracks);
@@ -251,6 +259,30 @@ export const getTracks = async (req, res) => {
     }
 };
 
+export const getBoughtTracks = async (req, res) => {
+  try {
+    // Find the user by their ID and populate the 'boughtTracks' array
+    const user = await User.findById(req.userId).populate('boughtTracks');
+
+   
+    if (!user) {
+      return res.status(401).json({ message: "User not found" });
+    }
+
+    // If no bought tracks are found, return a message indicating that
+    if (!user.boughtTracks || user.boughtTracks.length === 0) {
+      return res.status(404).json({ message: "No bought tracks found" });
+    }
+
+
+    return res.status(200).json(user.boughtTracks);
+
+  } catch (error) {
+    console.error('Error fetching bought tracks:', error);
+   
+    return res.status(500).json({ message: "Failed to fetch bought tracks", error: error.message });
+  }
+};
 
 export const downloadTrack = async (req, res) => {
 

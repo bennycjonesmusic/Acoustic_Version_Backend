@@ -10,10 +10,11 @@ import {
   queryTracks,
   searchTracks,
   downloadTrack,
-  getTracks,
+  getUploadedTracks,
   deleteTrack,
   uploadTrack,
-  getTrack
+  getTrack,
+  getBoughtTracks
 } from '../controllers/tracksController.js';
 
 const router = express.Router();
@@ -31,7 +32,9 @@ router.post('/tracks/upload', authMiddleware, uploadLimiter, upload.single('file
 router.delete('/tracks/:id', authMiddleware, deleteTrack); //delete a track by id
 
 //get tracks from the user. This will be used to display the tracks on the front end.
-router.get('/tracks', authMiddleware, getTracks);
+router.get('/uploaded-tracks',  authMiddleware, getUploadedTracks);
+
+router.get('/bought-tracks', authMiddleware, getUploadedTracks)
 
 //get one singular track
 router.get('/tracks/:id', authMiddleware, getTrack);
