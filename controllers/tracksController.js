@@ -199,6 +199,48 @@ export const deleteTrack = async (req, res) => {
     }
 };
 
+export const getTrack = async (req, res) => {
+
+try {
+
+ const { trackId } = req.params;
+
+
+ if (! trackId){
+
+return res.status(400).json({message: 'User not authenticated'});
+
+
+ };
+
+ const track = await BackingTrack.findOne({_id: trackId});
+
+ if (! track){
+
+
+    return res.status(404).json({message:"Track not found"});
+ }
+
+
+ return res.status(200).json(track);
+
+} catch(error) {
+
+    
+    return res.status(500).json({message: "Internal server error"});
+
+
+}
+
+
+
+
+
+
+
+
+}
+
 export const getTracks = async (req, res) => {
     try {
         const tracks = await BackingTrack.find({ user: req.userId }).sort({ createdAt: -1 });
