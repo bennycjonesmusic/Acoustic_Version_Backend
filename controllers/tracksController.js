@@ -5,7 +5,7 @@ import BackingTrack from '../models/backing_track.js';
 import User from '../models/User.js'; // 
 import { parseKeySignature } from '../utils/parseKeySignature.js';
 import { uploadTrackSchema, reviewSchema, commentSchema } from './validationSchemas.js';
-import Filter from 'bad-words';
+import * as Filter from 'bad-words';
 
 export const rateTrack = async(req, res) => {
 try{
@@ -429,7 +429,7 @@ export const commentTrack = async (req, res) => {
       return res.status(400).json({ message: error.details[0].message });
     }
     // Profanity filter
-    const profanity = new Filter();
+    const profanity = new Filter.Filter();
     if (profanity.isProfane(comment)) {
       return res.status(400).json({ message: 'Please avoid using inappropriate language.' });
     }

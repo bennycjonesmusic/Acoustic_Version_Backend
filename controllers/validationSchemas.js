@@ -32,3 +32,7 @@ export const reviewSchema = Joi.object({
 export const commentSchema = Joi.object({
   comment: Joi.string().min(1).max(250).required(),
 });
+
+export const artistAboutSchema = Joi.object({
+  about: Joi.string().min(1).max(500).required(),
+});

@@ -39,6 +39,15 @@ const backingTrackSchema = new mongoose.Schema({
     default: false,
   },
 
+  backingTrackType: {
+
+    type: String,
+    enum: ["Acoustic Guitar", "Piano", "Full Arrangement Track", "Other"],
+    default: "Guitar",
+
+
+  },
+
   vocalRange: {
     type: String,
     enum: ["Soprano", "Mezzo-Soprano", "Contralto", "Countertenor", "Tenor", "Baritone", "Bass"],
@@ -46,6 +55,7 @@ const backingTrackSchema = new mongoose.Schema({
 
   genre: {
     type: String,
+    enum: ["Pop", "Rock", "Folk", "Jazz", "Classical", "Musical Theatre", "Country", "Other"]
   },
   
   qualityValidated: {
@@ -141,7 +151,7 @@ backingTrackSchema.set('toJSON', {
     ret.id = ret._id.toString(); // Rename _id to id
     delete ret._id;              // Remove _id
     delete ret.__v;              // Remove version key
-    delete ret.s3Key;            // Never send the s3Key (it’s sensitive like  my nipple)
+    delete ret.s3Key;            // Never send the s3Key (it’s sensitive like my nipple)
     delete ret.ratings;          
     return ret;
   }

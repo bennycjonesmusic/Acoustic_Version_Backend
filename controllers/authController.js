@@ -5,11 +5,11 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken'; //going to use in register as well, to authenticate email
 import User from '../models/User.js';
 import BackingTrack from '../models/backing_track.js';
-import * as Filter from 'bad-words'; //package to prevent profanity
+import * as Filter from 'bad-words'; //package to prevent profanity. due to import issues, using import * as Filter
 import zxcvbn from 'zxcvbn'; //package for password strength
 import { validateEmail } from '../utils/emailValidator.js';
 import { sendVerificationEmail } from '../utils/emailAuthentication.js';
-import { registerSchema, loginSchema } from './validationSchemas.js';
+import { registerSchema, loginSchema, artistAboutSchema } from './validationSchemas.js';
 
 
 //Create...
@@ -240,3 +240,33 @@ export const getUserProfile = async(req, res) =>
 
 
 }
+
+// Update artist 'about' field
+export const updateAbout = async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    if (user.role !== 'artist') {
+      return res.status(403).json({ message: 'Only artists can update the about section.' });
+    }
+    const { about } = req.body;
+    // Joi validation
+    const { error } = artistAboutSchema.validate({ about });
+    if (error) {
+      return res.status(400).json({ message: error.details[0].message });
+    }
+    // Profanity filter
+    const profanity = new Filter.Filter();
+    if (profanity.isProfane(about)) {
+      return res.status(400).json({ message: 'Please avoid using inappropriate language.' });
+    }
+    user.about = about;
+    await user.save();
+    return res.status(200).json({ message: 'About section updated successfully', about: user.about });
+  } catch (error) {
+    console.error('Error updating about section:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};

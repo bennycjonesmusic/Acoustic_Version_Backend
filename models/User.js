@@ -8,7 +8,7 @@ const userSchema = new mongoose.Schema({
   type: Boolean,
   default: false
 }, //verify email
-  role: { type: String, default: 'user' }, // 
+  role: { type: String, default: 'user', enum: ["user", "artist", "admin"]}, // 
   stripeAccountId: { type: String, required: false }, // 
   uploadedTracks: [{
     type: mongoose.Schema.Types.ObjectId, 
@@ -25,6 +25,7 @@ const userSchema = new mongoose.Schema({
   
   },
   amountOfFollowers: { type: Number, default: 0 },
+  about: { type: String, default: '' },
 }, {
   timestamps: true, // 
 });
@@ -43,6 +44,11 @@ userSchema.set('toJSON', {
 
     const isAdmin = viewerRole === 'admin';
     const isSelf = viewerId && viewerId.toString() === ret.id;
+
+    // Only show 'about' if user is artist, self, or admin
+    if (ret.role !== 'artist' && !isSelf && !isAdmin) {
+      delete ret.about;
+    }
 
     //show less details if not admin or self
     if (viewerRole === 'public' || (!isAdmin && !isSelf)) {
