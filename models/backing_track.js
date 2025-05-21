@@ -80,6 +80,11 @@ const backingTrackSchema = new mongoose.Schema({
     default: 0,
   },
 
+  numOfRatings: {
+    type: Number,
+    default: 0
+  },
+
   ratings: [
     {
       user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
@@ -88,10 +93,20 @@ const backingTrackSchema = new mongoose.Schema({
     }
   ],
 
+
   averageRating: {
     type: Number,
     default: 0
-  }
+  },
+
+  comments: [{
+    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    text: { type: String, required: true },
+    createdAt: { type: Date, default: Date.now }
+
+
+  }]
+
 });
 
 
@@ -126,8 +141,8 @@ backingTrackSchema.set('toJSON', {
     ret.id = ret._id.toString(); // Rename _id to id
     delete ret._id;              // Remove _id
     delete ret.__v;              // Remove version key
-    delete ret.s3Key;            // Never send the s3Key (it’s sensitive)
-    delete ret.ratings;          // Optionally, hide ratings unless explicitly needed
+    delete ret.s3Key;            // Never send the s3Key (it’s sensitive like  my nipple)
+    delete ret.ratings;          
     return ret;
   }
 });

@@ -9,10 +9,16 @@ import * as Filter from 'bad-words'; //package to prevent profanity
 import zxcvbn from 'zxcvbn'; //package for password strength
 import { validateEmail } from '../utils/emailValidator.js';
 import { sendVerificationEmail } from '../utils/emailAuthentication.js';
+import { registerSchema, loginSchema } from './validationSchemas.js';
 
 
 //Create...
 export const register = async (req, res) => {
+    // Validate input using Joi schema
+    const { error } = registerSchema.validate(req.body);
+    if (error) {
+        return res.status(400).json({ message: error.details[0].message });
+    }
     try {
         const { username, email, password, role = "user" } = req.body;
         const existingUser = await User.findOne({ $or: [ {email } , { username } ] });
@@ -59,6 +65,11 @@ await sendVerificationEmail(email, token);
 
 //Read... need more read functions such as displaying your profile details e.t.c
 export const login = async (req, res) => {
+    // Validate input using Joi schema
+    const { error } = loginSchema.validate(req.body);
+    if (error) {
+        return res.status(400).json({ message: error.details[0].message });
+    }
     try {
         const { login, password } = req.body;
         const user = await User.findOne({$or: [{email: login}, {username: login}]});

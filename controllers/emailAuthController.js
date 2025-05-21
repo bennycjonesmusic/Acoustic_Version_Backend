@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import { sendVerificationEmail } from '../utils/emailAuthentication.js';
 
-//generated with ai come BACK to this!
+
 
 export const verifyEmail = async (req, res) => {
     try {

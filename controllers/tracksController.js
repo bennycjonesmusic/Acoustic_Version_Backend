@@ -2,13 +2,77 @@ import fs from 'fs'; // for reading & deleting temp files
 import { S3Client, ListObjectsV2Command, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage'; // for streaming uploads to S3
 import BackingTrack from '../models/backing_track.js';
-import User from '../models/User.js'; // assuming you’re using user logic
+import User from '../models/User.js'; // 
 import { parseKeySignature } from '../utils/parseKeySignature.js';
+import { uploadTrackSchema, reviewSchema } from './validationSchemas.js';
+
+export const rateTrack = async(req, res) => {
+try{
+   
+    const { review } = req.body;
+    const user = await User.findById(req.userId);
+    if (!user) {
+        return res.status(404).json({message: "User not found"});
+    }
+
+    const track = await BackingTrack.findById(req.params.id);
+    if (!track) {
+        return res.status(404).json({message: "Track not found"});
+
+    }
+
+    if (user.boughtTracks.some(id => id.equals(track._id)) ) {
+
+    } else {
+        return res.status(400).json({ message: "You can only rate tracks you have purchased." });
+    }
+
+    const { error } = reviewSchema.validate({ review });
+    
+    if (error) {
+        return res.status(400).json({ message: error.details[0].message });
+    }
+
+    
+    track.ratings.push({
+
+        user: user._id,
+        stars: review,
+        createdAt: new Date()
 
 
 
+
+        
+    });
+
+    track.calculateAverageRating();
+    await track.save();
+    return res.status(200).json({message: "Rating submitted successfully", track});
+
+
+
+
+
+
+}catch(error) {
+
+console.error('Error reviewing track:', error);
+return res.status(500).json({message: 'Internal server error'})
+
+
+}
+
+
+
+}
 
 export const uploadTrack = async (req, res) => {
+    
+    const { error } = uploadTrackSchema.validate(req.body);
+    if (error) {
+        return res.status(400).json({ message: error.details[0].message });
+    }
     try {
         if (!req.file) {
             return res.status(400).json({ message: 'No file uploaded' });
@@ -214,45 +278,18 @@ export const deleteTrack = async (req, res) => {
 };
 
 export const getTrack = async (req, res) => {
-
-try {
-
- const track =  await BackingTrack.findById(req.params.id);
-
-
- if (! req.params.id){
-
-return res.status(400).json({message: 'Please insert a trackId'});
-
-
- };
-
-
-
- if (! track){
-
-
-    return res.status(404).json({message:"Track not found"});
- }
-
-
- return res.status(200).json(track);
-
-} catch(error) {
-
-    
-    return res.status(500).json({message: "Internal server error"});
-
-
-}
-
-
-
-
-
-
-
-
+  try {
+    if (!req.params.id) {
+      return res.status(400).json({ message: 'Please insert a trackId' });
+    }
+    const track = await BackingTrack.findById(req.params.id);
+    if (!track) {
+      return res.status(404).json({ message: 'Track not found' });
+    }
+    return res.status(200).json(track);
+  } catch (error) {
+    return res.status(500).json({ message: 'Internal server error' });
+  }
 }
 
 //get tracks from user
@@ -352,4 +389,28 @@ return;
 
 
 
+}
+
+export const reviewTrack = async(req, res) => {
+  try {
+    const { review } = req.body;
+    const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(404).json({message: "User not found"});
+    }
+    const track = await BackingTrack.findById(req.params.id);
+    if (!track) {
+      return res.status(404).json({message: "Track not found"});
+    }
+    // Check if user has bought the track
+    const hasBought = user.boughtTracks.some(id => id.equals(track._id));
+    if (!hasBought) {
+      return res.status(400).json({ message: "You can only rate tracks you have purchased." });
+    }
+    // Place your review logic here (e.g., add rating, call calculateAverageRating, save, etc.)
+    // ...
+  } catch(error) {
+    console.error('Error reviewing track:', error);
+    return res.status(500).json({message: 'Internal server error'});
+  }
 }

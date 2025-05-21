@@ -9,9 +9,17 @@ const registerLimiter = rateLimit({
 export { registerLimiter };
 
 const uploadLimiter = rateLimit({
-  windowMs: 24 * 60 * 60 * 1000, // 15 minutes
+  windowMs: 24 * 60 * 60 * 1000, // 1 day 
   max: 10, // Max 5 requests per window (15 minutes)
   message: 'Too many tracks uploaded today. Only 10 per day. Please upload more tomorrow :).',
 });
 
 export {uploadLimiter};
+
+const downloadLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 30, // Max 20 downloads per hour
+  message: 'Too many downloads from this IP, please try again in an hour.'
+});
+
+export { downloadLimiter };
