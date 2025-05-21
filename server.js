@@ -8,7 +8,7 @@ import authRoutes from './routes/auth.js';
 import authMiddleware from './middleware/customer_auth.js';
 import artistAuthMiddleware from './middleware/artist_auth.js';
 import adminRoutes from './routes/admin.js';
-import stripeRoutes from './routes/Stripe.js';
+import stripeRoutes from './routes/stripe_payment.js';
 import webhookRoutes from './routes/webhook.js';
 import tracksRoutes from './routes/tracks.js';
 import userRoutes from './routes/users.js';

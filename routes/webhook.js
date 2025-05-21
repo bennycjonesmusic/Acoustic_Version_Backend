@@ -33,7 +33,7 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
       const track = await BackingTrack.findById(trackId);
 
       if (user && track) {
-        // Add track to user's boughtTracks
+        // Add track to user's boughtTracks (no duplicate check, revert to original)
         user.boughtTracks.push(track._id);
         await user.save();
 
@@ -45,7 +45,6 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
           await artist.save();
         }
         await track.save();
-
         console.log(`Purchase recorded for ${user.email}`);
       }
     } catch (err) {

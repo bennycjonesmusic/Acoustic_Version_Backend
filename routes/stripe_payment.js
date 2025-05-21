@@ -16,12 +16,13 @@ try {
     if (!track) {
         return res.status(404).json({ error: 'Track not found' });
     }
-    const { amount } = req.body;
-    if (!amount || isNaN(amount)) {
+    // Always use the price from the database
+    const price = Number(track.price) * 100; // convert to pence
+    if (isNaN(price) || price < 0) {
         return res.status(400).json({ error: "Track price is not valid" });
     }
     // If track is free, skip Stripe and grant access
-    if (track.price === 0) {
+    if (Number(track.price) === 0) {
         const user = await User.findById(req.userId);
         if (!user) {
             return res.status(404).json({ error: 'User not found' });
@@ -34,7 +35,6 @@ try {
         return res.status(200).json({ message: 'Track granted for free', free: true });
     }
 
-
     const session = await stripeClient.checkout.sessions.create({
         payment_method_types: ['card'],
         line_items: [
@@ -44,7 +44,7 @@ try {
                     product_data: {
                         name: 'Backing Track Purchase',
                     },
-                    unit_amount: amount,
+                    unit_amount: price,
                 },
                 quantity: 1,
             },
@@ -52,16 +52,15 @@ try {
         mode: 'payment',
         success_url: `${process.env.CLIENT_URL}/success`,
         cancel_url: `${process.env.CLIENT_URL}/cancel`,
-         metadata: {
-                userId: req.userId.toString(), // Add userId to metadata
-                trackId: track._id.toString(), // Add trackId to metadata
-            }
-
+        metadata: {
+            userId: req.userId.toString(),
+            trackId: track._id.toString(),
+        }
     });
-     if (! session) {
-        return res.status(500).json({ error: "Failed to create checkout session"});
-     }
-     return res.status(200).json({ url: session.url });
+    if (!session) {
+        return res.status(500).json({ error: "Failed to create checkout session" });
+    }
+    return res.status(200).json({ url: session.url });
 } catch(error) {
 
     console.error('Error creating checkout session:', error);
