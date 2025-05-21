@@ -15,6 +15,7 @@ import {
   uploadTrack,
   getTrack,
   getBoughtTracks
+  
 } from '../controllers/tracksController.js';
 
 const router = express.Router();
@@ -23,7 +24,7 @@ router.get('/tracks/list-s3', listS3);
 
 router.get('/tracks/query', queryTracks); //needs no auth middleware as it is public route.
 
-router.get('/tracks/search', searchTracks); //no need for camelcase here. search-tracks = standard practice. change it.
+router.get('/tracks/search', searchTracks); 
 
 //now we handle the upload of backing tracks. Create, Read, Update and Delete Operations. For now though, create and delete will suffice.
 
@@ -34,11 +35,12 @@ router.delete('/tracks/:id', authMiddleware, deleteTrack); //delete a track by i
 //get tracks from the user. This will be used to display the tracks on the front end.
 router.get('/uploaded-tracks',  authMiddleware, getUploadedTracks);
 
-router.get('/bought-tracks', authMiddleware, getUploadedTracks)
+router.get('/bought-tracks', authMiddleware, getBoughtTracks)
 
 //get one singular track
 router.get('/tracks/:id', authMiddleware, getTrack);
 
 router.get('/tracks/download/:id', authMiddleware, downloadTrack); //req.params.id = :id needed in route
 
+router.delete('/tracks/delete/:id', authMiddleware, deleteTrack)
 export default router;

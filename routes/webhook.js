@@ -33,8 +33,8 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
       const track = await BackingTrack.findById(trackId);
 
       if (user && track) {
-        // Add track to user's purchasedTracks
-        user.purchasedTracks.push(track._id);
+        // Add track to user's boughtTracks
+        user.boughtTracks.push(track._id);
         await user.save();
 
         // Optionally increment download or purchase count

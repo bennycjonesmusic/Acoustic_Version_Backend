@@ -46,10 +46,10 @@ export const uploadTrack = async (req, res) => {
             return res.status(404).json({ message: "User not found." });
         }
         fs.unlinkSync(req.file.path);
-        res.status(200).json({ message: 'File uploaded successfully!', track: newTrack });
+        return res.status(200).json({ message: 'File uploaded successfully!', track: newTrack });
     } catch (error) {
         console.error('Error uploading backing track:', error);
-        res.status(500).json({ message: 'Internal server error' });
+        return res.status(500).json({ message: 'Internal server error' });
     }
 };
 
@@ -77,7 +77,7 @@ export const listS3 = async (req, res) => {
         res.json(tracks);
     } catch (error) {
         console.error('Error listing backing tracks:', error);
-        res.status(500).json({ error: 'Failed to list backing tracks' });
+        return res.status(500).json({ error: 'Failed to list backing tracks' });
     }
 };
 
@@ -132,9 +132,9 @@ export const queryTracks = async (req, res) => {
             return res.status(404).json({message: "No tracks found."}); 
         }
 
-        res.status(200).json(tracks);
+        return res.status(200).json(tracks);
     } catch(error) {
-        res.status(500).json({ error: "Failed to query tracks" }); 
+        return res.status(500).json({ error: "Failed to query tracks" }); 
         console.error('Error querying tracks:', error);
     }
 };
@@ -156,7 +156,7 @@ export const searchTracks = async (req, res) => {
     const limit = 10;
     const skip = (page - 1) * limit; //how many items to skip
 
-    const tracks = await BackingTrack.find({$text: {$search : query}}).sort({score: {$meta: 'textScore'}})
+    let tracks = await BackingTrack.find({$text: {$search : query}}).sort({score: {$meta: 'textScore'}})
     .skip(skip).limit(limit).select({ score: { $meta: 'textScore' } }); 
 
      if (!tracks.length) {
@@ -167,17 +167,16 @@ export const searchTracks = async (req, res) => {
         .limit(limit);
     }
 
-    
+    return res.status(200).json(tracks);
 }catch(error){
-
-    res.status(500).json({message: "server error querying tracks"});
+    console.error(error);
+    return res.status(500).json({message: "server error querying tracks"});
 };
 
 
 
 
 }
-
 
 //delete a track by id
 export const deleteTrack = async (req, res) => {
@@ -206,10 +205,10 @@ export const deleteTrack = async (req, res) => {
         await User.findByIdAndUpdate(req.userId, { $pull: { uploadedTracks: req.params.id } }, { new: true });
         await s3Client.send(new DeleteObjectCommand(deleteParameters));
         await BackingTrack.findByIdAndDelete(req.params.id);
-        res.status(200).json({ message: 'Track and file deleted' });
+        return res.status(200).json({ message: 'Track and file deleted' });
     } catch (error) {
         console.error('There was an error deleting track:', error);
-        res.status(500).json({ message: 'Internal server error' });
+        return res.status(500).json({ message: 'Internal server error' });
     }
 };
 
@@ -259,35 +258,37 @@ return res.status(400).json({message: 'Please insert a trackId'});
 //get tracks from user
 export const getUploadedTracks = async (req, res) => {
     try {
+        // Defensive: ensure req.userId is present
+        if (!req.userId) {
+            return res.status(401).json({ message: 'User not authenticated' });
+        }
         const tracks = await BackingTrack.find({ user: req.userId }).sort({ createdAt: -1 });
-        res.status(200).json(tracks);
+        // Defensive: always return an array
+        return res.status(200).json(Array.isArray(tracks) ? tracks : []);
     } catch (error) {
         console.error('Error fetching tracks:', error);
-        res.status(500).json({ message: 'Internal server error' });
+        return res.status(500).json({ message: 'Internal server error' });
     }
 };
 
 export const getBoughtTracks = async (req, res) => {
   try {
+    if (!req.userId) {
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
     // Find the user by their ID and populate the 'boughtTracks' array
     const user = await User.findById(req.userId).populate('boughtTracks');
-
-   
     if (!user) {
       return res.status(401).json({ message: "User not found" });
     }
-
-    // If no bought tracks are found, return a message indicating that
-    if (!user.boughtTracks || user.boughtTracks.length === 0) {
+    // Defensive: ensure boughtTracks is always an array
+    const boughtTracks = Array.isArray(user.boughtTracks) ? user.boughtTracks : [];
+    if (boughtTracks.length === 0) {
       return res.status(404).json({ message: "No bought tracks found" });
     }
-
-
-    return res.status(200).json(user.boughtTracks);
-
+    return res.status(200).json(boughtTracks);
   } catch (error) {
     console.error('Error fetching bought tracks:', error);
-   
     return res.status(500).json({ message: "Failed to fetch bought tracks", error: error.message });
   }
 };
@@ -336,12 +337,12 @@ try {
 res.setHeader('Content-Disposition', `attachment; filename="${track.title}"`);
 
 data.Body.pipe(res);
-
+return;
     
 } catch (error) {
 
     console.error('Error downloading track:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    return res.status(500).json({ message: 'Internal server error' });
 
 
 

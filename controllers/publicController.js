@@ -37,7 +37,7 @@ if (! query){
    const limit = 10;
     const skip = (page - 1) * limit;
 
-     const users = await User.find({$text: {$search : query}}).sort({score: {$meta: 'textScore'}})
+     let users = await User.find({$text: {$search : query}}).sort({score: {$meta: 'textScore'}})
         .skip(skip).limit(limit).select({ score: { $meta: 'textScore' } }); 
 
          if (!users.length) {
@@ -62,12 +62,10 @@ if (! query){
 
     }
 
-catch {
-
-
-return res.status(500).json({ message: "Internal server error" });
-
-
+catch (error) {
+    console.error('Error searching user by name:', error);
+    return res.status(500).json({ message: "Internal server error" });
 }
+
 
 }

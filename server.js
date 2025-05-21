@@ -40,7 +40,7 @@ app.use('/tracks', tracksRoutes);
 app.use('/users', userRoutes);
 app.get('/', (req, res) =>{
 
-    res.send('Testicles');
+    res.send('Testing');
 
 
 });

@@ -21,8 +21,9 @@ try {
 
     
   const indexes = await User.collection.getIndexes();
+  const indexes2 = await BackingTrack.collection.getIndexes();
   console.log(indexes);
-
+  console.log(indexes2)
     // Optional: exit the script
     process.exit(0);
   } catch (err) {

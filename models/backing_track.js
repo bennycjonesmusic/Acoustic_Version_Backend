@@ -94,8 +94,7 @@ const backingTrackSchema = new mongoose.Schema({
   }
 });
 
-// Add text index for title
-backingTrackSchema.index({ title: 'text' });
+
 
 // Method to calculate average rating
 backingTrackSchema.methods.calculateAverageRating = function () {
@@ -132,6 +131,10 @@ backingTrackSchema.set('toJSON', {
     return ret;
   }
 });
+
+
+// Add text index for title
+backingTrackSchema.index({ title: 'text' });
 
 // Create the model
 const BackingTrack = mongoose.model('BackingTrack', backingTrackSchema);
