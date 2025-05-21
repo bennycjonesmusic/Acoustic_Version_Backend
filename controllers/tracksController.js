@@ -4,7 +4,8 @@ import { Upload } from '@aws-sdk/lib-storage'; // for streaming uploads to S3
 import BackingTrack from '../models/backing_track.js';
 import User from '../models/User.js'; // 
 import { parseKeySignature } from '../utils/parseKeySignature.js';
-import { uploadTrackSchema, reviewSchema } from './validationSchemas.js';
+import { uploadTrackSchema, reviewSchema, commentSchema } from './validationSchemas.js';
+import Filter from 'bad-words';
 
 export const rateTrack = async(req, res) => {
 try{
@@ -406,3 +407,42 @@ export const reviewTrack = async(req, res) => {
     return res.status(500).json({message: 'Internal server error'});
   }
 }
+
+export const commentTrack = async (req, res) => {
+  try {
+    const { comment } = req.body;
+    const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    const track = await BackingTrack.findById(req.params.id);
+    if (!track) {
+      return res.status(404).json({ message: 'Track not found' });
+    }
+    // Only allow users who have bought the track to comment
+    if (!user.boughtTracks.some(id => id.equals(track._id))) {
+      return res.status(400).json({ message: 'You can only comment on tracks you have purchased.' });
+    }
+    // Validate comment input
+    const { error } = commentSchema.validate({ comment });
+    if (error) {
+      return res.status(400).json({ message: error.details[0].message });
+    }
+    // Profanity filter
+    const profanity = new Filter();
+    if (profanity.isProfane(comment)) {
+      return res.status(400).json({ message: 'Please avoid using inappropriate language.' });
+    }
+    // Add comment to track
+    track.comments.push({
+      user: user._id,
+      text: comment,
+      createdAt: new Date()
+    });
+    await track.save();
+    return res.status(200).json({ message: 'Comment added successfully', comments: track.comments });
+  } catch (error) {
+    console.error('Error adding comment:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
