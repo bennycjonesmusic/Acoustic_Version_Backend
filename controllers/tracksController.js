@@ -9,7 +9,7 @@ import { uploadTrackSchema, reviewSchema } from './validationSchemas.js';
 export const rateTrack = async(req, res) => {
 try{
     //function for rating tracks
-    const { review } = req.body;
+    const { rating } = req.body;
     const user = await User.findById(req.userId);
     if (!user) {
         return res.status(404).json({message: "User not found"});
@@ -25,20 +25,20 @@ try{
     if (!user.boughtTracks.some(id => id.equals(track._id))) {
         return res.status(400).json({ message: "You can only rate tracks you have purchased." });
     }
-    //validate review input
-    const { error } = reviewSchema.validate({ review });
+    //validate rating input
+    const { error } = reviewSchema.validate({ rating });
     if (error) {
         return res.status(400).json({ message: error.details[0].message });
     }
     // Only allow one rating per user per track (update if exists)
     const existingRating = track.ratings.find(r => r.user.equals(user._id));
     if (existingRating) {
-        existingRating.stars = review;
+        existingRating.stars = rating;
         existingRating.ratedAt = new Date();
     } else {
         track.ratings.push({
             user: user._id,
-            stars: review,
+            stars: rating,
             ratedAt: new Date()
         });
     }
