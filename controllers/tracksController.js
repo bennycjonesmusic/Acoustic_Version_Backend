@@ -8,59 +8,46 @@ import { uploadTrackSchema, reviewSchema } from './validationSchemas.js';
 
 export const rateTrack = async(req, res) => {
 try{
-   
+    //function for rating tracks
     const { review } = req.body;
     const user = await User.findById(req.userId);
     if (!user) {
         return res.status(404).json({message: "User not found"});
     }
+    //find user from token
 
+    //find the track from the id in the url
     const track = await BackingTrack.findById(req.params.id);
     if (!track) {
         return res.status(404).json({message: "Track not found"});
-
     }
-
-    if (user.boughtTracks.some(id => id.equals(track._id)) ) {
-
-    } else {
+    //check if user has NOT bought the track
+    if (!user.boughtTracks.some(id => id.equals(track._id))) {
         return res.status(400).json({ message: "You can only rate tracks you have purchased." });
     }
-
+    //validate review input
     const { error } = reviewSchema.validate({ review });
-    
     if (error) {
         return res.status(400).json({ message: error.details[0].message });
     }
-
-    
-    track.ratings.push({
-
-        user: user._id,
-        stars: review,
-        createdAt: new Date()
-
-
-
-
-        
-    });
-
+    // Only allow one rating per user per track (update if exists)
+    const existingRating = track.ratings.find(r => r.user.equals(user._id));
+    if (existingRating) {
+        existingRating.stars = review;
+        existingRating.ratedAt = new Date();
+    } else {
+        track.ratings.push({
+            user: user._id,
+            stars: review,
+            ratedAt: new Date()
+        });
+    }
     track.calculateAverageRating();
     await track.save();
     return res.status(200).json({message: "Rating submitted successfully", track});
-
-
-
-
-
-
 }catch(error) {
-
-console.error('Error reviewing track:', error);
-return res.status(500).json({message: 'Internal server error'})
-
-
+    console.error('Error reviewing track:', error);
+    return res.status(500).json({message: 'Internal server error'})
 }
 
 
@@ -68,11 +55,16 @@ return res.status(500).json({message: 'Internal server error'})
 }
 
 export const uploadTrack = async (req, res) => {
+
+    //check first of all if the body follows the schema (JOI validation)
     
     const { error } = uploadTrackSchema.validate(req.body);
     if (error) {
         return res.status(400).json({ message: error.details[0].message });
     }
+
+    //if error return the error message
+    // if no error, continue with logic
     try {
         if (!req.file) {
             return res.status(400).json({ message: 'No file uploaded' });
