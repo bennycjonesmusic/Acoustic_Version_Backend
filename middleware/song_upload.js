@@ -20,10 +20,32 @@ const s3Client = new S3Client({
 const storage = multer.memoryStorage();
 // Setup multer for temporary file storage
 
-const fileFilter = (req, file, cb) => {
+const allowedMimeTypes = [
+    'audio/mpeg',    // .mp3
+    'audio/wav',     // .wav
+    'audio/x-wav',   // .wav (alternative)
+    'audio/wave',    // .wav (alternative)
+    'audio/vnd.wave',// .wav (alternative)
+    'audio/flac',    // .flac
+    'audio/ogg',     // .ogg
+    'audio/mp4',     // .m4a
+    'audio/aac',     // .aac
+    'audio/x-aac',   // .aac (alternative)
+    'audio/x-m4a',   // .m4a (alternative)
+    'audio/x-ms-wma',// .wma
+    'audio/x-ms-wax',// .wax
+    'audio/basic',   // .au, .snd
+    'audio/x-aiff',  // .aiff, .aif, .aifc
+    'audio/aiff',    // .aiff
+    'audio/x-pn-realaudio', // .ra, .ram
+    'audio/mid',     // .mid, .midi
+    'audio/x-midi',  // .mid, .midi
+];
 
-    if (file.mimetype !== 'audio'){
-        return cb(new Error('Only audio files allowed!'), false);
+const fileFilter = (req, file, cb) => {
+    console.log('Received MIME type:', file.mimetype);
+    if (!allowedMimeTypes.includes(file.mimetype)) {
+        return cb(new Error('Only audio files are allowed!'), false);
     };
 
     if (file.size > 50 * 1024 * 1024){

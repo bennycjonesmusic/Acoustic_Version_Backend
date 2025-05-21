@@ -13,7 +13,8 @@ export const uploadTrack = async (req, res) => {
         if (!req.file) {
             return res.status(400).json({ message: 'No file uploaded' });
         }
-        const fileStream = fs.createReadStream(req.file.path);
+        // Use the buffer directly from multer.memoryStorage
+        const fileStream = Buffer.from(req.file.buffer);
         const s3Client = new S3Client({
             region: process.env.AWS_REGION,
             credentials: {
@@ -26,7 +27,7 @@ export const uploadTrack = async (req, res) => {
             Key: `songs/${Date.now()}-${req.file.originalname}`,
             Body: fileStream,
             ACL: 'private',
-             StorageClass: 'STANDARD', //added because download speed seemed somewhat slow
+            StorageClass: 'STANDARD',
         };
         const data = await new Upload({
             client: s3Client,
@@ -45,7 +46,7 @@ export const uploadTrack = async (req, res) => {
         if (!updateUser) {
             return res.status(404).json({ message: "User not found." });
         }
-        fs.unlinkSync(req.file.path);
+        // No need to unlink file since it's not stored on disk
         return res.status(200).json({ message: 'File uploaded successfully!', track: newTrack });
     } catch (error) {
         console.error('Error uploading backing track:', error);
@@ -253,7 +254,6 @@ return res.status(400).json({message: 'Please insert a trackId'});
 
 
 }
-
 
 //get tracks from user
 export const getUploadedTracks = async (req, res) => {
