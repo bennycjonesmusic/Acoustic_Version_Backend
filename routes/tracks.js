@@ -35,7 +35,7 @@ router.delete('/tracks/:id', authMiddleware, deleteTrack); //delete a track by i
 //get tracks from the user. This will be used to display the tracks on the front end.
 router.get('/uploaded-tracks',  authMiddleware, getUploadedTracks);
 
-router.get('/bought-tracks', authMiddleware, getBoughtTracks)
+router.get('/bought-tracks',authMiddleware, getBoughtTracks)
 
 //get one singular track
 router.get('/tracks/:id', authMiddleware, getTrack);
