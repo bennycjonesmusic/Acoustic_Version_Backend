@@ -3,6 +3,7 @@ dotenv.config(); //
 
 import mongoose from 'mongoose';
 import BackingTrack from './models/backing_track.js';
+import User from './models/User.js';
 
 
 const connectDB = async () => {
@@ -14,6 +15,13 @@ try {
     // Sync indexes
     await BackingTrack.syncIndexes();
     console.log('Indexes synced for BackingTrack model');
+
+     await User.syncIndexes();
+    console.log('Indexes synced for User model');
+
+    
+  const indexes = await User.collection.getIndexes();
+  console.log(indexes);
 
     // Optional: exit the script
     process.exit(0);

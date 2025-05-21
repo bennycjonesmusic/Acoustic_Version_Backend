@@ -40,6 +40,14 @@ if (! query){
      const users = await User.find({$text: {$search : query}}).sort({score: {$meta: 'textScore'}})
         .skip(skip).limit(limit).select({ score: { $meta: 'textScore' } }); 
 
+         if (!users.length) {
+      users = await User.find({
+        username: { $regex: query, $options: 'i' }
+      })
+        .skip(skip)
+        .limit(limit);
+    }
+
         const transformedUsers = users.map(user => user.toJSON({ 
             viewerRole: searcher?.role || 'public',
             viewerId: req.userId || null

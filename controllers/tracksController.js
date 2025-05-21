@@ -159,6 +159,14 @@ export const searchTracks = async (req, res) => {
     const tracks = await BackingTrack.find({$text: {$search : query}}).sort({score: {$meta: 'textScore'}})
     .skip(skip).limit(limit).select({ score: { $meta: 'textScore' } }); 
 
+     if (!tracks.length) {
+      tracks = await BackingTrack.find({
+        title: { $regex: query, $options: 'i' }
+      })
+        .skip(skip)
+        .limit(limit);
+    }
+
     
 }catch(error){
 
