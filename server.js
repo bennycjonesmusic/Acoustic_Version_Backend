@@ -37,7 +37,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use("/auth", authRoutes);
 app.use("/admin", adminRoutes);
 app.use('/stripe', stripeRoutes);
-app.use('/tracks', tracksRoutes);
+app.use('/', tracksRoutes);
 app.use('/users', userRoutes);
 app.get('/', (req, res) =>{
 

@@ -1,3 +1,5 @@
+import dotenv from 'dotenv';
+dotenv.config();
 import request from 'supertest';
 import app from './server.js';
 import mongoose from 'mongoose';
@@ -105,6 +107,88 @@ describe('Password Reset Flow', () => {
       .send({ login: testUserEmail, password: 'NewPassword123!' });
     expect(res.statusCode).toBe(200);
     expect(res.body.token).toBeDefined();
+  });
+});
+
+describe('Backing Track Upload & Preview', () => {
+  const testUser = {
+    username: 'previewuser',
+    email: 'previewuser@example.com',
+    password: 'TestPassword123!',
+    about: 'Test user for preview.'
+  };
+  let token;
+
+  beforeAll(async () => {
+    await User.deleteMany({ email: testUser.email });
+    await request(app).post('/auth/register').send(testUser);
+    const loginRes = await request(app)
+      .post('/auth/login')
+      .send({ login: testUser.email, password: testUser.password });
+    token = loginRes.body.token;
+    expect(token).toBeDefined();
+  });
+
+  it('should upload a track and return a previewUrl', async () => {
+    const res = await request(app)
+      .post('/tracks/upload')
+      .set('Authorization', `Bearer ${token}`)
+      .field('title', 'Test Track')
+      .field('originalArtist', 'Test Artist')
+      .field('backingTrackType', 'Acoustic Guitar')
+      .field('genre', 'Pop')
+      .field('vocalRange', 'Tenor')
+      .field('description', 'Test track for preview')
+      .field('price', 0)
+      .attach('file', 'test-assets/sample.mp3');
+    if (res.statusCode !== 200) {
+      console.error('Upload failed:', res.body);
+    }
+    expect(res.statusCode).toBe(200);
+    expect(res.body.track).toBeDefined();
+    if (!res.body.track.previewUrl) {
+      console.error('No previewUrl in response:', res.body.track);
+    }
+    expect(res.body.track.previewUrl).toBeDefined();
+    expect(res.body.track.previewUrl).toMatch(/^https?:\/\//);
+  });
+});
+
+describe('Backing Track Upload', () => {
+  const testUser = {
+    username: 'uploaduser',
+    email: 'uploaduser@example.com',
+    password: 'TestPassword123!',
+    about: 'Test user for upload.'
+  };
+  let token;
+
+  beforeAll(async () => {
+    await User.deleteMany({ email: testUser.email });
+    await request(app).post('/auth/register').send(testUser);
+    const loginRes = await request(app)
+      .post('/auth/login')
+      .send({ login: testUser.email, password: testUser.password });
+    token = loginRes.body.token;
+    expect(token).toBeDefined();
+  });
+
+  it('should upload a track and return a fileUrl', async () => {
+    const res = await request(app)
+      .post('/tracks/upload')
+      .set('Authorization', `Bearer ${token}`)
+      .field('title', 'Test Track')
+      .field('originalArtist', 'Test Artist')
+      .field('backingTrackType', 'Acoustic Guitar')
+      .field('genre', 'Pop')
+      .field('vocalRange', 'Tenor')
+      .field('description', 'Test track for upload')
+      .field('price', 0)
+      .attach('file', 'test-assets/sample.mp3');
+    expect(res.statusCode).toBe(200);
+    expect(res.body.track).toBeDefined();
+    expect(res.body.track.fileUrl).toBeDefined();
+    expect(res.body.track.fileUrl).toMatch(/^https?:\/\//);
   });
 });
 

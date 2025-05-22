@@ -2,11 +2,14 @@ import Joi from 'joi'; //joi is used for input validation apparently.
 
 export const uploadTrackSchema = Joi.object({
   title: Joi.string().min(1).max(100).required(),
-  description: Joi.string().max(500).allow(''),
+  description: Joi.string().max(500).required(),
   price: Joi.number().min(0).required(),
+  originalArtist: Joi.string().min(1).max(100).required(),
+  backingTrackType: Joi.string().valid('Acoustic Guitar', 'Piano', 'Full Arrangement Track', 'Other').required(),
+  genre: Joi.string().valid('Pop', 'Rock', 'Folk', 'Jazz', 'Classical', 'Musical Theatre', 'Country', 'Other').optional(),
+  vocalRange: Joi.string().valid('Soprano', 'Mezzo-Soprano', 'Contralto', 'Countertenor', 'Tenor', 'Baritone', 'Bass').optional(),
   // You can add more fields as needed, e.g.:
   // key: Joi.string().valid('A', 'B', 'C', 'D', 'E', 'F', 'G').optional(),
-  // vocalRange: Joi.string().optional(),
 });
 
 export const registerSchema = Joi.object({

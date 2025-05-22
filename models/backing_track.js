@@ -120,7 +120,11 @@ const backingTrackSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now }
 
 
-  }]
+  }],
+
+  previewUrl: {
+    type: String
+  }
 
 });
 
@@ -172,6 +176,11 @@ backingTrackSchema.set('toJSON', {
       delete ret.licenseStatus;
       
       // add to hide more stuff. Check when on frontend and adjust as needed.
+    }
+
+    // Always include previewUrl in output
+    if (doc.previewUrl) {
+      ret.previewUrl = doc.previewUrl;
     }
     return ret;
   }

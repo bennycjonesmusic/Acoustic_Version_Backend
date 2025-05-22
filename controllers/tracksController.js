@@ -58,21 +58,14 @@ try{
 }
 
 export const uploadTrack = async (req, res) => {
-
-    //check first of all if the body follows the schema (JOI validation)
-    
     const { error } = uploadTrackSchema.validate(req.body);
     if (error) {
         return res.status(400).json({ message: error.details[0].message });
     }
-
-    //if error return the error message
-    // if no error, continue with logic
     try {
         if (!req.file) {
             return res.status(400).json({ message: 'No file uploaded' });
         }
-        // Use the buffer directly from multer.memoryStorage
         const fileStream = Buffer.from(req.file.buffer);
         const s3Client = new S3Client({
             region: process.env.AWS_REGION,
@@ -88,10 +81,46 @@ export const uploadTrack = async (req, res) => {
             ACL: 'private',
             StorageClass: 'STANDARD',
         };
-        const data = await new Upload({
-            client: s3Client,
-            params: uploadParams,
-        }).done();
+        const data = await new Upload({ client: s3Client, params: uploadParams }).done();
+
+        // --- 30-second preview logic ---
+        let previewUrl = null;
+        const tmp = await import('os');
+        const path = await import('path');
+        const { getAudioPreview } = await import('../utils/audioPreview.js');
+        const tmpDir = tmp.tmpdir();
+        const previewFilename = `preview-${Date.now()}-${req.file.originalname}`;
+        const previewPath = path.join(tmpDir, previewFilename);
+        try {
+            // Write buffer to temp file for ffmpeg
+            fs.writeFileSync(previewPath + '-full', fileStream);
+            await getAudioPreview(previewPath + '-full', previewPath, 30);
+            // Upload preview to S3
+            const previewUploadParams = {
+                Bucket: process.env.AWS_BUCKET_NAME,
+                Key: `previews/${Date.now()}-${req.file.originalname}`,
+                Body: fs.createReadStream(previewPath),
+                ACL: 'private',
+                StorageClass: 'STANDARD',
+            };
+            const previewData = await new Upload({ client: s3Client, params: previewUploadParams }).done();
+            console.log('S3 preview upload result:', previewData);
+            previewUrl = previewData.Location;
+            console.log('Assigned previewUrl:', previewUrl);
+            // Clean up temp files
+            fs.unlinkSync(previewPath);
+            fs.unlinkSync(previewPath + '-full');
+        } catch (err) {
+            console.error('Error generating/uploading preview:', err);
+            // Clean up temp files if they exist
+            try { fs.existsSync(previewPath) && fs.unlinkSync(previewPath); } catch {}
+            try { fs.existsSync(previewPath + '-full') && fs.unlinkSync(previewPath + '-full'); } catch {}
+            // Add error message for debugging
+            previewUrl = null;
+            res.locals.previewError = err && err.message ? err.message : 'Unknown error generating preview';
+        }
+        // --- end preview logic ---
+
         const newTrack = new BackingTrack({
             title: req.body.title || req.file.originalname,
             description: req.body.description || 'No description provided',
@@ -99,13 +128,21 @@ export const uploadTrack = async (req, res) => {
             s3Key: uploadParams.Key,
             price: parseFloat(req.body.price) || 0,
             user: req.userId,
+            previewUrl: previewUrl || undefined,
+            originalArtist: req.body.originalArtist,
+            backingTrackType: req.body.backingTrackType,
+            genre: req.body.genre,
+            vocalRange: req.body.vocalRange
         });
         await newTrack.save();
         const updateUser = await User.findByIdAndUpdate(req.userId, { $push: { uploadedTracks: newTrack._id } }, { new: true });
         if (!updateUser) {
             return res.status(404).json({ message: "User not found." });
         }
-        // No need to unlink file since it's not stored on disk
+        // If preview failed, include error in response for debugging
+        if (!previewUrl && res.locals.previewError) {
+            return res.status(200).json({ message: 'File uploaded, but preview failed', previewError: res.locals.previewError, track: newTrack });
+        }
         return res.status(200).json({ message: 'File uploaded successfully!', track: newTrack });
     } catch (error) {
         console.error('Error uploading backing track:', error);
