@@ -1,5 +1,6 @@
 import { S3Client, ListObjectsCommand, DeleteObjectsCommand } from '@aws-sdk/client-s3';
 import User from '../models/User.js';
+import BackingTrack from '../models/backing_track.js';
 
 export const clearS3 = async (req, res) => {
     try {
@@ -34,15 +35,43 @@ export const clearS3 = async (req, res) => {
 };
 
 export const deleteAllUsers = async (req, res) => {
+    // Require a special admin code for extra safety
+    const adminCode = req.header('x-admin-code');
+    if (!adminCode || adminCode !== process.env.ADMIN_DELETE_CODE) {
+        return res.status(403).json({ message: 'Admin code required or incorrect.' });
+    }
     try {
-        const result = await User.deleteMany({});
-        if (result.deletedCount === 0) {
-            return res.status(404).json({ message: 'No users found to delete' });
+        // Delete all users
+        const userResult = await User.deleteMany({});
+        // Delete all tracks
+        const trackResult = await BackingTrack.deleteMany({});
+        // Clear S3
+        const s3Client = new S3Client({
+            region: process.env.AWS_REGION,
+            credentials: {
+                accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+                secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+            },
+        });
+        const listParams = { Bucket: process.env.AWS_BUCKET_NAME };
+        const data = await s3Client.send(new ListObjectsCommand(listParams));
+        let s3Message = 'No files to delete from S3';
+        if (data.Contents && data.Contents.length > 0) {
+            const deleteParams = {
+                Bucket: process.env.AWS_BUCKET_NAME,
+                Delete: {
+                    Objects: data.Contents.map((object) => ({ Key: object.Key })),
+                },
+            };
+            await s3Client.send(new DeleteObjectsCommand(deleteParams));
+            s3Message = 'All files deleted from S3';
         }
-       return res.status(200).json({ message: `${result.deletedCount} users deleted` });
+        return res.status(200).json({ 
+            message: `${userResult.deletedCount} users and ${trackResult.deletedCount} tracks deleted. ${s3Message}` 
+        });
     } catch (error) {
-        console.error('Error deleting all users:', error);
-       return res.status(500).json({ message: 'Internal server error' });
+        console.error('Error deleting all users/tracks and clearing S3:', error);
+        return res.status(500).json({ message: 'Internal server error' });
     }
 };
 
