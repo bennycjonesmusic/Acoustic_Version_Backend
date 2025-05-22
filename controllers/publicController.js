@@ -88,18 +88,23 @@ export const getFeaturedTracks = async (req, res) => {
     try {
 
         //get popular and recent tracks
-        const popularTracks = await BackingTrack.find().sort({ purchaseCount: -1}).limit(10);
-        const recentTracks = await BackingTrack.find().sort({ createdAt: -1}).limit(10);
+        const popularTracks = await BackingTrack.find().sort({ purchaseCount: -1}).limit(10).populate('user', 'avatar username');
+        const recentTracks = await BackingTrack.find().sort({ createdAt: -1}).limit(10).populate('user', 'avatar username');
         
         // exclude popular and recent tracks from the random selection
         const excludeIds = [
             ...popularTracks.map(track => track._id),
             ...recentTracks.map(track => track._id)
-
         ];
-        const randomTracks = await BackingTrack.aggregate([ { $match: {_id: {$nin: excludeIds} } }, { $sample: {size: 5} }]);
-
-        const featured = [...popularTracks, ...randomTracks, ...recentTracks];
+        const randomTracks = await BackingTrack.aggregate([
+            { $match: { _id: { $nin: excludeIds } } }, //Exclude popular and recent tracks
+            { $sample: { size: 5 } }
+        ]);
+        // Populate user for randomTracks
+        const randomTrackIds = randomTracks.map(track => track._id);
+        const randomTracksPopulated = await BackingTrack.find({ _id: { $in: randomTrackIds } }).populate('user', 'avatar username');
+        // Merge all tracks
+        const featured = [...popularTracks, ...randomTracksPopulated, ...recentTracks]; //Merge the arrays in a super array
         return res.status(200).json(toTrackSummary(featured));
 
 
@@ -143,10 +148,10 @@ export const queryTracks = async (req, res) => {
             try {
                 filter.vocalRange = vocalRange;
             } catch (error) {
-                return res.status(400).json({ error: "Something went wrong. Make sure you enter valid vocal range" });
+                return res.status(400).json({ error: "Something went wrong. Make sure you enter a valid vocal range" });
             }
         }
-        const tracks = await BackingTrack.find(filter).sort(sort).skip((page - 1) * limit).limit(limit);
+        const tracks = await BackingTrack.find(filter).sort(sort).skip((page - 1) * limit).limit(limit).populate('user', 'avatar username');
         if (!tracks || tracks.length === 0) {
             return res.status(404).json({ message: "No tracks found." });
         }
@@ -169,13 +174,15 @@ export const searchTracks = async (req, res) => {
             .sort({ score: { $meta: 'textScore' } })
             .skip(skip)
             .limit(limit)
-            .select({ score: { $meta: 'textScore' } });
+            .select({ score: { $meta: 'textScore' } })
+            .populate('user', 'avatar username'); //we want to be able to display a picture for the tracks
         if (!tracks.length) {
             tracks = await BackingTrack.find({
                 title: { $regex: query, $options: 'i' }
             })
                 .skip(skip)
-                .limit(limit);
+                .limit(limit)
+                .populate('user', 'avatar username');
         }
         const summaryTracks = toTrackSummary(tracks);
         return res.status(200).json(summaryTracks);

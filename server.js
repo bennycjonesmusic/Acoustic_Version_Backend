@@ -12,6 +12,7 @@ import webhookRoutes from './routes/webhook.js';
 import tracksRoutes from './routes/tracks.js';
 import userRoutes from './routes/users.js';
 import publicRoutes from './routes/public.js';
+import rateLimit from 'express-rate-limit';
 
 
 
@@ -33,6 +34,17 @@ app.use(cors());
 app.use('/webhook', webhookRoutes);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Global rate limiter: 100 requests per 15 minutes per IP
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many requests, please try again later.' }
+});
+
+app.use(globalLimiter);
 
 //When /auth is hit, use the authRoutes. 
 app.use("/auth", authRoutes);

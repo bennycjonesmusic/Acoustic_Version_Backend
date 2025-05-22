@@ -45,3 +45,36 @@ export const sendPasswordResetEmail = async (email, token) => {
   };
   await transporter.sendMail(mailOptions);
 };
+
+export const sendPurchaseReceiptEmail = async (buyerEmail, track, artist, session) => {
+  const downloadUrl = track.fileUrl; // or a secure download link
+  const mailOptions = {
+    from: `"Backing Tracks" <${process.env.EMAIL_USER}>`,
+    to: buyerEmail,
+    subject: `Your purchase receipt: ${track.title}`,
+    html: `
+      <h2>Thank you for your purchase!</h2>
+      <p>You bought <b>${track.title}</b> by ${track.originalArtist}.</p>
+      <p>Sold by: ${artist?.username || 'the artist'} (${artist?.email || ''})</p>
+      <p>Price: $${track.price}</p>
+      <p><a href="${downloadUrl}">Download your track</a></p>
+      <p>Order ID: ${session.id}</p>
+    `,
+  };
+  await transporter.sendMail(mailOptions);
+};
+
+export const sendSaleNotificationEmail = async (sellerEmail, track, buyer, session) => {
+  const mailOptions = {
+    from: `"Backing Tracks" <${process.env.EMAIL_USER}>`,
+    to: sellerEmail,
+    subject: `You sold a track: ${track.title}`,
+    html: `
+      <h2>Congratulations!</h2>
+      <p>Your track <b>${track.title}</b> was purchased by ${buyer?.username || buyer?.email || 'a user'}.</p>
+      <p>Price: $${track.price}</p>
+      <p>Order ID: ${session.id}</p>
+    `,
+  };
+  await transporter.sendMail(mailOptions);
+};

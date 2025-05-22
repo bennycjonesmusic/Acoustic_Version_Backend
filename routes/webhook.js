@@ -2,6 +2,7 @@ import express from 'express';
 import Stripe from 'stripe';
 import User from '../models/User.js';
 import BackingTrack from '../models/backing_track.js';
+import { sendPurchaseReceiptEmail, sendSaleNotificationEmail } from '../utils/emailAuthentication.js';
 
 const router = express.Router();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -52,6 +53,14 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
         }
         await track.save();
         console.log(`Purchase recorded for ${user.email}`);
+        // Send purchase receipt to buyer
+        if (user.email) {
+          await sendPurchaseReceiptEmail(user.email, track, artist, session);
+        }
+        // Send sale notification to seller
+        if (artist && artist.email) {
+          await sendSaleNotificationEmail(artist.email, track, user, session);
+        }
       } else {
         console.error('User or track not found:', { userId, trackId });
       }
