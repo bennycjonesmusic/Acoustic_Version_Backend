@@ -9,6 +9,8 @@ import * as Filter from 'bad-words'; //package to prevent profanity
 import zxcvbn from 'zxcvbn'; //package for password strength
 import { validateEmail } from '../utils/emailValidator.js';
 import { sendVerificationEmail } from '../utils/emailAuthentication.js';
+import { toTrackSummary } from '../utils/trackSummary.js';
+import { toUserSummary } from '../utils/userSummary.js';
 
 
 
@@ -49,14 +51,7 @@ if (! query){
     }
 
         // Only return summary info for each user
-        const summaryUsers = users.map(user => ({
-            id: user._id,
-            username: user.username,
-            avatar: user.avatar, // if you have an avatar field
-            // add any other summary fields you want
-        }))
-
-         return res.status(200).json({ users: summaryUsers });
+        return res.status(200).json({ users: toUserSummary(users) });
         
 
     }
@@ -88,6 +83,43 @@ export const getUserDetails = async (req, res) => {
 
 // --- PUBLIC TRACK ENDPOINTS MOVED FROM tracksController.js ---
 
+export const getFeaturedTracks = async (req, res) => {
+
+    try {
+
+        //get popular and recent tracks
+        const popularTracks = await BackingTrack.find().sort({ purchaseCount: -1}).limit(10);
+        const recentTracks = await BackingTrack.find().sort({ createdAt: -1}).limit(10);
+        
+        // exclude popular and recent tracks from the random selection
+        const excludeIds = [
+            ...popularTracks.map(track => track._id),
+            ...recentTracks.map(track => track._id)
+
+        ];
+        const randomTracks = await BackingTrack.aggregate([ { $match: {_id: {$nin: excludeIds} } }, { $sample: {size: 5} }]);
+
+        const featured = [...popularTracks, ...randomTracks, ...recentTracks];
+        return res.status(200).json(toTrackSummary(featured));
+
+
+    } catch (error) {
+        console.error('Error getting featured tracks:', error);
+        return res.status(500).json({message: "Internal server error"});
+
+
+
+
+
+    }
+
+
+
+
+
+    
+}
+
 export const queryTracks = async (req, res) => {
     try {
         const { orderBy, page = 1, limit = 10, keySig, "vocal-range": vocalRange } = req.query;
@@ -118,13 +150,7 @@ export const queryTracks = async (req, res) => {
         if (!tracks || tracks.length === 0) {
             return res.status(404).json({ message: "No tracks found." });
         }
-        const summaryTracks = tracks.map(track => ({
-            id: track._id,
-            title: track.title,
-            user: track.user,
-            originalArtist: track.originalArtist,
-            trackPrice: track.price
-        }));
+        const summaryTracks = toTrackSummary(tracks);
         return res.status(200).json(summaryTracks);
     } catch (error) {
         return res.status(500).json({ error: "Failed to query tracks" });
@@ -151,13 +177,7 @@ export const searchTracks = async (req, res) => {
                 .skip(skip)
                 .limit(limit);
         }
-        const summaryTracks = tracks.map(track => ({
-            id: track._id,
-            title: track.title,
-            user: track.user,
-            originalArtist: track.originalArtist,
-            trackPrice: track.price
-        }));
+        const summaryTracks = toTrackSummary(tracks);
         return res.status(200).json(summaryTracks);
     } catch (error) {
         return res.status(500).json({ message: "server error querying tracks" });

@@ -6,7 +6,7 @@ import { clearS3, deleteAllUsers, getUsers } from '../controllers/adminControlle
 const router = Router();
 
 router.delete('/clear-s3', authMiddleware, isOwner, clearS3);
-router.delete('/delete-all-users', authMiddleware, isOwner, deleteAllUsers);
+router.delete('/delete-all-users', authMiddleware, isOwner, deleteAllUsers); //delete all users now requires special admin code
 router.get('/users', getUsers);
 
 export default router;
