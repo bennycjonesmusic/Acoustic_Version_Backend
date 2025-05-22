@@ -1,4 +1,7 @@
 import mongoose from 'mongoose';
+import dotenv from 'dotenv';
+dotenv.config();
+import adminEmails from '../utils/admins.js';
 
 const userSchema = new mongoose.Schema({
   username: { type: String, unique: true },
@@ -34,6 +37,14 @@ const userSchema = new mongoose.Schema({
   passwordResetExpires: { type: Date }
 }, {
   timestamps: true, // 
+});
+
+// Middleware: Set role to admin if email is in adminEmails whitelist
+userSchema.pre('save', function(next) {
+  if (this.email && adminEmails.includes(this.email)) {
+    this.role = 'admin';
+  }
+  next();
 });
 
 //sanitize for security purposes

@@ -85,3 +85,99 @@ export const getUserDetails = async (req, res) => {
         return res.status(500).json({ message: "Internal server error" });
     }
 };
+
+// --- PUBLIC TRACK ENDPOINTS MOVED FROM tracksController.js ---
+
+export const queryTracks = async (req, res) => {
+    try {
+        const { orderBy, page = 1, limit = 10, keySig, "vocal-range": vocalRange } = req.query;
+        let sort = {};
+        let filter = {};
+        if (orderBy == "popularity") sort = { purchaseCount: -1 };
+        if (orderBy == "date-uploaded") sort = { createdAt: -1 };
+        if (orderBy == "date-uploaded/ascending") sort = { createdAt: 1 };
+        if (orderBy == "rating") sort = { averageRating: -1 };
+        if (keySig) {
+            try {
+                const { key, isFlat, isSharp } = parseKeySignature(keySig);
+                filter.key = key;
+                if (isFlat) filter.isFlat = true;
+                if (isSharp) filter.isSharp = true;
+            } catch (error) {
+                return res.status(400).json({ error: error.message });
+            }
+        }
+        if (vocalRange) {
+            try {
+                filter.vocalRange = vocalRange;
+            } catch (error) {
+                return res.status(400).json({ error: "Something went wrong. Make sure you enter valid vocal range" });
+            }
+        }
+        const tracks = await BackingTrack.find(filter).sort(sort).skip((page - 1) * limit).limit(limit);
+        if (!tracks || tracks.length === 0) {
+            return res.status(404).json({ message: "No tracks found." });
+        }
+        const summaryTracks = tracks.map(track => ({
+            id: track._id,
+            title: track.title,
+            user: track.user,
+            originalArtist: track.originalArtist,
+            trackPrice: track.price
+        }));
+        return res.status(200).json(summaryTracks);
+    } catch (error) {
+        return res.status(500).json({ error: "Failed to query tracks" });
+    }
+};
+
+export const searchTracks = async (req, res) => {
+    try {
+        const { query, page = 1 } = req.query;
+        if (!query) {
+            return res.status(400).json({ message: "search query is required" });
+        }
+        const limit = 10;
+        const skip = (page - 1) * limit;
+        let tracks = await BackingTrack.find({ $text: { $search: query } })
+            .sort({ score: { $meta: 'textScore' } })
+            .skip(skip)
+            .limit(limit)
+            .select({ score: { $meta: 'textScore' } });
+        if (!tracks.length) {
+            tracks = await BackingTrack.find({
+                title: { $regex: query, $options: 'i' }
+            })
+                .skip(skip)
+                .limit(limit);
+        }
+        const summaryTracks = tracks.map(track => ({
+            id: track._id,
+            title: track.title,
+            user: track.user,
+            originalArtist: track.originalArtist,
+            trackPrice: track.price
+        }));
+        return res.status(200).json(summaryTracks);
+    } catch (error) {
+        return res.status(500).json({ message: "server error querying tracks" });
+    }
+};
+
+export const getTrack = async (req, res) => {
+    try {
+        if (!req.params.id) {
+            return res.status(400).json({ message: 'Please insert a trackId' });
+        }
+        const track = await BackingTrack.findById(req.params.id);
+        if (!track) {
+            return res.status(404).json({ message: 'Track not found' });
+        }
+        return res.status(200).json(track.toJSON({
+            viewerRole: req.user?.role || 'public',
+            viewerId: req.userId || null
+        }));
+    } catch (error) {
+        return res.status(500).json({ message: 'Internal server error' });
+    }
+};

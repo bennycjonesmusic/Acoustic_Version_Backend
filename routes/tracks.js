@@ -7,13 +7,10 @@ import { uploadLimiter, registerLimiter, downloadLimiter } from '../middleware/r
 
 import {
   listS3,
-  queryTracks,
-  searchTracks,
   downloadTrack,
   getUploadedTracks,
   deleteTrack,
   uploadTrack,
-  getTrack,
   getBoughtTracks,
   rateTrack,
   commentTrack,
@@ -23,10 +20,6 @@ import {
 const router = express.Router();
 
 router.get('/tracks/list-s3', listS3);
-
-router.get('/tracks/query', queryTracks); //needs no auth middleware as it is public route.
-
-router.get('/tracks/search', searchTracks); 
 
 //now we handle the upload of backing tracks. Create, Read, Update and Delete Operations. For now though, create and delete will suffice.
 
@@ -42,9 +35,6 @@ router.get('/bought-tracks',authMiddleware, getBoughtTracks)
 
 router.post('/tracks/rate/:id', authMiddleware, rateTrack); //rate a track by id
 router.post('/tracks/comment/:id', authMiddleware, commentTrack); //comment on a track by id
-
-//get one singular track
-router.get('/tracks/:id', authMiddleware, getTrack);
 
 router.get('/tracks/download/:id', downloadLimiter, authMiddleware, downloadTrack); //req.params.id = :id needed in route
 

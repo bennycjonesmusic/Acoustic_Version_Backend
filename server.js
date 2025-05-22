@@ -11,6 +11,7 @@ import stripeRoutes from './routes/stripe_payment.js';
 import webhookRoutes from './routes/webhook.js';
 import tracksRoutes from './routes/tracks.js';
 import userRoutes from './routes/users.js';
+import publicRoutes from './routes/public.js';
 
 
 
@@ -39,6 +40,7 @@ app.use("/admin", adminRoutes);
 app.use('/stripe', stripeRoutes);
 app.use('/', tracksRoutes);
 app.use('/users', userRoutes);
+app.use('/public', publicRoutes);
 app.get('/', (req, res) =>{
 
     res.send('Testing');
