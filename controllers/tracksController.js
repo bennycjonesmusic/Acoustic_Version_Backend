@@ -7,6 +7,8 @@ import { parseKeySignature } from '../utils/parseKeySignature.js';
 import { uploadTrackSchema, reviewSchema, commentSchema } from './validationSchemas.js';
 import * as Filter from 'bad-words';
 
+
+
 export const rateTrack = async(req, res) => {
 try{
     //function for rating tracks
@@ -190,7 +192,16 @@ export const queryTracks = async (req, res) => {
             return res.status(404).json({message: "No tracks found."}); 
         }
 
-        return res.status(200).json(tracks);
+        const summaryTracks = tracks.map(track => ({
+            id: track._id,
+            title: track.title,
+            user: track.user,
+            originalArtist: track.originalArtist,
+            trackPrice: track.price
+
+        }))
+
+        return res.status(200).json(summaryTracks);
     } catch(error) {
         return res.status(500).json({ error: "Failed to query tracks" }); 
         console.error('Error querying tracks:', error);
@@ -201,40 +212,39 @@ export const queryTracks = async (req, res) => {
 
 //public route
 export const searchTracks = async (req, res) => {
-
-    try{
-    const {query, page = 1} = req.query;
-
-
-    if (! query){
-
-    return res.status(400).json({message: "search query is required"});
+    try {
+        const { query, page = 1 } = req.query;
+        if (!query) {
+            return res.status(400).json({ message: "search query is required" });
+        }
+        const limit = 10;
+        const skip = (page - 1) * limit;
+        let tracks = await BackingTrack.find({ $text: { $search: query } })
+            .sort({ score: { $meta: 'textScore' } })
+            .skip(skip)
+            .limit(limit)
+            .select({ score: { $meta: 'textScore' } });
+        if (!tracks.length) {
+            tracks = await BackingTrack.find({
+                title: { $regex: query, $options: 'i' }
+            })
+                .skip(skip)
+                .limit(limit);
+        }
+        // Map to summary objects for the list view
+        const summaryTracks = tracks.map(track => ({
+            id: track._id,
+            title: track.title,
+            user: track.user,
+            originalArtist: track.originalArtist,
+            trackPrice: track.price
+        }));
+        return res.status(200).json(summaryTracks);
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: "server error querying tracks" });
     }
-
-    const limit = 10;
-    const skip = (page - 1) * limit; //how many items to skip
-
-    let tracks = await BackingTrack.find({$text: {$search : query}}).sort({score: {$meta: 'textScore'}})
-    .skip(skip).limit(limit).select({ score: { $meta: 'textScore' } }); 
-
-     if (!tracks.length) {
-      tracks = await BackingTrack.find({
-        title: { $regex: query, $options: 'i' }
-      })
-        .skip(skip)
-        .limit(limit);
-    }
-
-    return res.status(200).json(tracks);
-}catch(error){
-    console.error(error);
-    return res.status(500).json({message: "server error querying tracks"});
 };
-
-
-
-
-}
 
 //delete a track by id
 export const deleteTrack = async (req, res) => {
@@ -279,7 +289,11 @@ export const getTrack = async (req, res) => {
     if (!track) {
       return res.status(404).json({ message: 'Track not found' });
     }
-    return res.status(200).json(track);
+    // no need to change what is sent, as it is already filtered in the model
+    return res.status(200).json(track.toJSON({
+      viewerRole: req.user?.role || 'public',
+      viewerId: req.userId || null
+    }));
   } catch (error) {
     return res.status(500).json({ message: 'Internal server error' });
   }
@@ -384,29 +398,6 @@ return;
 
 }
 
-export const reviewTrack = async(req, res) => {
-  try {
-    const { review } = req.body;
-    const user = await User.findById(req.userId);
-    if (!user) {
-      return res.status(404).json({message: "User not found"});
-    }
-    const track = await BackingTrack.findById(req.params.id);
-    if (!track) {
-      return res.status(404).json({message: "Track not found"});
-    }
-    // Check if user has bought the track
-    const hasBought = user.boughtTracks.some(id => id.equals(track._id));
-    if (!hasBought) {
-      return res.status(400).json({ message: "You can only rate tracks you have purchased." });
-    }
-    // Place your review logic here (e.g., add rating, call calculateAverageRating, save, etc.)
-    // ...
-  } catch(error) {
-    console.error('Error reviewing track:', error);
-    return res.status(500).json({message: 'Internal server error'});
-  }
-}
 
 export const commentTrack = async (req, res) => {
   try {

@@ -26,6 +26,10 @@ const userSchema = new mongoose.Schema({
   },
   amountOfFollowers: { type: Number, default: 0 },
   about: { type: String, default: '' },
+  avatar: {
+    type: String,
+    default: '', // or a default profile pic URL 
+  },
 }, {
   timestamps: true, // 
 });
@@ -45,10 +49,7 @@ userSchema.set('toJSON', {
     const isAdmin = viewerRole === 'admin';
     const isSelf = viewerId && viewerId.toString() === ret.id;
 
-    // Only show 'about' if user is artist, self, or admin
-    if (ret.role !== 'artist' && !isSelf && !isAdmin) {
-      delete ret.about;
-    }
+
 
     //show less details if not admin or self
     if (viewerRole === 'public' || (!isAdmin && !isSelf)) {

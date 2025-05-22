@@ -6,6 +6,11 @@ const backingTrackSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  originalArtist: {
+
+    type: String,
+    required: true
+  },
   description: {
     type: String,
     required: true
@@ -147,12 +152,27 @@ backingTrackSchema.virtual('musicalKey').get(function () {
 
 // Sanitizing the schema before returning it as JSON
 backingTrackSchema.set('toJSON', {
-  transform: (doc, ret) => {
-    ret.id = ret._id.toString(); // Rename _id to id
-    delete ret._id;              // Remove _id
-    delete ret.__v;              // Remove version key
-    delete ret.s3Key;            // Never send the s3Key (it’s sensitive like my nipple)
-    delete ret.ratings;          
+  transform: (doc, ret, options) => {
+    ret.id = ret._id.toString();
+    delete ret._id;
+    delete ret.__v;
+    delete ret.s3Key;
+    delete ret.downloadCount
+  
+
+    const viewerRole = options?.viewerRole || 'user';
+    const viewerId = options?.viewerId || null;
+    const isAdmin = viewerRole === 'admin';
+    // If the track has a user field, check if the viewer is the owner
+    const isSelf = viewerId && ret.user && ret.user.toString() === viewerId.toString();
+    // Show less details if not admin or self (owner)
+    if (viewerRole === 'public' || (!isAdmin && !isSelf)) {
+      // Example: hide downloadCount, licenseStatus, etc. (customize as needed)
+      delete ret.downloadCount;
+      delete ret.licenseStatus;
+      
+      // add to hide more stuff. Check when on frontend and adjust as needed.
+    }
     return ret;
   }
 });

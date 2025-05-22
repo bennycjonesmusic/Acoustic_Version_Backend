@@ -14,7 +14,9 @@ import {
   deleteTrack,
   uploadTrack,
   getTrack,
-  getBoughtTracks
+  getBoughtTracks,
+  rateTrack,
+  commentTrack,
   
 } from '../controllers/tracksController.js';
 
@@ -35,7 +37,11 @@ router.delete('/tracks/:id', authMiddleware, deleteTrack); //delete a track by i
 //get tracks from the user. This will be used to display the tracks on the front end.
 router.get('/uploaded-tracks',  authMiddleware, getUploadedTracks);
 
+
 router.get('/bought-tracks',authMiddleware, getBoughtTracks)
+
+router.post('/tracks/rate/:id', authMiddleware, rateTrack); //rate a track by id
+router.post('/tracks/comment/:id', authMiddleware, commentTrack); //comment on a track by id
 
 //get one singular track
 router.get('/tracks/:id', authMiddleware, getTrack);

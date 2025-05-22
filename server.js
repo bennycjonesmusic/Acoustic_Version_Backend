@@ -1,9 +1,8 @@
-//load in the necessary modules. In this case we are using express make it easier to handle HTTP requests and to start the server.
-import dotenv from 'dotenv'; // another module. In this case it's to load the environment variables. Nice.
-dotenv.config(); //placing here to fix previous error. Keep this near top. saves redeclaring it.
-import express from 'express'; 
-import cors from 'cors'; // This module is used to enable CORS (Cross-origin Resource Sharing) and will enable me to make requests to the server from a different domain. This allows my front end to communicate with my back end. Saucy.
-import mongoose from 'mongoose'; // This module is used to connect to MongoDB. For storage of usernames e.t.c
+import dotenv from 'dotenv';
+dotenv.config();
+import express from 'express';
+import cors from 'cors';
+import mongoose from 'mongoose';
 import authRoutes from './routes/auth.js';
 import authMiddleware from './middleware/customer_auth.js';
 import artistAuthMiddleware from './middleware/artist_auth.js';
@@ -29,13 +28,15 @@ const app = express();
 
 //define the middleware. This will be used to parse the incoming requests. It allows frontend to communicate with the backend.
 app.use(cors());
+// Register the webhook route BEFORE any body parsers!
+app.use('/webhook', webhookRoutes);
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 //When /auth is hit, use the authRoutes. 
 app.use("/auth", authRoutes);
 app.use("/admin", adminRoutes);
 app.use('/stripe', stripeRoutes);
-app.use('/webhook', webhookRoutes);
 app.use('/tracks', tracksRoutes);
 app.use('/users', userRoutes);
 app.get('/', (req, res) =>{
@@ -61,3 +62,4 @@ console.log(`Server is running on http://localhost:${port}`); //check the consol
 });
 
  //check aws has loaded properly.
+export default app;

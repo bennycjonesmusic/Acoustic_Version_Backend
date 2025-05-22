@@ -20,7 +20,7 @@ export const register = async (req, res) => {
         return res.status(400).json({ message: error.details[0].message });
     }
     try {
-        const { username, email, password, role = "user" } = req.body;
+        const { username, email, password, role = "user", about } = req.body;
         const existingUser = await User.findOne({ $or: [ {email } , { username } ] });
         if (existingUser) {
             return res.status(400).json({ message: "User already exists!" });
@@ -29,6 +29,11 @@ export const register = async (req, res) => {
         const profanity = new Filter.Filter();
         
         if (profanity.isProfane(username)){
+
+            return res.status(400).json({message: "Vulgar language detected. Please use nice words."})
+
+        }
+        if (profanity.isProfane(about)){
 
             return res.status(400).json({message: "Vulgar language detected. Please use nice words."})
 
@@ -46,7 +51,7 @@ export const register = async (req, res) => {
             return res.status(400).json({message: "Password is too weak. Needs more power."});
         }
         const hashedPassword = await bcrypt.hash(password, 10);
-        const newUser = new User({ username, email, password: hashedPassword });
+        const newUser = new User({ username, email, password: hashedPassword, about });
         await newUser.save();
 
         const token = jwt.sign(

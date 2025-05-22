@@ -15,28 +15,34 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
 
   try {
     event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+    console.log('Webhook event received:', event.type);
   } catch (err) {
     console.error('Webhook signature verification failed:', err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
+  // Log the event for debugging
+  console.log('Event payload:', JSON.stringify(event, null, 2));
+
   // Handle successful checkout
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object;
-
+    if (!session.metadata || !session.metadata.userId || !session.metadata.trackId) {
+      // Allow CLI test events to pass without error, but log a warning
+      console.warn('Missing metadata in session (likely a Stripe CLI test event):', session);
+      return res.status(200).send('Received (no metadata, likely test event)');
+    }
     try {
-     
       const userId = session.metadata.userId;
       const trackId = session.metadata.trackId;
-
       const user = await User.findById(userId);
       const track = await BackingTrack.findById(trackId);
-
       if (user && track) {
-        // Add track to user's boughtTracks (no duplicate check, revert to original)
-        user.boughtTracks.push(track._id);
-        await user.save();
-
+        // Only add if not already bought
+        if (!user.boughtTracks.some(id => id.equals(track._id))) {
+          user.boughtTracks.push(track._id);
+          await user.save();
+        }
         // Optionally increment download or purchase count
         track.purchaseCount = (track.purchaseCount || 0) + 1;
         const artist = await User.findById(track.user);
@@ -46,6 +52,8 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
         }
         await track.save();
         console.log(`Purchase recorded for ${user.email}`);
+      } else {
+        console.error('User or track not found:', { userId, trackId });
       }
     } catch (err) {
       console.error('Error handling purchase:', err);

@@ -48,16 +48,15 @@ if (! query){
         .limit(limit);
     }
 
-        const transformedUsers = users.map(user => user.toJSON({ 
-            viewerRole: searcher?.role || 'public',
-            viewerId: req.userId || null
-
-
-
-
+        // Only return summary info for each user
+        const summaryUsers = users.map(user => ({
+            id: user._id,
+            username: user.username,
+            avatar: user.avatar, // if you have an avatar field
+            // add any other summary fields you want
         }))
 
-         return res.status(200).json({ users: transformedUsers });
+         return res.status(200).json({ users: summaryUsers });
         
 
     }
@@ -69,3 +68,20 @@ catch (error) {
 
 
 }
+
+export const getUserDetails = async (req, res) => {
+    try {
+        const user = await User.findById(req.params.id);
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+        // Use schema transform with viewerRole/viewerId if available
+        return res.status(200).json(user.toJSON({
+            viewerRole: req.user?.role || 'public',
+            viewerId: req.userId || null
+        }));
+    } catch (error) {
+        console.error('Error getting user details:', error);
+        return res.status(500).json({ message: "Internal server error" });
+    }
+};
