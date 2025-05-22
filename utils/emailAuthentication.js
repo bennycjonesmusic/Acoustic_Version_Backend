@@ -29,3 +29,19 @@ export const sendVerificationEmail = async (email, token) => {
 
   await transporter.sendMail(mailOptions);
 };
+
+export const sendPasswordResetEmail = async (email, token) => {
+  const resetUrl = `${process.env.BASE_URL}/reset-password?token=${token}`;
+  const mailOptions = {
+    from: `"Your App Name" <${process.env.EMAIL_USER}>`,
+    to: email,
+    subject: 'Password Reset Request',
+    html: `
+      <h2>Password Reset</h2>
+      <p>Click the link below to reset your password. This link will expire in 1 hour.</p>
+      <a href="${resetUrl}">${resetUrl}</a>
+      <p>If you did not request this, you can ignore this email.</p>
+    `,
+  };
+  await transporter.sendMail(mailOptions);
+};

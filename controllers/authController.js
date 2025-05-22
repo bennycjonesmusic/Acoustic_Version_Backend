@@ -8,8 +8,9 @@ import BackingTrack from '../models/backing_track.js';
 import * as Filter from 'bad-words'; //package to prevent profanity. due to import issues, using import * as Filter
 import zxcvbn from 'zxcvbn'; //package for password strength
 import { validateEmail } from '../utils/emailValidator.js';
-import { sendVerificationEmail } from '../utils/emailAuthentication.js';
+import { sendVerificationEmail, sendPasswordResetEmail } from '../utils/emailAuthentication.js';
 import { registerSchema, loginSchema, artistAboutSchema } from './validationSchemas.js';
+import crypto from 'crypto';
 
 
 //Create...
@@ -272,6 +273,44 @@ export const updateAbout = async (req, res) => {
     return res.status(200).json({ message: 'About section updated successfully', about: user.about });
   } catch (error) {
     console.error('Error updating about section:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+export const requestPasswordReset = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ message: 'Email is required.' });
+    const user = await User.findOne({ email });
+    if (!user) return res.status(200).json({ message: 'If that email is registered, a reset link has been sent.' });
+    // Generate token
+    const token = crypto.randomBytes(32).toString('hex');
+    user.passwordResetToken = token;
+    user.passwordResetExpires = Date.now() + 1000 * 60 * 60; // 1 hour
+    await user.save();
+    // Send email (implement sendPasswordResetEmail)
+    await sendPasswordResetEmail(user.email, token);
+    return res.status(200).json({ message: 'If that email is registered, a reset link has been sent.' });
+  } catch (error) {
+    console.error('Error requesting password reset:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+export const resetPassword = async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+    if (!token || !newPassword) return res.status(400).json({ message: 'Token and new password are required.' });
+    const user = await User.findOne({ passwordResetToken: token, passwordResetExpires: { $gt: Date.now() } });
+    if (!user) return res.status(400).json({ message: 'Invalid or expired token.' });
+    // Validate password strength if needed
+    user.password = await bcrypt.hash(newPassword, 10);
+    user.passwordResetToken = undefined;
+    user.passwordResetExpires = undefined;
+    await user.save();
+    return res.status(200).json({ message: 'Password has been reset successfully.' });
+  } catch (error) {
+    console.error('Error resetting password:', error);
     return res.status(500).json({ message: 'Internal server error' });
   }
 };

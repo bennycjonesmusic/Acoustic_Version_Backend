@@ -30,6 +30,8 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: '', // or a default profile pic URL 
   },
+  passwordResetToken: { type: String },
+  passwordResetExpires: { type: Date }
 }, {
   timestamps: true, // 
 });
