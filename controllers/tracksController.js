@@ -133,7 +133,10 @@ export const uploadTrack = async (req, res) => {
             originalArtist: req.body.originalArtist,
             backingTrackType: req.body.backingTrackType,
             genre: req.body.genre,
-            vocalRange: req.body.vocalRange
+            vocalRange: req.body.vocalRange,
+            instructions: req.body.instructions || '',
+            youtubeGuideUrl: req.body.youtubeGuideUrl || '',
+            guideTrackUrl: req.body.guideTrackUrl || ''
         });
         await newTrack.save();
         const updateUser = await User.findByIdAndUpdate(req.userId, { $push: { uploadedTracks: newTrack._id } }, { new: true });

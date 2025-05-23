@@ -8,6 +8,9 @@ export const uploadTrackSchema = Joi.object({
   backingTrackType: Joi.string().valid('Acoustic Guitar', 'Piano', 'Full Arrangement Track', 'Other').required(),
   genre: Joi.string().valid('Pop', 'Rock', 'Folk', 'Jazz', 'Classical', 'Musical Theatre', 'Country', 'Other').optional(),
   vocalRange: Joi.string().valid('Soprano', 'Mezzo-Soprano', 'Contralto', 'Countertenor', 'Tenor', 'Baritone', 'Bass').optional(),
+  instructions: Joi.string().max(1000).allow('').optional(),
+  youtubeGuideUrl: Joi.string().uri().allow('').optional(),
+  guideTrackUrl: Joi.string().uri().allow('').optional(),
   // You can add more fields as needed, e.g.:
   // key: Joi.string().valid('A', 'B', 'C', 'D', 'E', 'F', 'G').optional(),
 });
