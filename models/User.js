@@ -52,7 +52,8 @@ const userSchema = new mongoose.Schema({
     description: { type: String, default: '' },
     uploadedAt: { type: Date, default: Date.now }
   }],
-  banned: { type: Boolean, default: false }
+  banned: { type: Boolean, default: false },
+  totalIncome: { type: Number, default: 0 }
 }, {
   timestamps: true, // 
 });
@@ -108,11 +109,13 @@ userSchema.set('toJSON', {
       // Hide purchasedTracks from non-admins and non-self
       if (!isSelf) {
         delete ret.purchasedTracks;
+        delete ret.totalIncome;
       }
     }
-    // If not admin or self, hide purchasedTracks
+    // If not admin or self, hide purchasedTracks and totalIncome
     if (!isAdmin && !isSelf) {
       delete ret.purchasedTracks;
+      delete ret.totalIncome;
     }
     return ret;
   }

@@ -54,6 +54,7 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
         const artist = await User.findById(track.user);
         if (artist) {
           artist.amountOfTracksSold += 1;
+          artist.totalIncome = (artist.totalIncome || 0) + (track.price || 0);
           await artist.save();
         }
         await track.save();

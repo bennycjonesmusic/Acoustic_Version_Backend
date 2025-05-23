@@ -12,7 +12,8 @@ import {
     changePassword,
     getUserProfile,
     requestPasswordReset,
-    resetPassword
+    resetPassword,
+    updateProfile
 } from '../controllers/authController.js';
 
 //i know there are routes in here that should be in other route.js files. However, I am learning as i go and this project has quickly developed in size.
@@ -43,6 +44,8 @@ router.get('/verify-email', verifyEmail);
 router.post('/resend-email', authMiddleware, resendEmail);
 //update S3 File for ID's that were not initially added.
 router.put('/updateS3/:id', authMiddleware, updateS3Key);
+// Update user profile (avatar, about, etc.)
+router.patch('/update-profile', authMiddleware, updateProfile);
 
 export default router;
 

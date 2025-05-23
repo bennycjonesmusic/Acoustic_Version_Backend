@@ -1,6 +1,9 @@
 import { S3Client, ListObjectsCommand, DeleteObjectsCommand } from '@aws-sdk/client-s3';
 import User from '../models/User.js';
 import BackingTrack from '../models/backing_track.js';
+import { Parser } from 'json2csv';
+import path from 'path';
+import fs from 'fs';
 
 export const clearS3 = async (req, res) => {
     try {
@@ -104,6 +107,96 @@ export const banUser = async (req, res) => {
     return res.status(200).json({ success: true, message: 'User banned.' });
   } catch (error) {
     console.error('Error banning user:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Admin: Get all sales and refund history
+export const getAllSalesAndRefunds = async (req, res) => {
+  try {
+    if (!req.user || req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+    // Get all users with their purchasedTracks
+    const users = await User.find({}, 'username email purchasedTracks').populate({
+      path: 'purchasedTracks.track',
+      select: 'title user',
+      populate: { path: 'user', select: 'username' }
+    });
+    // Flatten all purchases
+    const allPurchases = [];
+    users.forEach(user => {
+      user.purchasedTracks.forEach(p => {
+        allPurchases.push({
+          buyer: user.username,
+          buyerEmail: user.email,
+          trackTitle: p.track?.title,
+          artist: p.track?.user?.username,
+          trackId: p.track?._id,
+          paymentIntentId: p.paymentIntentId,
+          purchasedAt: p.purchasedAt,
+          price: p.price,
+          refunded: p.refunded
+        });
+      });
+    });
+    return res.status(200).json({ sales: allPurchases });
+  } catch (error) {
+    console.error('Error fetching sales/refunds:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Admin: Get total income per month and export sales/refunds to CSV as file
+export const getSalesStatsAndCsv = async (req, res) => {
+  try {
+    if (!req.user || req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+    // Get all users with their purchasedTracks
+    const users = await User.find({}, 'username email purchasedTracks').populate({
+      path: 'purchasedTracks.track',
+      select: 'title user',
+      populate: { path: 'user', select: 'username' }
+    });
+    // Flatten all purchases
+    const allPurchases = [];
+    users.forEach(user => {
+      user.purchasedTracks.forEach(p => {
+        allPurchases.push({
+          buyer: user.username,
+          buyerEmail: user.email,
+          trackTitle: p.track?.title,
+          artist: p.track?.user?.username,
+          trackId: p.track?._id,
+          paymentIntentId: p.paymentIntentId,
+          purchasedAt: p.purchasedAt,
+          price: p.price,
+          refunded: p.refunded
+        });
+      });
+    });
+    // Calculate total income per month (exclude refunded)
+    const incomeByMonth = {};
+    allPurchases.forEach(p => {
+      if (!p.refunded && p.price && p.purchasedAt) {
+        const date = new Date(p.purchasedAt);
+        const month = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}`;
+        incomeByMonth[month] = (incomeByMonth[month] || 0) + p.price;
+      }
+    });
+    // CSV export to file
+    const parser = new Parser();
+    const csv = parser.parse(allPurchases);
+    const fileName = `sales-history-${Date.now()}.csv`;
+    const filePath = path.join(require('os').homedir(), 'Downloads', fileName);
+    fs.writeFileSync(filePath, csv);
+    return res.status(200).json({
+      incomeByMonth,
+      csvFile: filePath
+    });
+  } catch (error) {
+    console.error('Error fetching sales stats/csv:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 };
