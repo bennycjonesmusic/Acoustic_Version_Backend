@@ -35,9 +35,18 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
       const user = await User.findById(userId);
       const track = await BackingTrack.findById(trackId);
       if (user && track) {
-        // Only add if not already bought
-        if (!user.boughtTracks.some(id => id.equals(track._id))) {
-          user.boughtTracks.push(track._id);
+        // Only add if not already purchased
+        const alreadyPurchased = user.purchasedTracks.some(
+          p => p.track.equals(track._id) && !p.refunded
+        );
+        if (!alreadyPurchased) {
+          user.purchasedTracks.push({
+            track: track._id,
+            paymentIntentId: session.payment_intent,
+            purchasedAt: new Date(),
+            price: track.price,
+            refunded: false
+          });
           await user.save();
         }
         // Optionally increment download or purchase count

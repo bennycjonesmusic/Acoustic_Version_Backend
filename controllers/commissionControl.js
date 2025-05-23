@@ -1,14 +1,48 @@
 import CommissionRequest from "../models/CommissionRequest.js";
-import User from "../models/User.js"; // fixed import to match actual filename
 import stripe from 'stripe';
-import path from 'path';
-import fs from 'fs';
-import ffmpeg from 'fluent-ffmpeg';
+const stripeClient = stripe(process.env.STRIPE_SECRET_KEY);
+import BackingTrack from '../models/backing_track.js';
+import User from '../models/User.js';
+
+// Admin-only: Issue a refund for a regular track purchase (not commission)
+export const refundTrackPurchase = async (req, res) => {
+    try {
+        if (!req.user || req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'Not authorized' });
+        }
+        const { userId, trackId } = req.body;
+        if (!userId || !trackId) {
+            return res.status(400).json({ error: 'Missing userId or trackId' });
+        }
+        // Find user and purchase record
+        const user = await User.findById(userId);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+        const purchase = user.purchasedTracks.find(
+            p => p.track.equals(trackId) && !p.refunded
+        );
+        if (!purchase) {
+            return res.status(400).json({ error: 'No active purchase found for this track' });
+        }
+        // Issue refund
+        const refund = await stripeClient.refunds.create({
+            payment_intent: purchase.paymentIntentId,
+            reason: 'requested_by_customer',
+            metadata: { userId, trackId }
+        });
+        // Mark as refunded
+        purchase.refunded = true;
+        await user.save();
+        return res.status(200).json({ success: true, refund });
+    } catch (error) {
+        console.error('Error issuing track refund:', error);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+import User from "../models/User.js"; // fixed import to match actual filename
 import { getAudioPreview } from '../utils/audioPreview.js';
 import { S3Client } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
-
-const stripeClient = stripe(process.env.STRIPE_SECRET_KEY); //process the stripe secret key
 
 export const createCommissionRequest = async (req, res) => {
 

@@ -18,11 +18,14 @@ const userSchema = new mongoose.Schema({
     ref: 'BackingTrack',
     required: false
   }],
-  boughtTracks: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'BackingTrack',
-    required: false
-  }], amountOfTracksSold: {
+  purchasedTracks: [{
+    track: { type: mongoose.Schema.Types.ObjectId, ref: 'BackingTrack', required: true },
+    paymentIntentId: { type: String, required: true },
+    purchasedAt: { type: Date, default: Date.now },
+    price: { type: Number }, // store price at time of purchase
+    refunded: { type: Boolean, default: false }
+  }],
+  amountOfTracksSold: {
     type: Number,
     default : 0,
   
@@ -91,6 +94,14 @@ userSchema.set('toJSON', {
       if (Array.isArray(ret.uploadedTracks)) {
         ret.uploadedTracks = ret.uploadedTracks.filter(track => !track.isPrivate);
       }
+      // Hide purchasedTracks from non-admins and non-self
+      if (!isSelf) {
+        delete ret.purchasedTracks;
+      }
+    }
+    // If not admin or self, hide purchasedTracks
+    if (!isAdmin && !isSelf) {
+      delete ret.purchasedTracks;
     }
     return ret;
   }

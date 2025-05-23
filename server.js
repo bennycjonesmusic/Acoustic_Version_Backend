@@ -14,7 +14,8 @@ import userRoutes from './routes/users.js';
 import publicRoutes from './routes/public.js';
 import commissionRoutes from './routes/commission.js';
 import rateLimit from 'express-rate-limit';
-
+import cron from 'node-cron';
+import { processExpiredCommissions } from './controllers/commissionControl.js';
 // Handle uncaught exceptions and unhandled promise rejections
 process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception:', err);
@@ -23,6 +24,35 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection:', reason);
 });
 
+cron.schedule('0 * * * *', async () => {
+try {
+    console.log("Running cron job to process expired commissions");
+    await processExpiredCommissions({
+
+    body: {},
+    user: {role: "admin"} 
+    }, {
+        status: () => ({ json: (data) => console.log(data) })
+
+    });
+
+
+
+
+
+
+
+
+}
+catch (error) {
+
+    console.error('Error running cron job:', error);
+
+}
+
+
+
+})
 //connect to MongoDBAtlas. This will store the data.
 mongoose.connect(process.env.MONGODB_URI)
     

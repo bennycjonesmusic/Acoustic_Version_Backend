@@ -4,7 +4,9 @@ import {
   approveCommissionAndPayout, 
   processExpiredCommissions,
   uploadFinishedTrack,
-  confirmOrDenyCommission
+  confirmOrDenyCommission,
+  refundCommission,
+  refundTrackPurchase
 } from '../controllers/commissionControl.js';
 import { downloadCommissionFile } from '../controllers/commissionDownloadController.js';
 import customerAuth from '../middleware/customer_auth.js';
@@ -32,5 +34,11 @@ router.post('/confirm', customerAuth, confirmOrDenyCommission);
 
 // Download finished or preview commission file (customer or admin only)
 router.get('/download', customerAuth, downloadCommissionFile);
+
+// Admin-only: Issue a refund for a commission
+router.post('/admin/refund', adminAuth, refundCommission);
+
+// Admin-only: Issue a refund for a regular track purchase (not commission)
+router.post('/admin/track-refund', adminAuth, refundTrackPurchase);
 
 export default router;
