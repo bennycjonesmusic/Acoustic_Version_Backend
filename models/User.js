@@ -34,7 +34,16 @@ const userSchema = new mongoose.Schema({
     default: '', // or a default profile pic URL 
   },
   passwordResetToken: { type: String },
-  passwordResetExpires: { type: Date }
+  passwordResetExpires: { type: Date },
+  numOfReviews: {
+    type: Number,
+    default: 0
+  },
+  reviews: [{
+    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    text: { type: String, required: true },
+    createdAt: { type: Date, default: Date.now }
+  }]
 }, {
   timestamps: true, // 
 });
@@ -62,7 +71,15 @@ userSchema.set('toJSON', {
     const isAdmin = viewerRole === 'admin';
     const isSelf = viewerId && viewerId.toString() === ret.id;
 
+    if (ret.role !== "artist" && ret.role !== "admin") {
 
+      delete ret.uploadedTracks;
+      delete ret.amountOfTracksSold;
+      delete ret.amountOfFollowers;
+      delete ret.stripeAccountId;
+      delete ret.about;
+      delete ret.avatar;
+    }
 
     //show less details if not admin or self
     if (viewerRole === 'public' || (!isAdmin && !isSelf)) {
@@ -70,8 +87,11 @@ userSchema.set('toJSON', {
       delete ret.stripeAccountId;
       delete ret.amountOfTracksSold;
       delete ret.amountOfFollowers;
+      // Only show public uploaded tracks to public viewers
+      if (Array.isArray(ret.uploadedTracks)) {
+        ret.uploadedTracks = ret.uploadedTracks.filter(track => !track.isPrivate);
+      }
     }
-
     return ret;
   }
 });

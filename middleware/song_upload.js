@@ -4,6 +4,7 @@ import { S3Client } from '@aws-sdk/client-s3';  // AWS SDK v3 for S3
 import { Upload } from '@aws-sdk/lib-storage'; // For multipart uploads
 import fs from 'fs';  // Used to read files locally (for temporary storage)
 import dotenv from 'dotenv';
+import crypto from 'crypto';
 
 // Load environment variables
 dotenv.config();

@@ -20,6 +20,20 @@ const backingTrackSchema = new mongoose.Schema({
     required: true,
     min: [0, "Price must be positive"]
   },
+
+  //enable users to set their tracks as private
+  isPrivate: {
+
+    type: Boolean,
+    default: false
+  },
+  privateAccessToken: {
+    type: String,
+    default: "",
+
+
+
+  },
   fileUrl: {
     type: String,
     required: true
@@ -137,20 +151,17 @@ const backingTrackSchema = new mongoose.Schema({
   guideTrackUrl: {
     type: String,
     default: ''
-  },
-
-  isPrivate: {
-    type: Boolean,
-    default: false,
-  },
-  privateAccessToken: {
-    type: String,
-    default: '',
   }
 
 });
 
 
+
+// Method to generate a shareable URL for this track
+backingTrackSchema.methods.getShareUrl = function () {
+  // Adjust the base URL as needed for your deployment
+  return `https://acousticversion.co.uk/track/${this._id}`;
+};
 
 // Method to calculate average rating
 backingTrackSchema.methods.calculateAverageRating = function () {

@@ -88,8 +88,8 @@ export const getFeaturedTracks = async (req, res) => {
     try {
 
         //get popular and recent tracks
-        const popularTracks = await BackingTrack.find().sort({ purchaseCount: -1}).limit(10).populate('user', 'avatar username');
-        const recentTracks = await BackingTrack.find().sort({ createdAt: -1}).limit(10).populate('user', 'avatar username');
+        const popularTracks = await BackingTrack.find({isPrivate:false}).sort({ purchaseCount: -1}).limit(10).populate('user', 'avatar username');
+        const recentTracks = await BackingTrack.find({isPrivate:false}).sort({ createdAt: -1}).limit(10).populate('user', 'avatar username');
         
         // exclude popular and recent tracks from the random selection
         const excludeIds = [
@@ -97,7 +97,7 @@ export const getFeaturedTracks = async (req, res) => {
             ...recentTracks.map(track => track._id)
         ];
         const randomTracks = await BackingTrack.aggregate([
-            { $match: { _id: { $nin: excludeIds } } }, //Exclude popular and recent tracks
+            { $match: { _id: { $nin: excludeIds } }, isPrivate:false }, //Exclude popular and recent tracks
             { $sample: { size: 5 } }
         ]);
         // Populate user for randomTracks
@@ -151,6 +151,7 @@ export const queryTracks = async (req, res) => {
                 return res.status(400).json({ error: "Something went wrong. Make sure you enter a valid vocal range" });
             }
         }
+        filter.isPrivate = false; //show show public tracks only
         const tracks = await BackingTrack.find(filter).sort(sort).skip((page - 1) * limit).limit(limit).populate('user', 'avatar username');
         if (!tracks || tracks.length === 0) {
             return res.status(404).json({ message: "No tracks found." });
@@ -170,7 +171,7 @@ export const searchTracks = async (req, res) => {
         }
         const limit = 10;
         const skip = (page - 1) * limit;
-        let tracks = await BackingTrack.find({ $text: { $search: query } })
+        let tracks = await BackingTrack.find({ $text: { $search: query }, isPrivate: false })
             .sort({ score: { $meta: 'textScore' } })
             .skip(skip)
             .limit(limit)
@@ -178,7 +179,8 @@ export const searchTracks = async (req, res) => {
             .populate('user', 'avatar username'); //we want to be able to display a picture for the tracks
         if (!tracks.length) {
             tracks = await BackingTrack.find({
-                title: { $regex: query, $options: 'i' }
+                title: { $regex: query, $options: 'i' },
+                isPrivate: false
             })
                 .skip(skip)
                 .limit(limit)
@@ -191,6 +193,7 @@ export const searchTracks = async (req, res) => {
     }
 };
 
+//find and get a track by id
 export const getTrack = async (req, res) => {
     try {
         if (!req.params.id) {

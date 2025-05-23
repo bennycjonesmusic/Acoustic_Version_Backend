@@ -12,12 +12,17 @@ import {searchUserByName
 
   
 } from '../controllers/publicController.js';
+import { addArtistReview, getArtistReviews } from '../controllers/artistController.js';
 
 
 const router = express.Router();
 
 router.get("/search-by-username", publicMiddleware, searchUserByName);
 
+// Add a review to an artist
+router.post('/artist/:id/review', authMiddleware, addArtistReview);
+// Get all reviews for an artist
+router.get('/artist/:id/reviews', publicMiddleware, getArtistReviews);
 
 export default router;
 

@@ -262,22 +262,18 @@ try {
         return res.status(404).json({message: "Track not found."});
     }
 
-    // If the track is private, check for access token
-    if (track.isPrivate) {
-        const token = req.query.token || req.headers['x-access-token'];
-        if (!token || token !== track.privateAccessToken) {
-            return res.status(403).json({ message: "You are not allowed to download this private track. Valid access token required." });
-        }
-    } else {
-        // If not private, require purchase or ownership as before
-        const userId = req.userId;
-        const user = await User.findById(userId);
-        const hasBought = user.boughtTracks.some(id => id.equals(track._id));
-        const hasUploaded = user.uploadedTracks.some(id => id.equals(track._id));
-        if (!hasBought && !hasUploaded) {
-            return res.status(403).json({message: "You are not allowed to download this track. Please purchase"})
-        }
+    const userId = req.userId;
+
+    const user = await User.findById(userId); //find the user wanting to download track
+
+    const hasBought = user.boughtTracks.some(id => id.equals(track._id)); //had to use .some so we can access the .equals method. .includes used strict equality === which is not correct here.
+    const hasUploaded = user.uploadedTracks.some(id => id.equals(track._id));
+
+    if (!hasBought && !hasUploaded){
+    
+        return res.status(403).json({message: "You are not allowed to download this track. Please purchase"})
     }
+
 
      const s3Client = new S3Client({
             region: process.env.AWS_REGION,
