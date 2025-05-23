@@ -328,10 +328,10 @@ export const resetPassword = async (req, res) => {
 export const updateProfile = async (req, res) => {
   try {
     const allowedFields = ['about', 'avatar'];
-    const updates = {};
-    for (const key of allowedFields) {
-      if (req.body[key] !== undefined) updates[key] = req.body[key];
-    }
+    const updates = allowedFields.reduce((acc, key) => {
+      if (req.body[key] !== undefined) acc[key] = req.body[key];
+      return acc;
+    }, {});
     if (Object.keys(updates).length === 0) {
       return res.status(400).json({ message: 'No valid fields to update.' });
     }
@@ -340,9 +340,25 @@ export const updateProfile = async (req, res) => {
     if (user.role !== 'artist' && user.role !== 'admin') {
       return res.status(403).json({ message: 'Only artists or admins can update their profile.' });
     }
-    for (const key of allowedFields) {
-      if (req.body[key] !== undefined) user[key] = req.body[key];
+    // Profanity and length check for 'about'
+    if (updates.about !== undefined) {
+      const profanity = new Filter.Filter();
+      if (profanity.isProfane(updates.about)) {
+        return res.status(400).json({ message: 'Please avoid using inappropriate language in your about section.' });
+      }
+      if (typeof updates.about !== 'string' || updates.about.length > 1000) {
+        return res.status(400).json({ message: 'About section must be a string and less than 1000 characters.' });
+      }
     }
+    // Validation for avatar (must be a valid image URL)
+    if (updates.avatar !== undefined) {
+      const urlPattern = /^(https?:\/\/)[^\s]+\.(jpg|jpeg|png|gif|webp)$/i;
+      if (typeof updates.avatar !== 'string' || !urlPattern.test(updates.avatar)) {
+        return res.status(400).json({ message: 'Avatar must be a valid image URL (jpg, jpeg, png, gif, webp).' });
+      }
+    }
+    // Only update allowed fields
+    Object.assign(user, updates);
     await user.save();
     return res.status(200).json({ message: 'Profile updated.', user });
   } catch (err) {
