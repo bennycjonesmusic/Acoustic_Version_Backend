@@ -43,12 +43,19 @@ const allowedMimeTypes = [
 ];
 
 const fileFilter = (req, file, cb) => {
-    console.log('Received MIME type:', file.mimetype);
+    console.log('[multer fileFilter] Received file:', {
+        fieldname: file.fieldname,
+        originalname: file.originalname,
+        mimetype: file.mimetype,
+        size: file.size
+    });
     if (!allowedMimeTypes.includes(file.mimetype)) {
+        console.error('[multer fileFilter] Rejected: invalid mimetype', file.mimetype);
         return cb(new Error('Only audio files are allowed!'), false);
     };
 
     if (file.size > 50 * 1024 * 1024){
+        console.error('[multer fileFilter] Rejected: file too large', file.size);
         return cb(new Error('File larger than 50mb'), false);
     }
 

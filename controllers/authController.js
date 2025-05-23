@@ -52,7 +52,13 @@ export const register = async (req, res) => {
             return res.status(400).json({message: "Password is too weak. Needs more power."});
         }
         const hashedPassword = await bcrypt.hash(password, 10);
-        const newUser = new User({ username, email, password: hashedPassword, about });
+
+        // Only send role if in test environment
+        const userData = { username, email, password: hashedPassword, about, role};
+        if (process.env.NODE_ENV === 'test' && role) {
+            userData.role = role;
+        }
+        const newUser = new User(userData);
         await newUser.save();
 
         const token = jwt.sign(

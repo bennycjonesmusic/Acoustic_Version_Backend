@@ -1,10 +1,16 @@
 import dotenv from 'dotenv';
 dotenv.config();
+// Ensure FRONTEND_URL is set for Stripe URLs in tests
+process.env.FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 import request from 'supertest';
 import app from './server.js';
 import mongoose from 'mongoose';
 import User from './models/User.js';
 import CommissionRequest from './models/CommissionRequest.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import fs from 'fs';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 /* 
 this test file is used to test the API endpoints. It uses supertest to make requests to the server 
 and check the responses. It is used to ensure that the API endpoints are working as expected. */
@@ -226,20 +232,31 @@ describe('Commission Custom Backing Track Flow', () => {
     // Register users
     await request(app).post('/auth/register').send(customer);
     await request(app).post('/auth/register').send(artist);
-    await request(app).post('/auth/register').send({ ...admin, role: 'admin' });
-
+    const adminRegRes = await request(app).post('/auth/register').send({ ...admin, role: 'admin' });
+    console.log('Admin registration response:', adminRegRes.statusCode, adminRegRes.body);
+    // Ensure admin user is actually an admin
+    await User.updateOne({ email: admin.email }, { role: 'admin' });
+    const adminUser = await User.findOne({ email: admin.email });
+    console.log('Admin user after role update:', adminUser);
     // Login users
     const customerRes = await request(app).post('/auth/login').send({ login: customer.email, password: customer.password });
     customerToken = customerRes.body.token;
     const artistRes = await request(app).post('/auth/login').send({ login: artist.email, password: artist.password });
     artistToken = artistRes.body.token;
+    // Login admin again after role update
     const adminRes = await request(app).post('/auth/login').send({ login: admin.email, password: admin.password });
+    console.log('Admin login response:', adminRes.statusCode, adminRes.body);
     adminToken = adminRes.body.token;
+    if (!customerToken || !artistToken || !adminToken) {
+      console.error('Token error:', { customerToken, artistToken, adminToken });
+      throw new Error('Failed to obtain all tokens for commission flow tests');
+    }
     console.log('Tokens:', { customerToken, artistToken, adminToken });
-  });
+  }, 30000);
 
   it('Customer requests a commission', async () => {
     const artistUser = await User.findOne({ email: artist.email });
+    if (!artistUser) throw new Error('Artist user not found');
     const res = await request(app)
       .post('/commission/request')
       .set('Authorization', `Bearer ${customerToken}`)
@@ -253,9 +270,11 @@ describe('Commission Custom Backing Track Flow', () => {
     expect(res.statusCode).toBe(200);
     expect(res.body.commissionId).toBeDefined();
     commissionId = res.body.commissionId;
+    if (!commissionId) throw new Error('No commissionId returned');
   });
 
   it('Simulate payment (set status and paymentIntent)', async () => {
+    if (!commissionId) throw new Error('No commissionId for payment simulation');
     await CommissionRequest.findByIdAndUpdate(commissionId, {
       status: 'accepted',
       stripePaymentIntentId: 'pi_test123'
@@ -265,11 +284,15 @@ describe('Commission Custom Backing Track Flow', () => {
   });
 
   it('Artist uploads finished track', async () => {
+    if (!artistToken || !commissionId) throw new Error('Missing artistToken or commissionId');
+    const samplePath = path.join(__dirname, 'test-assets', 'sample.mp3');
+    const stats = fs.statSync(samplePath);
+    console.log('[TEST] sample.mp3 size:', stats.size);
     const res = await request(app)
       .post('/commission/upload-finished')
       .set('Authorization', `Bearer ${artistToken}`)
       .field('commissionId', commissionId)
-      .attach('audio', require('path').join(__dirname, 'test-assets/sample.mp3'));
+      .attach('file', samplePath);
     console.log('Upload finished track response:', res.body);
     expect(res.statusCode).toBe(200);
     expect(res.body.previewTrackUrl).toBeDefined();
@@ -280,6 +303,7 @@ describe('Commission Custom Backing Track Flow', () => {
   });
 
   it('Customer approves the preview', async () => {
+    if (!customerToken || !commissionId) throw new Error('Missing customerToken or commissionId');
     const res = await request(app)
       .post('/commission/confirm')
       .set('Authorization', `Bearer ${customerToken}`)
@@ -292,12 +316,84 @@ describe('Commission Custom Backing Track Flow', () => {
   });
 
   it('Admin triggers payout', async () => {
+    if (!adminToken || !commissionId) throw new Error('Missing adminToken or commissionId');
     const res = await request(app)
       .post('/commission/admin/approve')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ commissionId });
     console.log('Admin payout response:', res.body);
     expect([200, 400, 500]).toContain(res.statusCode);
+  });
+
+  it('Customer can download their own commission files (finished/preview)', async () => {
+    if (!customerToken || !commissionId) throw new Error('Missing customerToken or commissionId');
+    // Download finished file
+    let res = await request(app)
+      .get('/commission/download')
+      .set('Authorization', `Bearer ${customerToken}`)
+      .query({ commissionId, type: 'finished' });
+    console.log('Customer download finished:', res.statusCode, res.headers['content-type']);
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toMatch(/audio/);
+    // Download preview file
+    res = await request(app)
+      .get('/commission/download')
+      .set('Authorization', `Bearer ${customerToken}`)
+      .query({ commissionId, type: 'preview' });
+    console.log('Customer download preview:', res.statusCode, res.headers['content-type']);
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toMatch(/audio/);
+  });
+
+  it('Other users cannot download commission files they do not own', async () => {
+    // Register and login a random user
+    const otherUser = {
+      username: 'otheruser',
+      email: 'otheruser@example.com',
+      password: 'TestPassword123!',
+      about: 'Other user'
+    };
+    await User.deleteMany({ email: otherUser.email });
+    await request(app).post('/auth/register').send(otherUser);
+    const loginRes = await request(app)
+      .post('/auth/login')
+      .send({ login: otherUser.email, password: otherUser.password });
+    const otherToken = loginRes.body.token;
+    expect(otherToken).toBeDefined();
+    // Try to download finished file
+    let res = await request(app)
+      .get('/commission/download')
+      .set('Authorization', `Bearer ${otherToken}`)
+      .query({ commissionId, type: 'finished' });
+    console.log('Other user download finished:', res.statusCode, res.body);
+    expect(res.statusCode).toBe(403);
+    // Try to download preview file
+    res = await request(app)
+      .get('/commission/download')
+      .set('Authorization', `Bearer ${otherToken}`)
+      .query({ commissionId, type: 'preview' });
+    console.log('Other user download preview:', res.statusCode, res.body);
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('Admin can download any commission file', async () => {
+    if (!adminToken || !commissionId) throw new Error('Missing adminToken or commissionId');
+    // Download finished file
+    let res = await request(app)
+      .get('/commission/download')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .query({ commissionId, type: 'finished' });
+    console.log('Admin download finished:', res.statusCode, res.headers['content-type']);
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toMatch(/audio/);
+    // Download preview file
+    res = await request(app)
+      .get('/commission/download')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .query({ commissionId, type: 'preview' });
+    console.log('Admin download preview:', res.statusCode, res.headers['content-type']);
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toMatch(/audio/);
   });
 });
 

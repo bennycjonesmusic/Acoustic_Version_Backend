@@ -1,5 +1,7 @@
 import Joi from 'joi'; //joi is used for input validation apparently. 
 
+const isTestEnv = process.env.NODE_ENV === 'test';
+
 export const uploadTrackSchema = Joi.object({
   title: Joi.string().min(1).max(100).required(),
   description: Joi.string().max(500).required(),
@@ -20,6 +22,9 @@ export const registerSchema = Joi.object({
   email: Joi.string().email().required(),
   password: Joi.string().min(8).max(128).required(),
   about: Joi.string().min(1).max(500).required(),
+  role: isTestEnv
+    ? Joi.string().valid('user', 'artist', 'admin').optional()
+    : Joi.string().valid('user', 'artist').optional(),
 });
 
 export const loginSchema = Joi.object({

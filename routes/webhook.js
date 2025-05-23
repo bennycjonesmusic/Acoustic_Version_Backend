@@ -65,7 +65,7 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
     else if (session.metadata && session.metadata.commissionId) {
       try {
         const commissionId = session.metadata.commissionId;
-        const CommissionRequest = (await import('../models/commission_request.js')).default;
+        const CommissionRequest = (await import('../models/CommissionRequest.js')).default;
         const commission = await CommissionRequest.findById(commissionId);
         if (commission) {
           commission.stripePaymentIntentId = session.payment_intent;

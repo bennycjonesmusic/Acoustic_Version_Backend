@@ -13,6 +13,7 @@ const commissionRequestSchema = new mongoose.Schema({
   stripeSessionId: { type: String },
   stripePaymentIntentId: { type: String },
   finishedTrackUrl: { type: String },
+  previewTrackUrl: { type: String },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
   expiryDate: { type: Date, required: false }, // Optional deadline for delivery

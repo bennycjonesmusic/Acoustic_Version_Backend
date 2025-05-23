@@ -15,10 +15,15 @@ import publicRoutes from './routes/public.js';
 import commissionRoutes from './routes/commission.js';
 import rateLimit from 'express-rate-limit';
 
-
+// Handle uncaught exceptions and unhandled promise rejections
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+});
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection:', reason);
+});
 
 //connect to MongoDBAtlas. This will store the data.
-
 mongoose.connect(process.env.MONGODB_URI)
     
     .then(() => {

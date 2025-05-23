@@ -6,6 +6,7 @@ import {
   uploadFinishedTrack,
   confirmOrDenyCommission
 } from '../controllers/commissionControl.js';
+import { downloadCommissionFile } from '../controllers/commissionDownloadController.js';
 import customerAuth from '../middleware/customer_auth.js';
 import artistAuth from '../middleware/artist_auth.js';
 import adminAuth from '../middleware/Admin.js';
@@ -18,15 +19,18 @@ router.post('/request', customerAuth, createCommissionRequest);
 
 // Approve commission and pay out artist (customer or admin)
 router.post('/approve', customerAuth, approveCommissionAndPayout);
-router.post('/admin/approve', adminAuth, approveCommissionAndPayout);
+router.post('/admin/approve', customerAuth, adminAuth, approveCommissionAndPayout);
 
 // Process expired commissions and refund (admin only, can be called by cron or manually)
-router.post('/process-expired', adminAuth, processExpiredCommissions);
+router.post('/process-expired', customerAuth, adminAuth, processExpiredCommissions);
 
 // Artist uploads finished track for commission (audio file)
-router.post('/upload-finished', artistAuth, upload.single('audio'), uploadFinishedTrack);
+router.post('/upload-finished', customerAuth, upload.single('file'), uploadFinishedTrack);
 
 // Customer confirms or denies preview
 router.post('/confirm', customerAuth, confirmOrDenyCommission);
+
+// Download finished or preview commission file (customer or admin only)
+router.get('/download', customerAuth, downloadCommissionFile);
 
 export default router;

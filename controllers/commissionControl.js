@@ -1,9 +1,12 @@
-import CommissionRequest from "../models/commission_request";
-import User from "../models/User"; 
+import CommissionRequest from "../models/CommissionRequest.js";
+import User from "../models/User.js"; // fixed import to match actual filename
 import stripe from 'stripe';
 import path from 'path';
 import fs from 'fs';
 import ffmpeg from 'fluent-ffmpeg';
+import { getAudioPreview } from '../utils/audioPreview.js';
+import { S3Client } from '@aws-sdk/client-s3';
+import { Upload } from '@aws-sdk/lib-storage';
 
 const stripeClient = stripe(process.env.STRIPE_SECRET_KEY); //process the stripe secret key
 
@@ -158,49 +161,89 @@ export const processExpiredCommissions = async (req, res) => {
 
 // Artist uploads finished track for commission
 export const uploadFinishedTrack = async (req, res) => {
-    const commissionId = req.body.commissionId;
-    const artistId = req.userId;
-    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     try {
-        const commission = await CommissionRequest.findById(commissionId);
-        if (!commission) return res.status(404).json({ error: 'Commission not found' });
-        if (commission.artist.toString() !== artistId) return res.status(403).json({ error: 'Not authorized' });
-        if (!['accepted', 'in_progress'].includes(commission.status)) return res.status(400).json({ error: 'Commission not in progress' });
-
-        // Save file to /uploads/commissions/
-        const uploadsDir = path.join(process.cwd(), 'uploads', 'commissions');
-        if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+        // Only keep essential logs
+        const { commissionId } = req.body;
+        if (!commissionId) {
+            return res.status(400).json({ error: 'Missing commissionId' });
+        }
+        if (!req.file) {
+            return res.status(400).json({ error: 'No file uploaded' });
+        }
         const ext = path.extname(req.file.originalname);
-        const fileName = `${commissionId}_finished${ext}`;
-        const filePath = path.join(uploadsDir, fileName);
-        fs.writeFileSync(filePath, req.file.buffer);
-
-        // Generate 30s preview using ffmpeg
-        const previewName = `${commissionId}_preview${ext}`;
-        const previewPath = path.join(uploadsDir, previewName);
-        await new Promise((resolve, reject) => {
-            ffmpeg(filePath)
-                .setStartTime(0)
-                .duration(30)
-                .output(previewPath)
-                .on('end', resolve)
-                .on('error', reject)
-                .run();
+        const finishedKey = `${commissionId}_finished${ext}`;
+        const previewKey = `${commissionId}_preview${ext}`;
+        const s3Client = new S3Client({
+            region: process.env.AWS_REGION,
+            credentials: {
+                accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+                secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+            },
         });
-
-        commission.finishedTrackUrl = `/uploads/commissions/${fileName}`;
-        commission.previewTrackUrl = `/uploads/commissions/${previewName}`;
-        commission.status = 'delivered';
-        await commission.save();
-
+        // Write finished track buffer to temp file and upload via stream
+        const tmp = await import('os');
+        const tmpDir = tmp.tmpdir();
+        const tempFinishedPath = path.join(tmpDir, `${commissionId}_finished${ext}`);
+        fs.writeFileSync(tempFinishedPath, req.file.buffer);
+        let finishedUploadResult;
+        try {
+            finishedUploadResult = await new Upload({
+                client: s3Client,
+                params: {
+                    Bucket: process.env.AWS_BUCKET_NAME,
+                    Key: finishedKey,
+                    Body: fs.createReadStream(tempFinishedPath),
+                    ACL: 'private',
+                    ContentType: req.file.mimetype,
+                },
+            }).done();
+        } catch (s3Err) {
+            return res.status(500).json({ error: 'Failed to upload finished track to S3', details: s3Err.message });
+        }
+        try { fs.existsSync(tempFinishedPath) && fs.unlinkSync(tempFinishedPath); } catch (e) {}
+        const finishedTrackUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${finishedKey}`;
+        // Generate 30s preview using shared utility
+        let tempFullPath, tempPreviewPath;
+        try {
+            tempFullPath = path.join(tmpDir, `${commissionId}_full${ext}`);
+            tempPreviewPath = path.join(tmpDir, `${commissionId}_preview${ext}`);
+            fs.writeFileSync(tempFullPath, req.file.buffer);
+            await getAudioPreview(tempFullPath, tempPreviewPath, 30);
+            try {
+                await new Upload({
+                    client: s3Client,
+                    params: {
+                        Bucket: process.env.AWS_BUCKET_NAME,
+                        Key: previewKey,
+                        Body: fs.createReadStream(tempPreviewPath),
+                        ACL: 'private',
+                        ContentType: req.file.mimetype,
+                    },
+                }).done();
+            } catch (s3Err) {
+                return res.status(500).json({ error: 'Failed to upload preview to S3', details: s3Err.message });
+            }
+        } catch (previewErr) {
+            return res.status(500).json({ error: 'Failed to generate preview', details: previewErr.message });
+        }
+        try { fs.existsSync(tempFullPath) && fs.unlinkSync(tempFullPath); } catch (e) {}
+        try { fs.existsSync(tempPreviewPath) && fs.unlinkSync(tempPreviewPath); } catch (e) {}
+        // Update commission
+        const commissionToUpdate = await CommissionRequest.findById(commissionId);
+        if (!commissionToUpdate) {
+            return res.status(404).json({ error: 'Commission not found' });
+        }
+        commissionToUpdate.finishedTrackUrl = finishedTrackUrl;
+        commissionToUpdate.previewTrackUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${previewKey}`;
+        commissionToUpdate.status = 'delivered';
+        await commissionToUpdate.save();
         return res.status(200).json({
             success: true,
-            finishedTrackUrl: commission.finishedTrackUrl,
-            previewTrackUrl: commission.previewTrackUrl
+            finishedTrackUrl: commissionToUpdate.finishedTrackUrl,
+            previewTrackUrl: commissionToUpdate.previewTrackUrl
         });
-    } catch (error) {
-        console.error('Error uploading finished track:', error);
-        return res.status(500).json({ error: 'Internal server error' });
+    } catch (err) {
+        res.status(500).json({ error: 'Internal server error', details: err.message || err });
     }
 };
 
@@ -210,16 +253,22 @@ export const confirmOrDenyCommission = async (req, res) => {
     const customerId = req.userId;
     try {
         const commission = await CommissionRequest.findById(commissionId);
+        console.log('[confirmOrDenyCommission] Loaded commission:', commission);
         if (!commission) return res.status(404).json({ error: 'Commission not found' });
         if (commission.customer.toString() !== customerId) return res.status(403).json({ error: 'Not authorized' });
-        if (commission.status !== 'delivered') return res.status(400).json({ error: 'Not ready for confirmation' });
+        if (commission.status !== 'delivered') {
+            console.log('[confirmOrDenyCommission] Not ready for confirmation. Status:', commission.status);
+            return res.status(400).json({ error: 'Not ready for confirmation' });
+        }
         if (action === 'approve') {
             commission.status = 'approved';
             await commission.save();
+            console.log('[confirmOrDenyCommission] Commission approved:', commissionId);
             return res.status(200).json({ success: true, message: 'Commission approved. Artist will be paid out.' });
         } else if (action === 'deny') {
             commission.status = 'in_progress'; // Allow artist to re-upload
             await commission.save();
+            console.log('[confirmOrDenyCommission] Commission denied:', commissionId);
             return res.status(200).json({ success: true, message: 'Commission denied. Artist may re-upload.' });
         } else {
             return res.status(400).json({ error: 'Invalid action' });

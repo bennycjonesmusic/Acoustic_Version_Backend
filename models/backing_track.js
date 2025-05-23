@@ -137,6 +137,15 @@ const backingTrackSchema = new mongoose.Schema({
   guideTrackUrl: {
     type: String,
     default: ''
+  },
+
+  isPrivate: {
+    type: Boolean,
+    default: false,
+  },
+  privateAccessToken: {
+    type: String,
+    default: '',
   }
 
 });
