@@ -84,3 +84,26 @@ export const getUsers = async (req, res) => {
        return res.status(500).json({ message: "Error getting users" });
     }
 };
+
+// Admin: Ban a user
+export const banUser = async (req, res) => {
+  try {
+    if (!req.user || req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+    const { userId } = req.body;
+    if (!userId) {
+      return res.status(400).json({ error: 'Missing userId' });
+    }
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    user.banned = true;
+    await user.save();
+    return res.status(200).json({ success: true, message: 'User banned.' });
+  } catch (error) {
+    console.error('Error banning user:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};

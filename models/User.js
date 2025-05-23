@@ -51,7 +51,8 @@ const userSchema = new mongoose.Schema({
     url: { type: String, required: true },
     description: { type: String, default: '' },
     uploadedAt: { type: Date, default: Date.now }
-  }]
+  }],
+  banned: { type: Boolean, default: false }
 }, {
   timestamps: true, // 
 });
@@ -63,6 +64,11 @@ userSchema.pre('save', function(next) {
   }
   next();
 });
+
+// Block banned users from logging in or performing actions
+userSchema.methods.isBanned = function() {
+  return !!this.banned;
+};
 
 //sanitize for security purposes
 

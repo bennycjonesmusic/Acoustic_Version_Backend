@@ -88,6 +88,9 @@ export const login = async (req, res) => {
         if (!user) {
             return res.status(400).json({ message: "Invalid email or password" });
         }
+        if (user.isBanned && user.isBanned()) {
+            return res.status(403).json({ message: "Your account has been banned. Please contact support." });
+        }
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
             return res.status(400).json({ message: "Invalid email or password" });
