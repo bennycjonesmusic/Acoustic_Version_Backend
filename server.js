@@ -12,6 +12,7 @@ import webhookRoutes from './routes/webhook.js';
 import tracksRoutes from './routes/tracks.js';
 import userRoutes from './routes/users.js';
 import publicRoutes from './routes/public.js';
+import commissionRoutes from './routes/commission.js';
 import rateLimit from 'express-rate-limit';
 
 
@@ -53,6 +54,7 @@ app.use('/stripe', stripeRoutes);
 app.use('/', tracksRoutes);
 app.use('/users', userRoutes);
 app.use('/public', publicRoutes);
+app.use('/commission', commissionRoutes);
 app.get('/', (req, res) =>{
 
     res.send('Testing');

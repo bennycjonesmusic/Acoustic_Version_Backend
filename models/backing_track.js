@@ -124,6 +124,19 @@ const backingTrackSchema = new mongoose.Schema({
 
   previewUrl: {
     type: String
+  },
+
+  instructions: {
+    type: String,
+    default: ''
+  },
+  youtubeGuideUrl: {
+    type: String,
+    default: ''
+  },
+  guideTrackUrl: {
+    type: String,
+    default: ''
   }
 
 });
@@ -181,6 +194,11 @@ backingTrackSchema.set('toJSON', {
     // Always include previewUrl in output
     if (doc.previewUrl) {
       ret.previewUrl = doc.previewUrl;
+    }
+    // Only show youtubeGuideUrl to buyers or owners or admin
+    if (!(isAdmin || isSelf || (doc.boughtBy && doc.boughtBy.includes(viewerId)))) {
+      delete ret.youtubeGuideUrl;
+      delete ret.guideTrackUrl;
     }
     return ret;
   }

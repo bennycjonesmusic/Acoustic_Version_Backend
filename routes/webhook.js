@@ -28,12 +28,8 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
   // Handle successful checkout
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object;
-    if (!session.metadata || !session.metadata.userId || !session.metadata.trackId) {
-      // Allow CLI test events to pass without error, but log a warning
-      console.warn('Missing metadata in session (likely a Stripe CLI test event):', session);
-      return res.status(200).send('Received (no metadata, likely test event)');
-    }
-    try {
+    // Handle standard track purchase (existing logic)
+    if (session.metadata && session.metadata.userId && session.metadata.trackId) {
       const userId = session.metadata.userId;
       const trackId = session.metadata.trackId;
       const user = await User.findById(userId);
@@ -64,8 +60,24 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
       } else {
         console.error('User or track not found:', { userId, trackId });
       }
-    } catch (err) {
-      console.error('Error handling purchase:', err);
+    }
+    // Handle commission payment
+    else if (session.metadata && session.metadata.commissionId) {
+      try {
+        const commissionId = session.metadata.commissionId;
+        const CommissionRequest = (await import('../models/commission_request.js')).default;
+        const commission = await CommissionRequest.findById(commissionId);
+        if (commission) {
+          commission.stripePaymentIntentId = session.payment_intent;
+          commission.status = 'accepted'; // Mark as accepted/paid
+          await commission.save();
+          console.log(`Commission payment recorded for commission ${commissionId}`);
+        } else {
+          console.error('Commission not found:', commissionId);
+        }
+      } catch (err) {
+        console.error('Error handling commission payment:', err);
+      }
     }
   }
 

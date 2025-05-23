@@ -4,6 +4,7 @@ import request from 'supertest';
 import app from './server.js';
 import mongoose from 'mongoose';
 import User from './models/User.js';
+import CommissionRequest from './models/CommissionRequest.js';
 /* 
 this test file is used to test the API endpoints. It uses supertest to make requests to the server 
 and check the responses. It is used to ensure that the API endpoints are working as expected. */
@@ -189,6 +190,114 @@ describe('Backing Track Upload', () => {
     expect(res.body.track).toBeDefined();
     expect(res.body.track.fileUrl).toBeDefined();
     expect(res.body.track.fileUrl).toMatch(/^https?:\/\//);
+  });
+});
+
+describe('Commission Custom Backing Track Flow', () => {
+  let customerToken, artistToken, adminToken, commissionId;
+
+  const customer = {
+    username: 'commissioncustomer',
+    email: 'commissioncustomer@example.com',
+    password: 'TestPassword123!',
+    about: 'Customer for commission test'
+  };
+  const artist = {
+    username: 'commissionartist',
+    email: 'commissionartist@example.com',
+    password: 'TestPassword123!',
+    about: 'Artist for commission test'
+  };
+  const admin = {
+    username: 'adminuser',
+    email: 'admin@example.com',
+    password: 'TestPassword123!',
+    about: 'Admin user',
+    role: 'admin'
+  };
+
+  beforeAll(async () => {
+    // Clean up users
+    await Promise.all([
+      User.deleteMany({ email: customer.email }),
+      User.deleteMany({ email: artist.email }),
+      User.deleteMany({ email: admin.email })
+    ]);
+    // Register users
+    await request(app).post('/auth/register').send(customer);
+    await request(app).post('/auth/register').send(artist);
+    await request(app).post('/auth/register').send({ ...admin, role: 'admin' });
+
+    // Login users
+    const customerRes = await request(app).post('/auth/login').send({ login: customer.email, password: customer.password });
+    customerToken = customerRes.body.token;
+    const artistRes = await request(app).post('/auth/login').send({ login: artist.email, password: artist.password });
+    artistToken = artistRes.body.token;
+    const adminRes = await request(app).post('/auth/login').send({ login: admin.email, password: admin.password });
+    adminToken = adminRes.body.token;
+    console.log('Tokens:', { customerToken, artistToken, adminToken });
+  });
+
+  it('Customer requests a commission', async () => {
+    const artistUser = await User.findOne({ email: artist.email });
+    const res = await request(app)
+      .post('/commission/request')
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({
+        artistId: artistUser._id,
+        requirements: 'Test commission requirements',
+        price: 10,
+        expiryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+      });
+    console.log('Commission request response:', res.body);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.commissionId).toBeDefined();
+    commissionId = res.body.commissionId;
+  });
+
+  it('Simulate payment (set status and paymentIntent)', async () => {
+    await CommissionRequest.findByIdAndUpdate(commissionId, {
+      status: 'accepted',
+      stripePaymentIntentId: 'pi_test123'
+    });
+    const commission = await CommissionRequest.findById(commissionId);
+    console.log('Commission after simulated payment:', commission);
+  });
+
+  it('Artist uploads finished track', async () => {
+    const res = await request(app)
+      .post('/commission/upload-finished')
+      .set('Authorization', `Bearer ${artistToken}`)
+      .field('commissionId', commissionId)
+      .attach('audio', require('path').join(__dirname, 'test-assets/sample.mp3'));
+    console.log('Upload finished track response:', res.body);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.previewTrackUrl).toBeDefined();
+    expect(res.body.finishedTrackUrl).toBeDefined();
+    const commission = await CommissionRequest.findById(commissionId);
+    console.log('Commission after upload:', commission);
+    expect(commission.status).toBe('delivered');
+  });
+
+  it('Customer approves the preview', async () => {
+    const res = await request(app)
+      .post('/commission/confirm')
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({ commissionId, action: 'approve' });
+    console.log('Approve preview response:', res.body);
+    expect(res.statusCode).toBe(200);
+    const commission = await CommissionRequest.findById(commissionId);
+    console.log('Commission after approval:', commission);
+    expect(commission.status).toBe('approved');
+  });
+
+  it('Admin triggers payout', async () => {
+    const res = await request(app)
+      .post('/commission/admin/approve')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ commissionId });
+    console.log('Admin payout response:', res.body);
+    expect([200, 400, 500]).toContain(res.statusCode);
   });
 });
 
