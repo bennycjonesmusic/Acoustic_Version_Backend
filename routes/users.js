@@ -13,6 +13,7 @@ import {searchUserByName
   
 } from '../controllers/publicController.js';
 import { addArtistReview, getArtistReviews } from '../controllers/artistController.js';
+import { uploadArtistExample, getArtistExamples, deleteArtistExample } from '../controllers/artistExamplesController.js';
 
 
 const router = express.Router();
@@ -23,6 +24,11 @@ router.get("/search-by-username", publicMiddleware, searchUserByName);
 router.post('/artist/:id/review', authMiddleware, addArtistReview);
 // Get all reviews for an artist
 router.get('/artist/:id/reviews', publicMiddleware, getArtistReviews);
+
+// Artist example uploads (max 3, 30s each)
+router.post('/artist/examples/upload', artistAuthMiddleware, upload.single('file'), uploadArtistExample);
+router.get('/artist/:id/examples', getArtistExamples);
+router.delete('/artist/examples/:exampleId', artistAuthMiddleware, deleteArtistExample);
 
 export default router;
 
