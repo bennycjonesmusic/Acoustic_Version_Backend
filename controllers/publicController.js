@@ -125,6 +125,23 @@ export const getFeaturedTracks = async (req, res) => {
     
 }
 
+export const getFeaturedArtists = async (req, res) => {
+
+try {
+
+
+
+
+
+}
+catch(error) {
+
+
+
+
+}
+}
+
 export const queryTracks = async (req, res) => {
     try {
         const { orderBy, page = 1, limit = 10, keySig, "vocal-range": vocalRange } = req.query;

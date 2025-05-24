@@ -48,6 +48,11 @@ try{
     }
     track.calculateAverageRating();
     await track.save();
+    // Update artist's averageTrackRating
+    const artist = await User.findById(track.user);
+    if (artist && (artist.role === 'artist' || artist.role === 'admin')) {
+      await artist.calculateAverageTrackRating();
+    }
     return res.status(200).json({message: "Rating submitted successfully", track});
 }catch(error) {
     console.error('Error reviewing track:', error);

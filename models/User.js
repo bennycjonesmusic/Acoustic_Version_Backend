@@ -53,7 +53,11 @@ const userSchema = new mongoose.Schema({
     uploadedAt: { type: Date, default: Date.now }
   }],
   banned: { type: Boolean, default: false },
-  totalIncome: { type: Number, default: 0 }
+  totalIncome: { type: Number, default: 0 },
+  averageTrackRating: {
+    type: Number,
+    default: 0
+  }
 }, {
   timestamps: true, // 
 });
@@ -69,6 +73,25 @@ userSchema.pre('save', function(next) {
 // Block banned users from logging in or performing actions
 userSchema.methods.isBanned = function() {
   return !!this.banned;
+};
+
+// Method to calculate average track rating
+userSchema.methods.calculateAverageTrackRating = async function() {
+  // Populate uploadedTracks with ratings
+  await this.populate({
+    path: 'uploadedTracks',
+    select: 'averageRating',
+  });
+  const tracks = this.uploadedTracks || [];
+  const ratings = tracks
+    .map(track => typeof track.averageRating === 'number' ? track.averageRating : null)
+    .filter(r => r !== null && !isNaN(r));
+  if (ratings.length < 10) {
+    this.averageTrackRating = 5; // Set to maximum if fewer than 10 ratings
+  } else {
+    this.averageTrackRating = ratings.reduce((a, b) => a + b, 0) / ratings.length;
+  }
+  await this.save();
 };
 
 //sanitize for security purposes
@@ -92,31 +115,25 @@ userSchema.set('toJSON', {
       delete ret.amountOfTracksSold;
       delete ret.amountOfFollowers;
       delete ret.stripeAccountId;
-      delete ret.about;
       delete ret.avatar;
     }
 
     //show less details if not admin or self
-    if (viewerRole === 'public' || (!isAdmin && !isSelf)) {
+    if (!isAdmin && !isSelf) {
       delete ret.email;
       delete ret.stripeAccountId;
       delete ret.amountOfTracksSold;
       delete ret.amountOfFollowers;
+      delete ret.purchasedTracks;
+      delete ret.totalIncome;
       // Only show public uploaded tracks to public viewers
       if (Array.isArray(ret.uploadedTracks)) {
         ret.uploadedTracks = ret.uploadedTracks.filter(track => !track.isPrivate);
       }
       // Hide purchasedTracks from non-admins and non-self
-      if (!isSelf) {
-        delete ret.purchasedTracks;
-        delete ret.totalIncome;
-      }
+     
     }
-    // If not admin or self, hide purchasedTracks and totalIncome
-    if (!isAdmin && !isSelf) {
-      delete ret.purchasedTracks;
-      delete ret.totalIncome;
-    }
+   
     return ret;
   }
 });
