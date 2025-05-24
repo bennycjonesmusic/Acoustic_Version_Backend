@@ -39,12 +39,13 @@ if (! query){
    const limit = 10;
     const skip = (page - 1) * limit;
 
-     let users = await User.find({$text: {$search : query}}).sort({score: {$meta: 'textScore'}})
+     let users = await User.find({$text: {$search : query}, role: 'artist'}).sort({score: {$meta: 'textScore'}})
         .skip(skip).limit(limit).select({ score: { $meta: 'textScore' } }); 
 
          if (!users.length) {
       users = await User.find({
-        username: { $regex: query, $options: 'i' }
+        username: { $regex: query, $options: 'i' },
+        role: 'artist'
       })
         .skip(skip)
         .limit(limit);
@@ -129,12 +130,17 @@ export const getFeaturedArtists = async (req, res) => {
 
 try {
 
+const featuredArtists = await User.find({role: 'artist'}).sort({ amountOfTracksSold: -1, averageTrackRating: -1}).limit(10);
+const featureRandom = await User.aggregate([ { $match: { role: 'artist' } }, { $sample: { size: 5 } } ]);
+const featured = [...featuredArtists, ...featureRandom]; //Merge the arrays in a super array.
 
-
+return res.status(200).json(toUserSummary(featured))
 
 
 }
 catch(error) {
+    console.error('Error getting featured artists:', error);
+    return res.status(500).json({ message: "Internal server error" });
 
 
 
@@ -188,7 +194,7 @@ export const searchTracks = async (req, res) => {
         }
         const limit = 10;
         const skip = (page - 1) * limit;
-        let tracks = await BackingTrack.find({ $text: { $search: query }, isPrivate: false })
+        let tracks = await BackingTrack.find({ $text: { $search: query }, isPrivate: false})
             .sort({ score: { $meta: 'textScore' } })
             .skip(skip)
             .limit(limit)

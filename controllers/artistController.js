@@ -27,6 +27,11 @@ export const addArtistReview = async (req, res) => {
     if (!hasPurchased) {
       return res.status(403).json({ message: 'You can only review artists you have purchased from.' });
     }
+    // Prevent multiple reviews from the same user
+    const alreadyReviewed = artist.reviews.some(r => r.user && r.user.equals(req.userId));
+    if (alreadyReviewed) {
+      return res.status(400).json({ message: 'You have already reviewed this artist.' });
+    }
     // Add review
     artist.reviews.push({
       user: req.userId,
@@ -59,3 +64,40 @@ export const getArtistReviews = async (req, res) => {
     return res.status(500).json({ message: 'Internal server error' });
   }
 };
+
+export const deleteArtistReview = async (req, res) => {
+  
+  try {
+
+    const artist = await User.findById(req.params.id);
+    if (! artist){
+      return res.status(404).json({message: "Artist cannot be found"});
+    }
+
+    const reviewIndex = artist.reviews.findIndex(r => r.user && r.user.equals(req.userId));
+    if (reviewIndex === -1) {
+      return res.status(404).json({ message: 'Review not found.' });
+    }
+
+    artist.reviews.splice(reviewIndex, 1);
+    artist.numOfReviews = artist.reviews.length;
+    await artist.save();
+    return res.status(200).json({ message: "Review has been deleted successfully", reviews: artist.reviews, numOfReviews: artist.numOfReviews });
+
+
+  } catch (error) {
+
+
+    return res.status(500).json({ message: "Internal server error" });
+
+
+
+
+  }
+
+
+
+
+
+
+}

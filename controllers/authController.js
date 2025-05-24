@@ -21,41 +21,45 @@ export const register = async (req, res) => {
         return res.status(400).json({ message: error.details[0].message });
     }
     try {
-        const { username, email, password, role = "user", about } = req.body;
+        const { username, email, password, role = "user", about, avatar } = req.body;
         const existingUser = await User.findOne({ $or: [ {email } , { username } ] });
         if (existingUser) {
             return res.status(400).json({ message: "User already exists!" });
         }
 
         const profanity = new Filter.Filter();
-        
         if (profanity.isProfane(username)){
-
             return res.status(400).json({message: "Vulgar language detected. Please use nice words."})
-
         }
-        if (profanity.isProfane(about)){
-
-            return res.status(400).json({message: "Vulgar language detected. Please use nice words."})
-
+        if (role === 'artist') {
+            if (profanity.isProfane(about)){
+                return res.status(400).json({message: "Vulgar language detected. Please use nice words."})
+            }
+            if (typeof about !== 'string' || about.length > 1000) {
+                return res.status(400).json({message: "About section must be a string and less than 1000 characters."});
+            }
+            // Validate avatar (must be a valid image URL)
+            if (avatar !== undefined) {
+                const urlPattern = /^(https?:\/\/)[^\s]+\.(jpg|jpeg|png|gif|webp)$/i;
+                if (typeof avatar !== 'string' || !urlPattern.test(avatar)) {
+                    return res.status(400).json({ message: 'Avatar must be a valid image URL (jpg, jpeg, png, gif, webp).' });
+                }
+            }
         }
         const isEmailValid = await validateEmail(email);
-
         if (! isEmailValid){
-
-        return res.status(400).json({message: "Invalid email, please try a different email"});
+            return res.status(400).json({message: "Invalid email, please try a different email"});
         }
-
         const passwordStrength = zxcvbn(password);
         if (passwordStrength.score < 3){
-
             return res.status(400).json({message: "Password is too weak. Needs more power."});
         }
         const hashedPassword = await bcrypt.hash(password, 10);
-
-        // Only send role if in test environment
-        const userData = { username, email, password: hashedPassword, about, role};
-        if (process.env.NODE_ENV === 'test' && role) {
+        // Only send role, about, avatar if artist
+        let userData = { username, email, password: hashedPassword };
+        if (role === 'artist') {
+            userData = { ...userData, role, about, avatar };
+        } else if (process.env.NODE_ENV === 'test' && role) {
             userData.role = role;
         }
         const newUser = new User(userData);
