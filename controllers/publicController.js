@@ -67,11 +67,22 @@ catch (error) {
 
 export const getUserDetails = async (req, res) => {
     try {
-        const user = await User.findById(req.params.id);
+        // Populate uploadedTracks if artist/admin
+        let user = await User.findById(req.params.id);
         if (!user) {
             return res.status(404).json({ message: "User not found" });
         }
-        // Use schema transform with viewerRole/viewerId if available
+        // Only populate uploadedTracks for artists/admins... probably redundant since viewerRole edits this out in the toJSON method, but just to be sure.
+        if (user.role === 'artist' || user.role === 'admin') {
+            // Only show public tracks to public viewers
+            const isSelfOrAdmin = req.userId && (req.userId === user._id.toString() || req.user?.role === 'admin');
+            await user.populate({
+                path: 'uploadedTracks',
+                match: isSelfOrAdmin ? {} : { isPrivate: false },
+                select: 'title previewUrl fileUrl createdAt averageRating purchaseCount',
+                options: { sort: { createdAt: -1 } }
+            });
+        }
         return res.status(200).json(user.toJSON({
             viewerRole: req.user?.role || 'public',
             viewerId: req.userId || null
@@ -174,6 +185,9 @@ export const queryTracks = async (req, res) => {
                 return res.status(400).json({ error: "Something went wrong. Make sure you enter a valid vocal range" });
             }
         }
+        if (req.query.artistId) {
+            filter.user = req.query.artistId;
+        }//filter by artist
         filter.isPrivate = false; //show show public tracks only
         const tracks = await BackingTrack.find(filter).sort(sort).skip((page - 1) * limit).limit(limit).populate('user', 'avatar username');
         if (!tracks || tracks.length === 0) {

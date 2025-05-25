@@ -12,7 +12,13 @@ const s3 = new S3Client({
     }
 });
 
-    const upload = multer({
+function getFileExtension(filename) {
+  return filename.split('.').pop().toLowerCase();
+}
+
+const allowedTypes = /jpeg|jpg|png|gif/; // file types allowed
+
+const upload = multer({
 
      storage: multerS3({
         s3: s3,
@@ -20,7 +26,7 @@ const s3 = new S3Client({
         acl: 'public-read', //avatars should be public
         contentType: multerS3.AUTO_CONTENT_TYPE,
         key: function (req, file, cb) {
-            const ext = file.originalname.split('.').pop();
+            const ext = getFileExtension(file.originalname);
              const uniqueName = `avatars/${req.userId || 'user'}_${Date.now()}.${ext}`;
              cb(null, uniqueName);
 
@@ -30,21 +36,12 @@ const s3 = new S3Client({
 
      }),
      fileFilter: (req, file, cb) => {
-
-    const allowedTypes = /jpeg|jpg|png|gif/; //file types allowed
-    const ext = file.originalname.split('.').pop().toLowerCase(); 
-    /* get the file extension. .split splits the string by '.' returning an array of two elements. Then pop returns the last element of the array
-    thus getting the file extension. */
+    const ext = getFileExtension(file.originalname);
     if (allowedTypes.test(ext)) {
-
-        cb(null, true);
+      cb(null, true);
     } else {
-        cb(new Error('Only image files are allowed!'));
+      cb(new Error('Only image files are allowed!'));
     }
-
-
-
-
      }
 
     });

@@ -6,7 +6,7 @@ import User from '../models/User.js'; //
 import { parseKeySignature } from '../utils/parseKeySignature.js';
 import { uploadTrackSchema, reviewSchema, commentSchema } from './validationSchemas.js';
 import * as Filter from 'bad-words';
-
+import { sendFollowersNewTrack } from '../utils/updateFollowers.js';
 
 
 
@@ -148,6 +148,17 @@ export const uploadTrack = async (req, res) => {
         if (!updateUser) {
             return res.status(404).json({ message: "User not found." });
         }
+        // Notify followers by email
+        if (updateUser.followers && updateUser.followers.length > 0) {
+            // Get followers' emails
+            const followers = await User.find({ _id: { $in: updateUser.followers } }, 'email');
+            for (const follower of followers) {
+                if (follower.email) {
+                    // Send email asynchronously, don't block response
+                    sendFollowersNewTrack(follower.email, updateUser, newTrack).catch(e => console.error('Email error:', e));
+                }
+            }
+        }
         // If preview failed, include error in response for debugging
         if (!previewUrl && res.locals.previewError) {
             return res.status(200).json({ message: 'File uploaded, but preview failed', previewError: res.locals.previewError, track: newTrack });
@@ -221,6 +232,8 @@ export const deleteTrack = async (req, res) => {
     }
 };
 
+//this function gets all the tracks uploaded by the logged in user
+
 export const getUploadedTracks = async (req, res) => {
     try {
         // Defensive: ensure req.userId is present
@@ -246,7 +259,7 @@ export const getBoughtTracks = async (req, res) => {
     if (!user) {
       return res.status(401).json({ message: "User not found" });
     }
-    // Defensive: ensure boughtTracks is always an array
+    // ensure boughtTracks is always an array
     const boughtTracks = Array.isArray(user.boughtTracks) ? user.boughtTracks : [];
     if (boughtTracks.length === 0) {
       return res.status(404).json({ message: "No bought tracks found" });

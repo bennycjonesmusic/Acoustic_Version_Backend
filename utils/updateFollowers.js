@@ -32,3 +32,26 @@ export const sendFollowersNewTrack = async (userEmail, artist, newTrack) => {
 
   await transporter.sendMail(mailOptions);
 };
+
+
+export const sendCommissionPreviewEmail = async (customerEmail, artist, commission) => {
+  // Direct link to the preview file (assuming a frontend route for preview)
+  const previewUrl = `${process.env.FRONTEND_URL}/commission/preview/${commission._id}`;
+
+  const mailOptions = {
+    from: `AcousticVersion <${process.env.EMAIL_USER}>`,
+    to: customerEmail,
+    subject: `Your commission preview from ${artist.username} is ready!`,
+    html: `
+      <h2>Your commission preview is ready!</h2>
+      <p><strong>Artist:</strong> ${artist.username}</p>
+      <p><strong>Commission:</strong> ${commission.requirements || 'Custom Backing Track'}</p>
+      <p>Click below to listen to your preview and approve or request changes:</p>
+      <a href="${previewUrl}">${previewUrl}</a>
+      <br><br>
+      <small>You will receive the full track link after you confirm you are happy with the preview.</small>
+    `,
+  };
+
+  await transporter.sendMail(mailOptions);
+};

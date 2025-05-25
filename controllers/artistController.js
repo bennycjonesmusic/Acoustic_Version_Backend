@@ -1,5 +1,5 @@
 import User from '../models/User.js';
-import profanity from 'profanity-util';
+import * as Filter from 'bad-words';
 
 // Add a review to an artist
 export const addArtistReview = async (req, res) => {
@@ -9,8 +9,9 @@ export const addArtistReview = async (req, res) => {
     if (!review || !review.trim()) {
       return res.status(400).json({ message: 'Review text is required.' });
     }
-    // Optionally, check for profanity
-    if (profanity.isProfane(review)) {
+    // Profanity check using bad-words
+    const filter = new Filter();
+    if (filter.isProfane(review)) {
       return res.status(400).json({ message: 'Please avoid profanity in your review.' });
     }
     const artist = await User.findById(artistId);
@@ -65,6 +66,48 @@ export const getArtistReviews = async (req, res) => {
   }
 };
 
+export const followArtist = async (req, res) => {
+
+  try {
+
+    const artistId = req.params.id;
+    const artist = await User.findById(artistId);
+    const user = await User.findById(req.userId);
+
+    if (!artist || (artist.role !== 'artist' && artist.role !== 'admin')) {
+      return res.status(404).json({ message: "Must be artist/admin to follow... or the artist was not found"});
+ } 
+
+
+ if (!user) {
+    return res.status(404).json({ message: "User not found" });
+ }
+
+ if (user.following.includes(artistId)) {
+    return res.status(400).json({ message: "You are already following this artist" });
+ }
+
+ user.following.push(artistId);
+ artist.followers.push(user._id);
+ artist.numOfFollowers = artist.followers.length;
+ await user.save();
+ await artist.save();
+ return res.status(200).json({ message: "Successfully followed artist", following: user.following, followers: artist.followers, numOfFollowers: artist.numOfFollowers });
+
+
+  
+}
+  catch(error) {
+
+    console.error('Error following artist:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+
+  }
+ 
+}
+
+
+
 export const deleteArtistReview = async (req, res) => {
   
   try {
@@ -96,8 +139,49 @@ export const deleteArtistReview = async (req, res) => {
   }
 
 
+ 
+
 
 
 
 
 }
+
+
+
+ export const sortUploadedOrBoughtTracks = async (req, res) => {
+  try {
+    const { uploadedOrder = 'recent', purchasedOrder = 'recent' } = req.query;
+    const user = await User.findById(req.userId)
+      .populate('uploadedTracks')
+      .populate('purchasedTracks.track');
+    if (!user) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+    // Sort uploaded tracks
+    if (uploadedOrder === 'popularity') {
+      user.uploadedTracks.sort((a, b) => (b.purchaseCount || 0) - (a.purchaseCount || 0));
+    } else if (uploadedOrder === 'alphabetical') {
+      user.uploadedTracks.sort((a, b) => a.title.localeCompare(b.title));
+    } else { // 'recent' or default
+      user.uploadedTracks.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    }
+    // Sort purchased tracks
+    if (purchasedOrder === 'alphabetical') {
+      user.purchasedTracks.sort((a, b) => {
+        if (!a.track || !b.track) return 0;
+        return a.track.title.localeCompare(b.track.title);
+      });
+    } else { // 'recent' or default
+      user.purchasedTracks.sort((a, b) => new Date(b.purchasedAt) - new Date(a.purchasedAt));
+    }
+    return res.status(200).json({
+      uploadedTracks: user.uploadedTracks,
+      purchasedTracks: user.purchasedTracks,
+    });
+  } catch (error) {
+    console.error('Error sorting tracks:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+

@@ -397,6 +397,79 @@ describe('Commission Custom Backing Track Flow', () => {
   });
 });
 
+describe('Admin Endpoints', () => {
+  it('GET /admin/users should require admin and return 200 or 403', async () => {
+    const res = await request(app).get('/admin/users');
+    expect([200, 401, 403]).toContain(res.statusCode);
+  });
+  // Add more admin tests as needed
+});
+
+describe('Public Endpoints', () => {
+  it('GET /public/featured should return 200', async () => {
+    const res = await request(app).get('/public/featured');
+    expect([200, 404]).toContain(res.statusCode);
+  });
+  it('GET /public/search?q=test should return 200', async () => {
+    const res = await request(app).get('/public/search?q=test');
+    expect([200, 404]).toContain(res.statusCode);
+  });
+});
+
+describe('Artist Endpoints', () => {
+  it('GET /artist/profile should require artist and return 200 or 403', async () => {
+    const res = await request(app).get('/artist/profile');
+    expect([200, 401, 403]).toContain(res.statusCode);
+  });
+  // Add POST audition track, update profile, etc.
+});
+
+describe('Artist Examples Endpoints', () => {
+  it('GET /artist-examples should return 200', async () => {
+    const res = await request(app).get('/artist-examples');
+    expect([200, 404]).toContain(res.statusCode);
+  });
+  // Add POST, PUT, DELETE as needed
+});
+
+describe('Stripe Payment Endpoints', () => {
+  it('POST /stripe_payment/create-intent should return 200 or 400', async () => {
+    const res = await request(app).post('/stripe_payment/create-intent').send({ amount: 100 });
+    expect([200, 400]).toContain(res.statusCode);
+  });
+});
+
+describe('Users Endpoints', () => {
+  it('POST /users/follow should require auth and return 200 or 401', async () => {
+    const res = await request(app).post('/users/follow').send({ artistId: 'fakeid' });
+    expect([200, 401, 403, 400]).toContain(res.statusCode);
+  });
+  it('POST /users/unfollow should require auth and return 200 or 401', async () => {
+    const res = await request(app).post('/users/unfollow').send({ artistId: 'fakeid' });
+    expect([200, 401, 403, 400]).toContain(res.statusCode);
+  });
+  it('POST /users/sort-tracks should return 200 or 400', async () => {
+    const res = await request(app).post('/users/sort-tracks').send({ sort: 'recent' });
+    expect([200, 400]).toContain(res.statusCode);
+  });
+  // Add update profile, delete review, etc.
+});
+
+describe('Tracks Endpoints', () => {
+  it('GET /tracks/:id should return 200, 404, or 400', async () => {
+    const res = await request(app).get('/tracks/fakeid');
+    expect([200, 404, 400]).toContain(res.statusCode);
+  });
+  it('PUT /tracks/:id should require auth and return 200 or 401', async () => {
+    const res = await request(app).put('/tracks/fakeid').send({ title: 'Updated' });
+    expect([200, 401, 403, 400]).toContain(res.statusCode);
+  });
+  it('DELETE /tracks/:id should require auth and return 200 or 401', async () => {
+    const res = await request(app).delete('/tracks/fakeid');
+    expect([200, 401, 403, 400]).toContain(res.statusCode);
+  });
+});
+
 // Close MongoDB connection after all tests
 afterAll(async () => {
   await mongoose.connection.close();

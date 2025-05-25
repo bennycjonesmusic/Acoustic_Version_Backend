@@ -8,6 +8,10 @@ import dotenv from 'dotenv';
 import { getAudioPreview } from '../utils/audioPreview.js';
 dotenv.config();
 
+if (process.env.FFMPEG_PATH) {
+  ffmpeg.setFfmpegPath(process.env.FFMPEG_PATH);
+}
+
 const s3Client = new S3Client({
     region: process.env.AWS_REGION,
     credentials: {

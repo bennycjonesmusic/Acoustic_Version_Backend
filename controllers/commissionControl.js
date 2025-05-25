@@ -3,6 +3,10 @@ import stripe from 'stripe';
 const stripeClient = stripe(process.env.STRIPE_SECRET_KEY);
 import BackingTrack from '../models/backing_track.js';
 import User from '../models/User.js';
+import { sendCommissionPreviewEmail } from '../utils/updateFollowers.js';
+import { getAudioPreview } from '../utils/audioPreview.js';
+import { S3Client } from '@aws-sdk/client-s3';
+import { Upload } from '@aws-sdk/lib-storage';
 
 // Admin-only: Issue a refund for a regular track purchase (not commission)
 export const refundTrackPurchase = async (req, res) => {
@@ -38,11 +42,6 @@ export const refundTrackPurchase = async (req, res) => {
         return res.status(500).json({ error: 'Internal server error' });
     }
 };
-
-import User from "../models/User.js"; // fixed import to match actual filename
-import { getAudioPreview } from '../utils/audioPreview.js';
-import { S3Client } from '@aws-sdk/client-s3';
-import { Upload } from '@aws-sdk/lib-storage';
 
 export const createCommissionRequest = async (req, res) => {
 
@@ -159,9 +158,11 @@ export const approveCommissionAndPayout = async (req, res) => {
 export const processExpiredCommissions = async (req, res) => {
     try {
         const now = new Date();
-        // Find commissions past expiry, not delivered or paid or cancelled
+        // Set expiry threshold to 2 weeks (14 days) from commission creation
+        const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+        // Find commissions created more than 2 weeks ago, not delivered, paid, refunded, or cancelled
         const expired = await CommissionRequest.find({
-            expiryDate: { $lt: now },
+            createdAt: { $lt: twoWeeksAgo },
             status: { $in: ['requested', 'accepted', 'in_progress'] }
         });
         let results = [];
@@ -174,7 +175,7 @@ export const processExpiredCommissions = async (req, res) => {
                         reason: 'requested_by_customer',
                         metadata: { commissionId: commission._id.toString() }
                     });
-                    commission.status = 'cancelled';
+                    commission.status = 'refunded';
                     await commission.save();
                     results.push({ commissionId: commission._id, refunded: true });
                 } catch (err) {
@@ -263,7 +264,7 @@ export const uploadFinishedTrack = async (req, res) => {
         try { fs.existsSync(tempFullPath) && fs.unlinkSync(tempFullPath); } catch (e) {}
         try { fs.existsSync(tempPreviewPath) && fs.unlinkSync(tempPreviewPath); } catch (e) {}
         // Update commission
-        const commissionToUpdate = await CommissionRequest.findById(commissionId);
+        const commissionToUpdate = await CommissionRequest.findById(commissionId).populate('customer artist');
         if (!commissionToUpdate) {
             return res.status(404).json({ error: 'Commission not found' });
         }
@@ -271,6 +272,14 @@ export const uploadFinishedTrack = async (req, res) => {
         commissionToUpdate.previewTrackUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${previewKey}`;
         commissionToUpdate.status = 'delivered';
         await commissionToUpdate.save();
+        // Send preview email to customer
+        if (commissionToUpdate.customer && commissionToUpdate.customer.email && commissionToUpdate.artist) {
+            sendCommissionPreviewEmail(
+                commissionToUpdate.customer.email,
+                commissionToUpdate.artist,
+                commissionToUpdate
+            ).catch(e => console.error('Commission preview email error:', e));
+        }
         return res.status(200).json({
             success: true,
             finishedTrackUrl: commissionToUpdate.finishedTrackUrl,
@@ -309,6 +318,47 @@ export const confirmOrDenyCommission = async (req, res) => {
         }
     } catch (error) {
         console.error('Error confirming/denying commission:', error);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// Admin-only: Refund a commission (not a regular track purchase)
+export const refundCommission = async (req, res) => {
+    try {
+        if (!req.user || req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'Not authorized' });
+        }
+        const { commissionId } = req.body;
+        if (!commissionId) {
+            return res.status(400).json({ error: 'Missing commissionId' });
+        }
+        const commission = await CommissionRequest.findById(commissionId);
+        if (!commission) {
+            return res.status(404).json({ error: 'Commission not found' });
+        }
+        // Only refund if not already refunded or paid
+        if (commission.status === 'refunded' || commission.status === 'paid') {
+            return res.status(400).json({ error: 'Cannot refund this commission' });
+        }
+        // Refund via Stripe
+        if (commission.stripePaymentIntentId) {
+            try {
+                await stripeClient.refunds.create({
+                    payment_intent: commission.stripePaymentIntentId,
+                    reason: 'requested_by_customer',
+                    metadata: { commissionId: commission._id.toString() }
+                });
+                commission.status = 'refunded';
+                await commission.save();
+                return res.status(200).json({ success: true });
+            } catch (err) {
+                return res.status(500).json({ error: 'Failed to issue refund', details: err.message });
+            }
+        } else {
+            return res.status(400).json({ error: 'No payment intent found for this commission' });
+        }
+    } catch (error) {
+        console.error('Error refunding commission:', error);
         return res.status(500).json({ error: 'Internal server error' });
     }
 };

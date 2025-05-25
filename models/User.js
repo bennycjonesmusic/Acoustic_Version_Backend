@@ -30,6 +30,10 @@ const userSchema = new mongoose.Schema({
     default : 0,
   
   },
+  following: [{
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'User'
+  }],
   amountOfFollowers: { type: Number, default: 0 },
   about: { type: String, default: '' },
   avatar: {

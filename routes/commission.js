@@ -35,10 +35,10 @@ router.post('/confirm', customerAuth, confirmOrDenyCommission);
 // Download finished or preview commission file (customer or admin only)
 router.get('/download', customerAuth, downloadCommissionFile);
 
-// Admin-only: Issue a refund for a commission
-router.post('/admin/refund', adminAuth, refundCommission);
-
 // Admin-only: Issue a refund for a regular track purchase (not commission)
 router.post('/admin/track-refund', adminAuth, refundTrackPurchase);
+
+// Admin-only: Issue a refund for a commission
+router.post('/admin/refund', adminAuth, refundCommission);
 
 export default router;
