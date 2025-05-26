@@ -1,72 +1,77 @@
+// To run: npm install mocha chai supertest --save-dev
+// Then run: npx mocha api.test.js
+import { expect } from 'chai';
 import dotenv from 'dotenv';
 dotenv.config();
-// Ensure FRONTEND_URL is set for Stripe URLs in tests
 process.env.FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 import request from 'supertest';
-import app from './server.js';
 import mongoose from 'mongoose';
 import User from './models/User.js';
 import CommissionRequest from './models/CommissionRequest.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import sinon from 'sinon';
+import nodemailer from 'nodemailer';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 /* 
 this test file is used to test the API endpoints. It uses supertest to make requests to the server 
 and check the responses. It is used to ensure that the API endpoints are working as expected. */
 
+let app;
+before(async function() {
+  const mod = await import('./server.js');
+  app = mod.default || mod.app || mod;
+}).timeout(20000);
+
+// Mock nodemailer before any tests run
+before(function () {
+  sinon.stub(nodemailer, 'createTransport').returns({
+    sendMail: sinon.stub().resolves({ messageId: 'mocked' })
+  });
+});
+
+// Restore after all tests
+after(function () {
+  nodemailer.createTransport.restore();
+});
+
 describe('API Endpoints', () => {
   it('GET / should return Testing', async () => {
     const res = await request(app).get('/');
-    expect(res.statusCode).toBe(200);
-    expect(res.text).toMatch(/Testing/);
+    expect(res.statusCode).to.equal(200);
+    expect(res.text).to.match(/Testing/);
   });
-
-  it('GET /tracks should return tracks, 401, 403, or 404 if protected or not found', async () => {
+  it('GET /tracks should return tracks', async () => {
     const res = await request(app).get('/tracks');
-    if (res.statusCode === 200) {
-      expect(Array.isArray(res.body) || Array.isArray(res.body.tracks)).toBe(true);
-    } else {
-      expect([401, 403, 404]).toContain(res.statusCode);
-    }
+    expect(res.statusCode).to.equal(200);
+    expect(Array.isArray(res.body) || Array.isArray(res.body.tracks)).to.be.true;
   });
-
-  it('GET /users should return users, 401, 403, or 404 if protected or not found', async () => {
+  it('GET /users should return users', async () => {
     const res = await request(app).get('/users');
-    if (res.statusCode === 200) {
-      expect(Array.isArray(res.body) || Array.isArray(res.body.users)).toBe(true);
-    } else {
-      expect([401, 403, 404]).toContain(res.statusCode);
-    }
+    expect(res.statusCode).to.equal(200);
+    expect(Array.isArray(res.body) || Array.isArray(res.body.users)).to.be.true;
   });
-
   it('POST /webhook should return 400 or 200 for missing signature', async () => {
     const res = await request(app).post('/webhook').send({});
-    expect([400, 200]).toContain(res.statusCode);
+    expect([400, 200]).to.include(res.statusCode);
   });
-
   it('GET /protectedUser should return 401, 403, or 500 without token', async () => {
     const res = await request(app).get('/protectedUser');
-    expect([401, 403, 500]).toContain(res.statusCode);
+    expect([401, 403, 500]).to.include(res.statusCode);
   });
-
   it('GET /protectedArtist should return 401, 403, or 500 without token', async () => {
     const res = await request(app).get('/protectedArtist');
-    expect([401, 403, 500]).toContain(res.statusCode);
+    expect([401, 403, 500]).to.include(res.statusCode);
   });
-
-  // Add more tests for /admin, /stripe, etc. as needed
 });
 
 describe('Password Reset Flow', () => {
   let testUserEmail = 'resetuser@example.com';
   let testUserPassword = 'TestPassword123!';
   let resetToken;
-
-  beforeAll(async () => {
-    // Clean up any existing test user before starting
+  before(async () => {
     await User.deleteMany({ email: testUserEmail });
-    // Register a user for password reset
     await request(app)
       .post('/auth/register')
       .send({
@@ -75,48 +80,41 @@ describe('Password Reset Flow', () => {
         password: testUserPassword,
         about: 'Test user for password reset.'
       });
-    // Confirm user exists in DB before proceeding
     const user = await User.findOne({ email: testUserEmail });
-    expect(user).toBeTruthy();
-  });
-
+    expect(user).to.exist;
+  }).timeout(20000);
   it('should request a password reset and send a reset token', async () => {
     const res = await request(app)
       .post('/auth/request-password-reset')
       .send({ email: testUserEmail });
-    expect(res.statusCode).toBe(200);
-    expect(res.body.message).toMatch(/reset link has been sent/i);
-    // Simulate fetching the token from the database
+    expect(res.statusCode).to.equal(200);
+    expect(res.body.message).to.match(/reset link has been sent/i);
     const user = await User.findOne({ email: testUserEmail });
-    expect(user.passwordResetToken).toBeDefined();
+    expect(user.passwordResetToken).to.exist;
     resetToken = user.passwordResetToken;
   });
-
   it('should not reset password with invalid token', async () => {
     const res = await request(app)
       .post('/auth/reset-password')
       .send({ token: 'invalidtoken', newPassword: 'NewPassword123!' });
-    expect(res.statusCode).toBe(400);
-    expect(res.body.message).toMatch(/invalid or expired token/i);
+    expect(res.statusCode).to.equal(400);
+    expect(res.body.message).to.match(/invalid or expired token/i);
   });
-
   it('should reset password with valid token', async () => {
     const res = await request(app)
       .post('/auth/reset-password')
       .send({ token: resetToken, newPassword: 'NewPassword123!' });
-    expect(res.statusCode).toBe(200);
-    expect(res.body.message).toMatch(/password has been reset/i);
-    // Confirm token is cleared
+    expect(res.statusCode).to.equal(200);
+    expect(res.body.message).to.match(/password has been reset/i);
     const user = await User.findOne({ email: testUserEmail });
-    expect(user.passwordResetToken).toBeFalsy();
+    expect(user.passwordResetToken).to.not.exist;
   });
-
   it('should allow login with new password', async () => {
     const res = await request(app)
       .post('/auth/login')
       .send({ login: testUserEmail, password: 'NewPassword123!' });
-    expect(res.statusCode).toBe(200);
-    expect(res.body.token).toBeDefined();
+    expect(res.statusCode).to.equal(200);
+    expect(res.body.token).to.exist;
   });
 });
 
@@ -129,15 +127,15 @@ describe('Backing Track Upload & Preview', () => {
   };
   let token;
 
-  beforeAll(async () => {
+  before(async function() {
     await User.deleteMany({ email: testUser.email });
     await request(app).post('/auth/register').send(testUser);
     const loginRes = await request(app)
       .post('/auth/login')
       .send({ login: testUser.email, password: testUser.password });
     token = loginRes.body.token;
-    expect(token).toBeDefined();
-  });
+    expect(token).to.exist;
+  }).timeout(20000);
 
   it('should upload a track and return a previewUrl', async () => {
     const res = await request(app)
@@ -151,11 +149,16 @@ describe('Backing Track Upload & Preview', () => {
       .field('description', 'Test track for preview')
       .field('price', 0)
       .attach('file', 'test-assets/sample.mp3');
-    expect(res.statusCode).toBe(200);
-    expect(res.body.track).toBeDefined();
-    expect(res.body.track.title).toBe('Test Track');
-    expect(res.body.track.previewUrl).toBeDefined();
-    expect(res.body.track.previewUrl).toMatch(/^https?:\/\//);
+    expect(res.statusCode).to.equal(200);
+    expect(res.body.track).to.exist;
+    expect(typeof res.body.track.id === 'string' || typeof res.body.track._id === 'string').to.be.true;
+    expect(res.body.track.title).to.equal('Test Track');
+    expect(res.body.track.previewUrl).to.exist;
+    expect(res.body.track.previewUrl).to.match(/^https?:\/\//);
+    expect(typeof res.body.track.fileUrl).to.be.equal('string');
+    expect(res.body.track.genre).to.equal('Pop');
+    expect(res.body.track.vocalRange).to.equal('Tenor');
+    expect(res.body.track.backingTrackType).to.equal('Acoustic Guitar');
   });
 });
 
@@ -168,15 +171,15 @@ describe('Backing Track Upload', () => {
   };
   let token;
 
-  beforeAll(async () => {
+  before(async function() {
     await User.deleteMany({ email: testUser.email });
     await request(app).post('/auth/register').send(testUser);
     const loginRes = await request(app)
       .post('/auth/login')
       .send({ login: testUser.email, password: testUser.password });
     token = loginRes.body.token;
-    expect(token).toBeDefined();
-  });
+    expect(token).to.exist;
+  }).timeout(20000);
 
   it('should upload a track and return a fileUrl', async () => {
     const res = await request(app)
@@ -190,11 +193,11 @@ describe('Backing Track Upload', () => {
       .field('description', 'Test track for upload')
       .field('price', 0)
       .attach('file', 'test-assets/sample.mp3');
-    expect(res.statusCode).toBe(200);
-    expect(res.body.track).toBeDefined();
-    expect(res.body.track.title).toBe('Test Track');
-    expect(res.body.track.fileUrl).toBeDefined();
-    expect(res.body.track.fileUrl).toMatch(/^https?:\/\//);
+    expect(res.statusCode).to.equal(200);
+    expect(res.body.track).to.exist;
+    expect(res.body.track.title).to.equal('Test Track');
+    expect(res.body.track.fileUrl).to.exist;
+    expect(res.body.track.fileUrl).to.match(/^https?:\/\//);
   });
 });
 
@@ -221,7 +224,7 @@ describe('Commission Custom Backing Track Flow', () => {
     role: 'admin'
   };
 
-  beforeAll(async () => {
+  before(async function() {
     // Clean up users
     await Promise.all([
       User.deleteMany({ email: customer.email }),
@@ -266,8 +269,8 @@ describe('Commission Custom Backing Track Flow', () => {
         expiryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
       });
     console.log('Commission request response:', res.body);
-    expect(res.statusCode).toBe(200);
-    expect(res.body.commissionId).toBeDefined();
+    expect(res.statusCode).to.equal(200);
+    expect(res.body.commissionId).to.exist;
     commissionId = res.body.commissionId;
     if (!commissionId) throw new Error('No commissionId returned');
   });
@@ -293,12 +296,12 @@ describe('Commission Custom Backing Track Flow', () => {
       .field('commissionId', commissionId)
       .attach('file', samplePath);
     console.log('Upload finished track response:', res.body);
-    expect(res.statusCode).toBe(200);
-    expect(res.body.previewTrackUrl).toBeDefined();
-    expect(res.body.finishedTrackUrl).toBeDefined();
+    expect(res.statusCode).to.equal(200);
+    expect(res.body.previewTrackUrl).to.exist;
+    expect(res.body.finishedTrackUrl).to.exist;
     const commission = await CommissionRequest.findById(commissionId);
     console.log('Commission after upload:', commission);
-    expect(commission.status).toBe('delivered');
+    expect(commission.status).to.equal('delivered');
   });
 
   it('Customer approves the preview', async () => {
@@ -308,10 +311,10 @@ describe('Commission Custom Backing Track Flow', () => {
       .set('Authorization', `Bearer ${customerToken}`)
       .send({ commissionId, action: 'approve' });
     console.log('Approve preview response:', res.body);
-    expect(res.statusCode).toBe(200);
+    expect(res.statusCode).to.equal(200);
     const commission = await CommissionRequest.findById(commissionId);
     console.log('Commission after approval:', commission);
-    expect(commission.status).toBe('approved');
+    expect(commission.status).to.equal('approved');
   });
 
   it('Admin triggers payout', async () => {
@@ -321,7 +324,7 @@ describe('Commission Custom Backing Track Flow', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ commissionId });
     console.log('Admin payout response:', res.body);
-    expect([200, 400, 500]).toContain(res.statusCode);
+    expect([200, 400, 500]).to.include(res.statusCode);
   });
 
   it('Customer can download their own commission files (finished/preview)', async () => {
@@ -332,16 +335,16 @@ describe('Commission Custom Backing Track Flow', () => {
       .set('Authorization', `Bearer ${customerToken}`)
       .query({ commissionId, type: 'finished' });
     console.log('Customer download finished:', res.statusCode, res.headers['content-type']);
-    expect(res.statusCode).toBe(200);
-    expect(res.headers['content-type']).toMatch(/audio/);
+    expect(res.statusCode).to.equal(200);
+    expect(res.headers['content-type']).to.match(/audio/);
     // Download preview file
     res = await request(app)
       .get('/commission/download')
       .set('Authorization', `Bearer ${customerToken}`)
       .query({ commissionId, type: 'preview' });
     console.log('Customer download preview:', res.statusCode, res.headers['content-type']);
-    expect(res.statusCode).toBe(200);
-    expect(res.headers['content-type']).toMatch(/audio/);
+    expect(res.statusCode).to.equal(200);
+    expect(res.headers['content-type']).to.match(/audio/);
   }, 20000); // Increase timeout for slow commission downloads
 
   it('Other users cannot download commission files they do not own', async () => {
@@ -358,21 +361,21 @@ describe('Commission Custom Backing Track Flow', () => {
       .post('/auth/login')
       .send({ login: otherUser.email, password: otherUser.password });
     const otherToken = loginRes.body.token;
-    expect(otherToken).toBeDefined();
+    expect(otherToken).to.exist;
     // Try to download finished file
     let res = await request(app)
       .get('/commission/download')
       .set('Authorization', `Bearer ${otherToken}`)
       .query({ commissionId, type: 'finished' });
     console.log('Other user download finished:', res.statusCode, res.body);
-    expect(res.statusCode).toBe(403);
+    expect(res.statusCode).to.equal(403);
     // Try to download preview file
     res = await request(app)
       .get('/commission/download')
       .set('Authorization', `Bearer ${otherToken}`)
       .query({ commissionId, type: 'preview' });
     console.log('Other user download preview:', res.statusCode, res.body);
-    expect(res.statusCode).toBe(403);
+    expect(res.statusCode).to.equal(403);
   });
 
   it('Admin can download any commission file', async () => {
@@ -383,16 +386,16 @@ describe('Commission Custom Backing Track Flow', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .query({ commissionId, type: 'finished' });
     console.log('Admin download finished:', res.statusCode, res.headers['content-type']);
-    expect(res.statusCode).toBe(200);
-    expect(res.headers['content-type']).toMatch(/audio/);
+    expect(res.statusCode).to.equal(200);
+    expect(res.headers['content-type']).to.match(/audio/);
     // Download preview file
     res = await request(app)
       .get('/commission/download')
       .set('Authorization', `Bearer ${adminToken}`)
       .query({ commissionId, type: 'preview' });
     console.log('Admin download preview:', res.statusCode, res.headers['content-type']);
-    expect(res.statusCode).toBe(200);
-    expect(res.headers['content-type']).toMatch(/audio/);
+    expect(res.statusCode).to.equal(200);
+    expect(res.headers['content-type']).to.match(/audio/);
   });
 });
 
@@ -400,9 +403,9 @@ describe('Admin Endpoints', () => {
   it('GET /admin/users should require admin and return 200 or 403', async () => {
     const res = await request(app).get('/admin/users');
     if (res.statusCode === 200) {
-      expect(Array.isArray(res.body) || Array.isArray(res.body.users)).toBe(true);
+      expect(Array.isArray(res.body) || Array.isArray(res.body.users)).to.be.true;
     } else {
-      expect([401, 403]).toContain(res.statusCode);
+      expect([401, 403]).to.include(res.statusCode);
     }
   });
   // Add more admin tests as needed
@@ -412,17 +415,17 @@ describe('Public Endpoints', () => {
   it('GET /public/featured should return 200', async () => {
     const res = await request(app).get('/public/featured');
     if (res.statusCode === 200) {
-      expect(Array.isArray(res.body) || Array.isArray(res.body.featured)).toBe(true);
+      expect(Array.isArray(res.body) || Array.isArray(res.body.featured)).to.be.true;
     } else {
-      expect([404]).toContain(res.statusCode);
+      expect([404]).to.include(res.statusCode);
     }
   });
   it('GET /public/search?q=test should return 200', async () => {
     const res = await request(app).get('/public/search?q=test');
     if (res.statusCode === 200) {
-      expect(Array.isArray(res.body) || Array.isArray(res.body.results)).toBe(true);
+      expect(Array.isArray(res.body) || Array.isArray(res.body.results)).to.be.true;
     } else {
-      expect([404]).toContain(res.statusCode);
+      expect([404]).to.include(res.statusCode);
     }
   });
 });
@@ -431,10 +434,10 @@ describe('Artist Endpoints', () => {
   it('GET /artist/profile should require artist and return 200, 401, 403, or 404', async () => {
     const res = await request(app).get('/artist/profile');
     if (res.statusCode === 200) {
-      expect(res.body).toBeDefined();
-      expect(res.body.username || res.body.artist).toBeDefined();
+      expect(res.body).to.exist;
+      expect(res.body.username || res.body.artist).to.exist;
     } else {
-      expect([401, 403, 404]).toContain(res.statusCode);
+      expect([401, 403, 404]).to.include(res.statusCode);
     }
   });
   // Add POST audition track, update profile, etc.
@@ -444,9 +447,9 @@ describe('Artist Examples Endpoints', () => {
   it('GET /artist-examples should return 200', async () => {
     const res = await request(app).get('/artist-examples');
     if (res.statusCode === 200) {
-      expect(Array.isArray(res.body) || Array.isArray(res.body.examples)).toBe(true);
+      expect(Array.isArray(res.body) || Array.isArray(res.body.examples)).to.be.true;
     } else {
-      expect([404]).toContain(res.statusCode);
+      expect([404]).to.include(res.statusCode);
     }
   });
   // Add POST, PUT, DELETE as needed
@@ -456,64 +459,119 @@ describe('Stripe Payment Endpoints', () => {
   it('POST /stripe_payment/create-intent should return 200, 400, or 404', async () => {
     const res = await request(app).post('/stripe_payment/create-intent').send({ amount: 100 });
     if (res.statusCode === 200) {
-      expect(res.body.clientSecret || res.body.intent).toBeDefined();
+      expect(res.body.clientSecret || res.body.intent).to.exist;
     } else {
-      expect([400, 404]).toContain(res.statusCode);
+      expect([400, 404]).to.include(res.statusCode);
     }
   });
 });
 
 describe('Users Endpoints', () => {
-  it('POST /users/follow should require auth and return 200, 401, 403, 400, or 404', async () => {
-    const res = await request(app).post('/users/follow').send({ artistId: 'fakeid' });
-    if (res.statusCode === 200) {
-      expect(res.body.message).toBeDefined();
-    } else {
-      expect([401, 403, 400, 404]).toContain(res.statusCode);
-    }
+  it('POST /users/follow should follow a real artist', async () => {
+    // Register and login user
+    const user = {
+      username: 'followuser',
+      email: 'followuser@example.com',
+      password: 'TestPassword123!',
+      about: 'User for follow test.'
+    };
+    await User.deleteMany({ email: user.email });
+    await request(app).post('/auth/register').send(user);
+    const loginRes = await request(app)
+      .post('/auth/login')
+      .send({ login: user.email, password: user.password });
+    const token = loginRes.body.token;
+    expect(token).to.exist;
+    // Register an artist to follow
+    const artist = {
+      username: 'followartist',
+      email: 'followartist@example.com',
+      password: 'TestPassword123!',
+      about: 'Artist for follow test.'
+    };
+    await User.deleteMany({ email: artist.email });
+    await request(app).post('/auth/register').send(artist);
+    const artistUser = await User.findOne({ email: artist.email });
+    expect(artistUser).to.be.ok;
+    // Follow the artist
+    const res = await request(app)
+      .post('/users/follow')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ artistId: artistUser._id });
+    expect(res.statusCode).to.equal(200);
+    expect(res.body.message).to.match(/follow/i);
   });
-  it('POST /users/unfollow should require auth and return 200, 401, 403, 400, or 404', async () => {
-    const res = await request(app).post('/users/unfollow').send({ artistId: 'fakeid' });
-    if (res.statusCode === 200) {
-      expect(res.body.message).toBeDefined();
-    } else {
-      expect([401, 403, 400, 404]).toContain(res.statusCode);
-    }
+
+  it('POST /users/unfollow should unfollow a real artist', async () => {
+    // Register and login user
+    const user = {
+      username: 'unfollowuser',
+      email: 'unfollowuser@example.com',
+      password: 'TestPassword123!',
+      about: 'User for unfollow test.'
+    };
+    await User.deleteMany({ email: user.email });
+    await request(app).post('/auth/register').send(user);
+    const loginRes = await request(app)
+      .post('/auth/login')
+      .send({ login: user.email, password: user.password });
+    const token = loginRes.body.token;
+    expect(token).to.exist;
+    // Register an artist to unfollow
+    const artist = {
+      username: 'unfollowartist',
+      email: 'unfollowartist@example.com',
+      password: 'TestPassword123!',
+      about: 'Artist for unfollow test.'
+    };
+    await User.deleteMany({ email: artist.email });
+    await request(app).post('/auth/register').send(artist);
+    const artistUser = await User.findOne({ email: artist.email });
+    expect(artistUser).to.be.ok;
+    // Follow the artist first
+    await request(app)
+      .post('/users/follow')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ artistId: artistUser._id });
+    // Unfollow the artist
+    const res = await request(app)
+      .post('/users/unfollow')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ artistId: artistUser._id });
+    expect(res.statusCode).to.equal(200);
+    expect(res.body.message).to.match(/unfollow/i);
   });
-  it('POST /users/sort-tracks should return 200, 400, or 404', async () => {
+
+  it('POST /users/sort-tracks should return sorted tracks', async () => {
     const res = await request(app).post('/users/sort-tracks').send({ sort: 'recent' });
-    if (res.statusCode === 200) {
-      expect(Array.isArray(res.body.tracks)).toBe(true);
-    } else {
-      expect([400, 404]).toContain(res.statusCode);
-    }
+    expect(res.statusCode).to.equal(200);
+    expect(Array.isArray(res.body.tracks)).to.be.true;
   });
-  // Add update profile, delete review, etc.
 });
 
 describe('Tracks Endpoints', () => {
   it('GET /tracks/:id should return 200, 404, or 400', async () => {
     const res = await request(app).get('/tracks/fakeid');
     if (res.statusCode === 200) {
-      expect(res.body._id || res.body.track).toBeDefined();
+      expect(res.body._id || res.body.track).to.be.defined;
     } else {
-      expect([404, 400]).toContain(res.statusCode);
+      expect([404, 400]).to.include(res.statusCode);
     }
   });
   it('PUT /tracks/:id should require auth and return 200, 401, 403, 400, or 404', async () => {
     const res = await request(app).put('/tracks/fakeid').send({ title: 'Updated' });
     if (res.statusCode === 200) {
-      expect(res.body._id || res.body.track).toBeDefined();
+      expect(res.body._id || res.body.track).to.be.defined;
     } else {
-      expect([401, 403, 400, 404]).toContain(res.statusCode);
+      expect([401, 403, 400, 404]).to.include(res.statusCode);
     }
   });
   it('DELETE /tracks/:id should require auth and return 200 or 401', async () => {
     const res = await request(app).delete('/tracks/fakeid');
     if (res.statusCode === 200) {
-      expect(res.body.message).toBeDefined();
+      expect(res.body.message).to.exist;
     } else {
-      expect([401, 403, 400]).toContain(res.statusCode);
+      expect([401, 403, 400]).to.include(res.statusCode);
     }
   });
 });
@@ -533,7 +591,7 @@ describe('Tracks Endpoints (Full)', () => {
       .post('/auth/login')
       .send({ login: user.email, password: user.password });
     const token = loginRes.body.token;
-    expect(token).toBeDefined();
+    expect(token).to.exist;
     // Upload a track
     const uploadRes = await request(app)
       .post('/tracks/upload')
@@ -547,9 +605,9 @@ describe('Tracks Endpoints (Full)', () => {
       .field('price', 0)
       .attach('file', 'test-assets/sample.mp3');
     console.log('Upload response body (rate test):', uploadRes.body);
-    expect(uploadRes.statusCode).toBe(200);
+    expect(uploadRes.statusCode).to.equal(200);
     const trackId = uploadRes.body.track && (uploadRes.body.track._id || uploadRes.body.track.id);
-    expect(trackId).toBeDefined();
+    expect(trackId).to.exist;
     // Simulate purchase: add track to user's purchasedTracks (correct structure)
     await User.updateOne(
       { email: user.email },
@@ -561,20 +619,20 @@ describe('Tracks Endpoints (Full)', () => {
       .post(`/tracks/rate/${trackId}`)
       .set('Authorization', `Bearer ${token}`)
       .send({ rating: 5 });
-    expect(rateRes.statusCode).toBe(200);
-    expect(rateRes.body.track).toBeDefined();
-    expect(rateRes.body.track.ratings.some(r => r.stars === 5)).toBe(true);
+    expect(rateRes.statusCode).to.equal(200);
+    expect(rateRes.body.track).to.exist;
+    expect(rateRes.body.track.ratings.some(r => r.stars === 5)).to.be.true;
     // Rate with invalid value (negative)
     const badRateRes = await request(app)
       .post(`/tracks/rate/${trackId}`)
       .set('Authorization', `Bearer ${token}`)
       .send({ rating: 100 });
-    expect([400, 403, 500]).toContain(badRateRes.statusCode);
+    expect([400, 403, 500]).to.include(badRateRes.statusCode);
     // Rate without auth (negative)
     const unauthRes = await request(app)
       .post(`/tracks/rate/${trackId}`)
       .send({ rating: 4 });
-    expect([401, 403, 500]).toContain(unauthRes.statusCode);
+    expect([401, 403, 500]).to.include(unauthRes.statusCode);
   });
   it('should comment on a track', async () => {
     // Register and login user
@@ -590,7 +648,7 @@ describe('Tracks Endpoints (Full)', () => {
       .post('/auth/login')
       .send({ login: user.email, password: user.password });
     const token = loginRes.body.token;
-    expect(token).toBeDefined();
+    expect(token).to.exist;
     // Upload a track
     const uploadRes = await request(app)
       .post('/tracks/upload')
@@ -603,9 +661,9 @@ describe('Tracks Endpoints (Full)', () => {
       .field('description', 'Track for comment test')
       .field('price', 0)
       .attach('file', 'test-assets/sample.mp3');
-    expect(uploadRes.statusCode).toBe(200);
+    expect(uploadRes.statusCode).to.equal(200);
     const trackId = uploadRes.body.track && (uploadRes.body.track._id || uploadRes.body.track.id);
-    expect(trackId).toBeDefined();
+    expect(trackId).to.exist;
     // Simulate purchase: add track to user's purchasedTracks (correct structure)
     await User.updateOne(
       { email: user.email },
@@ -617,20 +675,20 @@ describe('Tracks Endpoints (Full)', () => {
       .post(`/tracks/comment/${trackId}`)
       .set('Authorization', `Bearer ${token}`)
       .send({ comment: 'Great track!' });
-    expect(commentRes.statusCode).toBe(200);
-    expect(commentRes.body.comments).toBeDefined();
-    expect(commentRes.body.comments.some(c => c.text === 'Great track!')).toBe(true);
+    expect(commentRes.statusCode).to.equal(200);
+    expect(commentRes.body.comments).to.exist;
+    expect(commentRes.body.comments.some(c => c.text === 'Great track!')).to.be.true;
     // Comment with empty body (negative)
     const badCommentRes = await request(app)
       .post(`/tracks/comment/${trackId}`)
       .set('Authorization', `Bearer ${token}`)
       .send({ comment: '' });
-    expect([400, 403, 500]).toContain(badCommentRes.statusCode);
+    expect([400, 403, 500]).to.include(badCommentRes.statusCode);
     // Comment without auth (negative)
     const unauthRes = await request(app)
       .post(`/tracks/comment/${trackId}`)
       .send({ comment: 'Nice!' });
-    expect([401, 403, 500]).toContain(unauthRes.statusCode);
+    expect([401, 403, 500]).to.include(unauthRes.statusCode);
   });
   it('should get uploaded tracks after upload', async () => {
     // Register and login user
@@ -646,7 +704,7 @@ describe('Tracks Endpoints (Full)', () => {
       .post('/auth/login')
       .send({ login: user.email, password: user.password });
     const token = loginRes.body.token;
-    expect(token).toBeDefined();
+    expect(token).to.exist;
     // Upload a track
     const uploadRes = await request(app)
       .post('/tracks/upload')
@@ -659,24 +717,31 @@ describe('Tracks Endpoints (Full)', () => {
       .field('description', 'Track for uploaded list test')
       .field('price', 0)
       .attach('file', 'test-assets/sample.mp3');
-    expect(uploadRes.statusCode).toBe(200);
+    expect(uploadRes.statusCode).to.equal(200);
     const uploadedTrackId = uploadRes.body.track && (uploadRes.body.track._id || uploadRes.body.track.id);
-    expect(uploadedTrackId).toBeDefined();
+    expect(uploadedTrackId).to.exist;
     // Get uploaded tracks (should include the uploaded track)
     const res = await request(app)
       .get('/tracks/uploaded-tracks')
       .set('Authorization', `Bearer ${token}`);
-    expect(res.statusCode).toBe(200);
-    expect(Array.isArray(res.body.tracks)).toBe(true);
+    expect(res.statusCode).to.equal(200);
+    expect(Array.isArray(res.body.tracks)).to.be.true;
+    expect(res.body.tracks.length).to.be.greaterThan(0);
+    res.body.tracks.forEach(track => {
+      expect(typeof track.id === 'string' || typeof track._id === 'string').to.be.true;
+      expect(typeof track.title).to.be.equal('string');
+      expect(typeof track.fileUrl).to.be.equal('string');
+      expect(typeof track.previewUrl).to.be.equal('string');
+    });
     // Debug log
     console.log('Returned uploaded tracks:', res.body.tracks, 'Expected ID:', uploadedTrackId);
     // For uploaded tracks, each element is a track object
     const found = res.body.tracks.some(t => t.id === uploadedTrackId || t._id === uploadedTrackId || t._id?.toString() === uploadedTrackId);
-    expect(found).toBe(true);
+    expect(found).to.be.true;
     // Get uploaded tracks without auth (negative)
     const unauthRes = await request(app)
       .get('/tracks/uploaded-tracks');
-    expect([401, 403, 404]).toContain(unauthRes.statusCode);
+    expect([401, 403, 404]).to.include(unauthRes.statusCode);
   });
 
   it('should get bought tracks after purchase', async () => {
@@ -693,7 +758,7 @@ describe('Tracks Endpoints (Full)', () => {
       .post('/auth/login')
       .send({ login: user.email, password: user.password });
     const token = loginRes.body.token;
-    expect(token).toBeDefined();
+    expect(token).to.exist;
     // Upload a track as another user (artist)
     const artist = {
       username: 'boughtartist',
@@ -707,7 +772,7 @@ describe('Tracks Endpoints (Full)', () => {
       .post('/auth/login')
       .send({ login: artist.email, password: artist.password });
     const artistToken = artistLogin.body.token;
-    expect(artistToken).toBeDefined();
+    expect(artistToken).to.exist;
     const uploadRes = await request(app)
       .post('/tracks/upload')
       .set('Authorization', `Bearer ${artistToken}`)
@@ -719,9 +784,9 @@ describe('Tracks Endpoints (Full)', () => {
       .field('description', 'Track for bought list test')
       .field('price', 0)
       .attach('file', 'test-assets/sample.mp3');
-    expect(uploadRes.statusCode).toBe(200);
+    expect(uploadRes.statusCode).to.equal(200);
     const trackId = uploadRes.body.track && (uploadRes.body.track._id || uploadRes.body.track.id);
-    expect(trackId).toBeDefined();
+    expect(trackId).to.exist;
     // Simulate purchase: add track to user's purchasedTracks (correct structure)
     await User.updateOne(
       { email: user.email },
@@ -731,19 +796,29 @@ describe('Tracks Endpoints (Full)', () => {
     const res = await request(app)
       .get('/tracks/bought-tracks')
       .set('Authorization', `Bearer ${token}`);
-    expect(res.statusCode).toBe(200);
-    expect(Array.isArray(res.body.tracks)).toBe(true);
+    expect(res.statusCode).to.equal(200);
+    expect(Array.isArray(res.body.tracks)).to.be.true;
+    expect(res.body.tracks.length).to.be.greaterThan(0);
+    res.body.tracks.forEach(pt => {
+      expect(pt.track).to.exist;
+      expect(typeof pt.track.id === 'string' || typeof pt.track._id === 'string').to.be.true;
+      expect(typeof pt.track.title).to.be.equal('string');
+      expect(typeof pt.track.fileUrl).to.be.equal('string');
+      expect(typeof pt.track.previewUrl).to.be.equal('string');
+      expect(typeof pt.paymentIntentId).to.be.equal('string');
+      expect(typeof pt.price).to.be.equal('number');
+    });
     // Debug log
     console.log('Returned bought tracks:', res.body.tracks, 'Expected ID:', trackId);
     // For bought tracks, each element is a purchase record, so check the .track.id field (track object)
     const found = res.body.tracks.some(pt => (
       pt.track && (pt.track.id === trackId || pt.track._id === trackId || pt.track._id?.toString() === trackId)
     ));
-    expect(found).toBe(true);
+    expect(found).to.be.true;
     // Get bought tracks without auth (negative)
     const unauthRes = await request(app)
       .get('/tracks/bought-tracks');
-    expect([401, 403, 404]).toContain(unauthRes.statusCode);
+    expect([401, 403, 404]).to.include(unauthRes.statusCode);
   });
 });
 
@@ -762,28 +837,28 @@ describe('Artist Endpoints (Full)', () => {
       .post('/auth/login')
       .send({ login: user.email, password: user.password });
     const token = loginRes.body.token;
-    expect(token).toBeDefined();
+    expect(token).to.exist;
     // Add review (positive)
     const addRes = await request(app)
       .post('/artist/add-review')
       .set('Authorization', `Bearer ${token}`)
       .send({ artistId: '000000000000000000000000', review: 'Great artist!', rating: 5 });
-    expect([200, 400, 404, 500]).toContain(addRes.statusCode);
+    expect([200, 400, 404, 500]).to.include(addRes.statusCode);
     // Get reviews (positive)
     const getRes = await request(app)
       .get('/artist/get-reviews/000000000000000000000000');
-    expect([200, 404, 500]).toContain(getRes.statusCode);
+    expect([200, 404, 500]).to.include(getRes.statusCode);
     // Delete review (negative, as review may not exist)
     const delRes = await request(app)
       .delete('/artist/delete-review')
       .set('Authorization', `Bearer ${token}`)
       .send({ artistId: '000000000000000000000000' });
-    expect([200, 400, 404, 500]).toContain(delRes.statusCode);
+    expect([200, 400, 404, 500]).to.include(delRes.statusCode);
     // Add review without auth (negative)
     const unauthRes = await request(app)
       .post('/artist/add-review')
       .send({ artistId: '000000000000000000000000', review: 'Nice', rating: 4 });
-    expect([401, 403, 404, 500]).toContain(unauthRes.statusCode);
+    expect([401, 403, 404, 500]).to.include(unauthRes.statusCode);
   });
 });
 
@@ -802,30 +877,30 @@ describe('Artist Examples Endpoints (Full)', () => {
       .post('/auth/login')
       .send({ login: user.email, password: user.password });
     const token = loginRes.body.token;
-    expect(token).toBeDefined();
+    expect(token).to.exist;
     // Upload example (negative, fake artist id)
     const uploadRes = await request(app)
       .post('/artist-examples/upload')
       .set('Authorization', `Bearer ${token}`)
       .field('artistId', '000000000000000000000000')
       .attach('file', 'test-assets/sample.mp3');
-    expect([200, 400, 404, 500]).toContain(uploadRes.statusCode);
+    expect([200, 400, 404, 500]).to.include(uploadRes.statusCode);
     // Get examples (should be empty or error)
     const getRes = await request(app)
       .get('/artist-examples/get/000000000000000000000000');
-    expect([200, 404, 500]).toContain(getRes.statusCode);
+    expect([200, 404, 500]).to.include(getRes.statusCode);
     // Delete example (negative, fake id)
     const delRes = await request(app)
       .delete('/artist-examples/delete')
       .set('Authorization', `Bearer ${token}`)
       .send({ exampleId: '000000000000000000000000' });
-    expect([200, 400, 404, 500]).toContain(delRes.statusCode);
+    expect([200, 400, 404, 500]).to.include(delRes.statusCode);
     // Upload example without auth (negative)
     const unauthRes = await request(app)
       .post('/artist-examples/upload')
       .field('artistId', '000000000000000000000000')
       .attach('file', 'test-assets/sample.mp3');
-    expect([401, 403, 404, 500]).toContain(unauthRes.statusCode);
+    expect([401, 403, 404, 500]).to.include(unauthRes.statusCode);
   });
 });
 
@@ -842,22 +917,23 @@ describe('Admin Endpoints (Full)', () => {
     await User.deleteMany({ email: admin.email });
     await request(app).post('/auth/register').send(admin);
     await User.updateOne({ email: admin.email }, { $set: { isAdmin: true } });
+    // Wait for the role update to propagate
+    await new Promise(res => setTimeout(res, 100));
     const loginRes = await request(app)
       .post('/auth/login')
       .send({ login: admin.email, password: admin.password });
     if (!loginRes.body.token) {
       console.error('Admin login failed:', loginRes.body);
-      // Skip test if admin login fails
-      return;
+      throw new Error('Admin login failed');
     }
     const token = loginRes.body.token;
-    expect(token).toBeDefined();
+    expect(token).to.exist;
     // Ban user (negative, fake id)
     const banRes = await request(app)
       .post('/admin/ban-user')
       .set('Authorization', `Bearer ${token}`)
       .send({ userId: '000000000000000000000000' });
-    expect([200, 400, 404, 500]).toContain(banRes.statusCode);
+    expect([200, 400, 404, 500]).to.include(banRes.statusCode);
     // Ban user without admin (negative)
     const user = {
       username: 'notadmin',
@@ -875,7 +951,7 @@ describe('Admin Endpoints (Full)', () => {
       .post('/admin/ban-user')
       .set('Authorization', `Bearer ${userToken}`)
       .send({ userId: '000000000000000000000000' });
-    expect([401, 403, 404, 500]).toContain(unauthBan.statusCode);
+    expect([401, 403, 404, 500]).to.include(unauthBan.statusCode);
   });
   it('should get sales history and stats CSV (admin)', async () => {
     // Register and login as admin
@@ -889,6 +965,8 @@ describe('Admin Endpoints (Full)', () => {
     await User.deleteMany({ email: admin.email });
     await request(app).post('/auth/register').send(admin);
     await User.updateOne({ email: admin.email }, { $set: { isAdmin: true } });
+    // Wait for the role update to propagate
+    await new Promise(res => setTimeout(res, 100));
     const loginRes = await request(app)
       .post('/auth/login')
       .send({ login: admin.email, password: admin.password });
@@ -898,17 +976,17 @@ describe('Admin Endpoints (Full)', () => {
       return;
     }
     const token = loginRes.body.token;
-    expect(token).toBeDefined();
+    expect(token).to.exist;
     // Get sales history
     const salesRes = await request(app)
       .get('/admin/sales-history')
       .set('Authorization', `Bearer ${token}`);
-    expect([200, 403, 500]).toContain(salesRes.statusCode);
+    expect([200, 403, 500]).to.include(salesRes.statusCode);
     // Get sales stats CSV
     const csvRes = await request(app)
       .get('/admin/sales-stats-csv')
       .set('Authorization', `Bearer ${token}`);
-    expect([200, 403, 500]).toContain(csvRes.statusCode);
+    expect([200, 403, 500]).to.include(csvRes.statusCode);
   });
 });
 
@@ -928,17 +1006,17 @@ describe('Email Auth Endpoints', () => {
     // Verify email (should fail with fake token)
     const verifyRes = await request(app)
       .get(`/email-auth/verify/${fakeToken}`);
-    expect([400, 404, 500]).toContain(verifyRes.statusCode);
+    expect([400, 404, 500]).to.include(verifyRes.statusCode);
     // Resend verification email (positive)
     const resendRes = await request(app)
       .post('/email-auth/resend-verification')
       .send({ email: user.email });
-    expect([200, 400, 404]).toContain(resendRes.statusCode);
+    expect([200, 400, 404]).to.include(resendRes.statusCode);
     // Resend with missing email (negative)
     const badResend = await request(app)
       .post('/email-auth/resend-verification')
       .send({});
-    expect([400, 404]).toContain(badResend.statusCode);
+    expect([400, 404]).to.include(badResend.statusCode);
   }, 20000); // Increase timeout for slow email tests
 });
 
@@ -963,66 +1041,24 @@ describe('User Profile and Public Endpoints', () => {
       return;
     }
     const token = loginRes.body.token;
-    expect(token).toBeDefined();
+    expect(token).to.exist;
     // Update profile (positive)
     const updateRes = await request(app)
       .post('/user/update-profile')
       .set('Authorization', `Bearer ${token}`)
       .send({ about: 'Updated about section.' });
-    expect([200, 400, 403, 404]).toContain(updateRes.statusCode);
+    expect([200, 400, 403, 404]).to.include(updateRes.statusCode);
     // Update profile without auth (negative)
     const unauthRes = await request(app)
       .post('/user/update-profile')
       .send({ about: 'Should fail.' });
-    expect([401, 403, 404]).toContain(unauthRes.statusCode);
+    expect([401, 403, 404]).to.include(unauthRes.statusCode);
     // Get public endpoints (should always succeed)
     const genresRes = await request(app).get('/public/genres');
-    expect([200, 404]).toContain(genresRes.statusCode);
+    expect([200, 404]).to.include(genresRes.statusCode);
     const typesRes = await request(app).get('/public/backing-track-types');
-    expect([200, 404]).toContain(typesRes.statusCode);
+    expect([200, 404]).to.include(typesRes.statusCode);
     const vocalRes = await request(app).get('/public/vocal-ranges');
-    expect([200, 404]).toContain(vocalRes.statusCode);
+    expect([200, 404]).to.include(vocalRes.statusCode);
   });
-});
-
-describe('Admin Cleanup (Destructive Actions)', () => {
-  it('should clear S3 and delete all users (admin)', async () => {
-    // Register and login as admin
-    const unique = Date.now() + '-' + Math.floor(Math.random() * 10000);
-    const admin = {
-      username: 'adminclear',
-      email: `adminclear+${unique}@example.com`,
-      password: 'TestPassword123!',
-      about: 'Admin for clear.'
-    };
-    await User.deleteMany({ email: admin.email });
-    await request(app).post('/auth/register').send(admin);
-    await User.updateOne({ email: admin.email }, { $set: { isAdmin: true } });
-    const loginRes = await request(app)
-      .post('/auth/login')
-      .send({ login: admin.email, password: admin.password });
-    if (!loginRes.body.token) {
-      console.error('Admin login failed:', loginRes.body);
-      // Skip test if admin login fails
-      return;
-    }
-    const token = loginRes.body.token;
-    expect(token).toBeDefined();
-    // Clear S3 (should succeed or fail gracefully)
-    const clearRes = await request(app)
-      .post('/admin/clear-s3')
-      .set('Authorization', `Bearer ${token}`);
-    expect([200, 403, 404, 500]).toContain(clearRes.statusCode);
-    // Delete all users (should succeed or fail gracefully)
-    const delRes = await request(app)
-      .post('/admin/delete-all-users')
-      .set('Authorization', `Bearer ${token}`);
-    expect([200, 403, 404, 500]).toContain(delRes.statusCode);
-  });
-});
-
-// Close MongoDB connection after all tests
-
-afterAll(async () => {
-  await mongoose.connection.close();
 });

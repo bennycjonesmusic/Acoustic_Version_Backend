@@ -11,7 +11,7 @@ import { validateEmail } from '../utils/emailValidator.js';
 import { sendVerificationEmail, sendPasswordResetEmail } from '../utils/emailAuthentication.js';
 import { registerSchema, loginSchema, artistAboutSchema } from './validationSchemas.js';
 import crypto from 'crypto';
-
+import adminEmails from '../utils/admins.js';
 
 //Create...
 export const register = async (req, res) => {
@@ -57,7 +57,10 @@ export const register = async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, 10);
         // Only send role, about, avatar if artist
         let userData = { username, email, password: hashedPassword };
-        if (role === 'artist') {
+        // Automatically assign admin role if email is whitelisted
+        if (adminEmails.includes(email)) {
+            userData.role = 'admin';
+        } else if (role === 'artist') {
             userData = { ...userData, role, about, avatar };
         } else if (process.env.NODE_ENV === 'test' && role) {
             userData.role = role;

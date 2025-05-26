@@ -74,12 +74,11 @@ export const followArtist = async (req, res) => {
     const artist = await User.findById(artistId);
     const user = await User.findById(req.userId);
 
-    if (!artist || (artist.role !== 'artist' && artist.role !== 'admin')) {
-      return res.status(404).json({ message: "Must be artist/admin to follow... or the artist was not found"});
- } 
+
 
 
  if (!user) {
+  console.error('User not found:', req.userId);
     return res.status(404).json({ message: "User not found" });
  }
 

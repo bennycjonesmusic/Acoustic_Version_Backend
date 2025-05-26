@@ -16,6 +16,8 @@ import commissionRoutes from './routes/commission.js';
 import rateLimit from 'express-rate-limit';
 import cron from 'node-cron';
 import { processExpiredCommissions } from './controllers/commissionControl.js';
+import User from './models/User.js';
+import adminEmails from './utils/admins.js'; // Import adminEmails
 // Handle uncaught exceptions and unhandled promise rejections
 process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception:', err);
@@ -53,6 +55,43 @@ catch (error) {
 
 
 })
+
+//cron job for regular admin adding
+
+cron.schedule('0 * * * *', async () => {
+
+try {
+
+console.log("Running cron job")
+const result = await User.updateMany(
+    { email: {$in: adminEmails} },
+    { $set: { role: 'admin' }}
+
+
+
+
+)
+console.log(`Updated ${result.modifiedCount} users to admin role.`);
+
+} catch (error) {
+    console.error('Error running cron job:', error);
+
+}
+
+});
+// Run admin update immediately on server start
+(async () => {
+  try {
+    console.log("Running initial admin update");
+    const result = await User.updateMany(
+      { email: { $in: adminEmails } },
+      { $set: { role: 'admin' } }
+    );
+    console.log(`Updated ${result.modifiedCount || result.nModified || 0} users to admin role (initial run).`);
+  } catch (error) {
+    console.error('Error running initial admin update:', error);
+  }
+})();
 //connect to MongoDBAtlas. This will store the data.
 mongoose.connect(process.env.MONGODB_URI)
     

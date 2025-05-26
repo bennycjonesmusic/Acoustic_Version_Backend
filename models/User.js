@@ -15,8 +15,7 @@ const userSchema = new mongoose.Schema({
   stripeAccountId: { type: String, required: false }, // 
   uploadedTracks: [{
     type: mongoose.Schema.Types.ObjectId, 
-    ref: 'BackingTrack',
-    required: false
+    ref: 'BackingTrack'
   }],
   purchasedTracks: [{
     track: { type: mongoose.Schema.Types.ObjectId, ref: 'BackingTrack', required: true },
@@ -32,6 +31,10 @@ const userSchema = new mongoose.Schema({
   },
   following: [{
     type: mongoose.Schema.Types.ObjectId, 
+    ref: 'User'
+  }],
+  followers: [{
+    type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   }],
   amountOfFollowers: { type: Number, default: 0 },

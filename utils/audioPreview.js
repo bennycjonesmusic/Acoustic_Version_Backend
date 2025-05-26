@@ -7,7 +7,7 @@ export async function getAudioPreview(inputPath, outputPath, duration = 30) {
     // Log the ffmpeg path for debugging
     console.log('Using ffmpeg at:', ffmpegPath);
     const ffmpeg = spawn(ffmpegPath, [
-      '-y', // overwrite output
+      '-y', // overwrite output  
       '-i', inputPath,
       '-t', duration.toString(),
       '-acodec', 'copy',
@@ -18,7 +18,7 @@ export async function getAudioPreview(inputPath, outputPath, duration = 30) {
     });
     ffmpeg.on('close', (code) => {
       if (code === 0 && fs.existsSync(outputPath)) {
-        resolve();
+        resolve(); 
       } else {
         reject(new Error(`ffmpeg exited with code ${code}`));
       }

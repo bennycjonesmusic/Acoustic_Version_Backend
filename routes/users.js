@@ -22,13 +22,13 @@ const router = express.Router();
 router.get("/search-by-username", authMiddleware, searchUserByName);
 
 // Add a review to an artist
-router.post('/artist/:id/review', authMiddleware, addArtistReview);
+router.post('/review/:id', authMiddleware, addArtistReview);
 // Get all reviews for an artist
-router.get('/artist/:id/reviews', authMiddleware, getArtistReviews);
+router.get('/reviews/:id', authMiddleware, getArtistReviews);
 // Follow an artist
-router.post('/artist/:id/follow', authMiddleware, followArtist);
+router.post('/follow/:id', authMiddleware, followArtist);
 // Delete your review for an artist
-router.delete('/artist/:id/review', authMiddleware, deleteArtistReview);
+router.delete('/delete-review/:id', authMiddleware, deleteArtistReview);
 
 // Sort uploaded and bought tracks for the logged-in user
 router.get('/sort-tracks', authMiddleware, sortUploadedOrBoughtTracks);
