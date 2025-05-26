@@ -26,7 +26,7 @@ try{
         return res.status(404).json({message: "Track not found"});
     }
     //check if user has NOT bought the track
-    if (!user.boughtTracks.some(id => id.equals(track._id))) {
+    if (!user.purchasedTracks.some(pt => (pt.track?.toString?.() || pt.track) === track._id.toString())) {
         return res.status(400).json({ message: "You can only rate tracks you have purchased." });
     }
     //validate rating input
@@ -236,13 +236,11 @@ export const deleteTrack = async (req, res) => {
 
 export const getUploadedTracks = async (req, res) => {
     try {
-        // Defensive: ensure req.userId is present
         if (!req.userId) {
             return res.status(401).json({ message: 'User not authenticated' });
         }
         const tracks = await BackingTrack.find({ user: req.userId }).sort({ createdAt: -1 });
-        // Defensive: always return an array
-        return res.status(200).json(Array.isArray(tracks) ? tracks : []);
+        return res.status(200).json({ tracks: Array.isArray(tracks) ? tracks : [] });
     } catch (error) {
         console.error('Error fetching tracks:', error);
         return res.status(500).json({ message: 'Internal server error' });
@@ -254,17 +252,12 @@ export const getBoughtTracks = async (req, res) => {
     if (!req.userId) {
       return res.status(401).json({ message: 'User not authenticated' });
     }
-    // Find the user by their ID and populate the 'boughtTracks' array
-    const user = await User.findById(req.userId).populate('boughtTracks');
+    const user = await User.findById(req.userId).populate('purchasedTracks.track');
     if (!user) {
       return res.status(401).json({ message: "User not found" });
     }
-    // ensure boughtTracks is always an array
-    const boughtTracks = Array.isArray(user.boughtTracks) ? user.boughtTracks : [];
-    if (boughtTracks.length === 0) {
-      return res.status(404).json({ message: "No bought tracks found" });
-    }
-    return res.status(200).json(boughtTracks);
+    const purchasedTracks = Array.isArray(user.purchasedTracks) ? user.purchasedTracks : [];
+    return res.status(200).json({ tracks: purchasedTracks }); //return object for extended frontend manipulation
   } catch (error) {
     console.error('Error fetching bought tracks:', error);
     return res.status(500).json({ message: "Failed to fetch bought tracks", error: error.message });
@@ -272,66 +265,42 @@ export const getBoughtTracks = async (req, res) => {
 };
 
 export const downloadTrack = async (req, res) => {
-
-try {
-
+  try {
     const track = await BackingTrack.findById(req.params.id);
     if (!track) {
-        return res.status(404).json({message: "Track not found."});
+      return res.status(404).json({ message: "Track not found." });
     }
-
     const userId = req.userId;
-
     const user = await User.findById(userId); //find the user wanting to download track
-
-    const hasBought = user.boughtTracks.some(id => id.equals(track._id)); //had to use .some so we can access the .equals method. .includes used strict equality === which is not correct here.
+    const hasBought = user.purchasedTracks.some(pt => (pt.track?.toString?.() || pt.track) === track._id.toString());
     const hasUploaded = user.uploadedTracks.some(id => id.equals(track._id));
-
-    if (!hasBought && !hasUploaded){
-    
-        return res.status(403).json({message: "You are not allowed to download this track. Please purchase"})
+    if (!hasBought && !hasUploaded) {
+      return res.status(403).json({ message: "You are not allowed to download this track. Please purchase" });
     }
-
-
-     const s3Client = new S3Client({
-            region: process.env.AWS_REGION,
-            credentials: {
-                accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-                secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-            },
-        });
-
-          const createParameters = {
-            Bucket: process.env.AWS_BUCKET_NAME,
-            Key: track.s3Key,
-        };
-
-        const command = new GetObjectCommand(createParameters);
-        const data = await s3Client.send(command);
-        track.downloadCount += 1;
-        await track.save();
-
-        res.setHeader('Content-Type', data.ContentType);
-res.setHeader('Content-Disposition', `attachment; filename="${track.title}"`);
-
-data.Body.pipe(res);
-return;
-    
-} catch (error) {
-
+    const s3Client = new S3Client({
+      region: process.env.AWS_REGION,
+      credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+      },
+    });
+    const createParameters = {
+      Bucket: process.env.AWS_BUCKET_NAME,
+      Key: track.s3Key,
+    };
+    const command = new GetObjectCommand(createParameters);
+    const data = await s3Client.send(command);
+    track.downloadCount += 1;
+    await track.save();
+    res.setHeader('Content-Type', data.ContentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${track.title}"`);
+    data.Body.pipe(res);
+    return;
+  } catch (error) {
     console.error('Error downloading track:', error);
     return res.status(500).json({ message: 'Internal server error' });
-
-
-
-}
-
-
-
-
-
-}
-
+  }
+};
 
 export const commentTrack = async (req, res) => {
   try {
@@ -345,7 +314,7 @@ export const commentTrack = async (req, res) => {
       return res.status(404).json({ message: 'Track not found' });
     }
     // Only allow users who have bought the track to comment
-    if (!user.boughtTracks.some(id => id.equals(track._id))) {
+    if (!user.purchasedTracks.some(pt => (pt.track?.toString?.() || pt.track) === track._id.toString())) {
       return res.status(400).json({ message: 'You can only comment on tracks you have purchased.' });
     }
     // Validate comment input
@@ -368,6 +337,6 @@ export const commentTrack = async (req, res) => {
     return res.status(200).json({ message: 'Comment added successfully', comments: track.comments });
   } catch (error) {
     console.error('Error adding comment:', error);
-    return res.status(500).json({ message: 'Internal server error' });
+    return res.status(500).json({ message: 'Failed to add comment', error: error.message });
   }
 };

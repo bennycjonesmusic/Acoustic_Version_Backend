@@ -59,7 +59,13 @@ export const uploadArtistExample = async (req, res) => {
         const url = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`;
         user.artistExamples.push({ url });
         await user.save();
-        return res.status(200).json({ success: true, artistExamples: user.artistExamples });
+        // Map _id to id for response
+        const mappedExamples = user.artistExamples.map(e => ({
+            ...e.toObject(),
+            id: e._id.toString(),
+            _id: undefined
+        }));
+        return res.status(200).json({ success: true, artistExamples: mappedExamples });
     } catch (err) {
         return res.status(500).json({ error: 'Upload failed', details: err.message });
     }
@@ -72,7 +78,11 @@ export const getArtistExamples = async (req, res) => {
         if (!user || user.role !== 'artist') {
             return res.status(404).json({ error: 'Artist not found' });
         }
-        return res.status(200).json({ artistExamples: user.artistExamples });
+        return res.status(200).json({ artistExamples: user.artistExamples.map(e => ({
+            ...e.toObject(),
+            id: e._id.toString(), //convert to clean objects and map _id to id for ease
+            _id: undefined
+        })) });
     } catch (err) {
         return res.status(500).json({ error: 'Failed to fetch examples' });
     }
@@ -88,7 +98,13 @@ export const deleteArtistExample = async (req, res) => {
         const { exampleId } = req.params;
         user.artistExamples = user.artistExamples.filter(e => e._id.toString() !== exampleId);
         await user.save();
-        return res.status(200).json({ success: true, artistExamples: user.artistExamples });
+        // Map _id to id for response
+        const mappedExamples = user.artistExamples.map(e => ({
+            ...e.toObject(),
+            id: e._id.toString(),
+            _id: undefined
+        }));
+        return res.status(200).json({ success: true, artistExamples: mappedExamples });
     } catch (err) {
         return res.status(500).json({ error: 'Failed to delete example' });
     }

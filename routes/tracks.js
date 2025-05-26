@@ -28,10 +28,9 @@ router.post('/tracks/upload', uploadLimiter, authMiddleware, upload.single('file
 router.delete('/tracks/:id', authMiddleware, deleteTrack); //delete a track by id
 
 //get tracks from the user. This will be used to display the tracks on the front end.
-router.get('/uploaded-tracks',  authMiddleware, getUploadedTracks);
+router.get('/tracks/uploaded-tracks',  authMiddleware, getUploadedTracks);
 
-
-router.get('/bought-tracks',authMiddleware, getBoughtTracks)
+router.get('/tracks/bought-tracks',authMiddleware, getBoughtTracks)
 
 router.post('/tracks/rate/:id', authMiddleware, rateTrack); //rate a track by id
 router.post('/tracks/comment/:id', authMiddleware, commentTrack); //comment on a track by id
