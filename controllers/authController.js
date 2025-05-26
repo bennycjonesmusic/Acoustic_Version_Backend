@@ -21,7 +21,27 @@ export const register = async (req, res) => {
         return res.status(400).json({ message: error.details[0].message });
     }
     try {
-        const { username, email, password, role = "user", about, avatar } = req.body;
+        const { username, email, password, role = "user", about } = req.body;
+        let avatar = req.body.avatar;
+        // Handle avatar file upload to S3 if file is provided
+        if (req.file && req.file.buffer) {
+            const s3Client = new S3Client({
+                region: process.env.AWS_REGION,
+                credentials: {
+                    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+                    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+                },
+            });
+            const uploadParams = {
+                Bucket: process.env.AWS_BUCKET_NAME,
+                Key: `avatars/${Date.now()}-${req.file.originalname}`,
+                Body: Buffer.from(req.file.buffer),
+                ACL: 'private',
+                StorageClass: 'STANDARD',
+            };
+            const data = await new Upload({ client: s3Client, params: uploadParams }).done();
+            avatar = data.Location;
+        }
         const existingUser = await User.findOne({ $or: [ {email } , { username } ] });
         if (existingUser) {
             return res.status(400).json({ message: "User already exists!" });
@@ -31,20 +51,23 @@ export const register = async (req, res) => {
         if (profanity.isProfane(username)){
             return res.status(400).json({message: "Vulgar language detected. Please use nice words."})
         }
-        if (role === 'artist') {
+        if (role === 'artist' || role === 'admin') {
             if (profanity.isProfane(about)){
                 return res.status(400).json({message: "Vulgar language detected. Please use nice words."})
             }
             if (typeof about !== 'string' || about.length > 1000) {
                 return res.status(400).json({message: "About section must be a string and less than 1000 characters."});
             }
-            // Validate avatar (must be a valid image URL)
-            if (avatar !== undefined) {
+            // Validate avatar (must be a valid image URL) if not uploaded and only if present
+            if (avatar !== undefined && !(req.file && req.file.buffer)) {
                 const urlPattern = /^(https?:\/\/)[^\s]+\.(jpg|jpeg|png|gif|webp)$/i;
                 if (typeof avatar !== 'string' || !urlPattern.test(avatar)) {
                     return res.status(400).json({ message: 'Avatar must be a valid image URL (jpg, jpeg, png, gif, webp).' });
                 }
             }
+        } else {
+            // For non-artist/admin, ignore or skip about and avatar validation
+            // Optionally, you could delete about and avatar if present: delete req.body.about; delete req.body.avatar;
         }
         const isEmailValid = await validateEmail(email);
         if (! isEmailValid){
@@ -55,11 +78,12 @@ export const register = async (req, res) => {
             return res.status(400).json({message: "Password is too weak. Needs more power."});
         }
         const hashedPassword = await bcrypt.hash(password, 10);
-        // Only send role, about, avatar if artist
+        // Only send role, about, avatar if artist or admin
         let userData = { username, email, password: hashedPassword };
-        // Automatically assign admin role if email is whitelisted
         if (adminEmails.includes(email)) {
             userData.role = 'admin';
+            userData.about = about;
+            userData.avatar = avatar;
         } else if (role === 'artist') {
             userData = { ...userData, role, about, avatar };
         } else if (process.env.NODE_ENV === 'test' && role) {

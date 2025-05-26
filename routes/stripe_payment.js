@@ -82,18 +82,29 @@ router.post('/create-account-link', authMiddleware, async (req, res) => {
         if (!user) {
             return res.status(404).json({ error: 'User not found' });
         }
+        console.log('[Stripe Onboarding] User before:', user);
         if (!user.stripeAccountId) {
             const account = await stripeClient.accounts.create({
                 type: 'standard',
                 country: 'GB',
-                email: user.email,
-                capabilities: {
-                    transfers: { requested: true },
-                }
+                email: user.email
+                // Do NOT request capabilities for standard accounts
             });
             user.stripeAccountId = account.id;
             await user.save();
+            console.log('[Stripe Onboarding] Created new Stripe account:', account.id);
+        } else {
+            // Double-check the field is saved if it exists
+            if (!user.stripeAccountId) {
+                console.log('[Stripe Onboarding] Stripe account exists but not saved, saving now.');
+                await user.save();
+            } else {
+                console.log('[Stripe Onboarding] User already has Stripe account:', user.stripeAccountId);
+            }
         }
+        // Fetch user again to confirm
+        const updatedUser = await User.findById(req.userId);
+        console.log('[Stripe Onboarding] User after:', updatedUser);
         const accountLink = await stripeClient.accountLinks.create({
             account: user.stripeAccountId,
             refresh_url: `${process.env.CLIENT_URL}/reauth`,
@@ -132,6 +143,10 @@ router.post('/checkout/artist/:trackId', authMiddleware, async (req, res) => {
         const artist = await User.findById(track.user);
         if (!artist || !artist.stripeAccountId) {
             return res.status(404).json({ error: 'Artist either not found or does not have a stripe account' });
+        }
+        // Only allow payout if artist is 'artist' or 'admin'
+        if (artist.role !== 'artist' && artist.role !== 'admin') {
+            return res.status(403).json({ error: 'Payouts are only allowed to users with role artist or admin.' });
         }
         if (!Number.isFinite(track.price) || track.price <= 0) {
             return res.status(400).json({ error: 'Invalid track price' });

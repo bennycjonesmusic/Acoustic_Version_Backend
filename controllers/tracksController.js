@@ -65,6 +65,11 @@ try{
 
 export const uploadTrack = async (req, res) => {
     const { error } = uploadTrackSchema.validate(req.body);
+    const Artist = await User.findById(req.userId);
+    // Only allow upload if user is artist or admin
+    if (Artist.role !== 'artist' && Artist.role !== 'admin') {
+      return res.status(403).json({ message: "Only artists or admins can upload tracks." })
+    }
     if (error) {
         return res.status(400).json({ message: error.details[0].message });
     }

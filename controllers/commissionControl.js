@@ -127,7 +127,10 @@ export const approveCommissionAndPayout = async (req, res) => {
         if (!artist.stripeAccountId) {
             return res.status(400).json({ error: 'Artist has no Stripe account' });
         }
-
+        // Only allow payout if artist is 'artist' or 'admin'
+        if (artist.role !== 'artist' && artist.role !== 'admin') {
+            return res.status(403).json({ error: 'Payouts are only allowed to users with role artist or admin.' });
+        }
         // Calculate payout (e.g. 15% platform fee)
         const totalAmount = Math.round(commission.price * 100); // pence
         const platformFee = Math.round(totalAmount * 0.15); // 15% fee

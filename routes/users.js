@@ -15,6 +15,7 @@ import { addArtistReview, getArtistReviews, sortUploadedOrBoughtTracks, followAr
 import { uploadArtistExample, getArtistExamples, deleteArtistExample } from '../controllers/artistExamplesController.js';
 import avatarUpload from '../middleware/avatar_upload.js';
 import { updateProfile } from '../controllers/authController.js';
+import User from '../models/User.js';
 
 
 const router = express.Router();
@@ -40,6 +41,17 @@ router.delete('/artist/examples/:exampleId', authMiddleware, deleteArtistExample
 
 // Update artist/admin profile (with avatar upload to S3)
 router.patch('/profile', authMiddleware, avatarUpload.single('avatar'), updateProfile);
+
+// Add GET /users/me route
+router.get('/me', authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId).lean(); // .lean() returns plain object
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    res.status(200).json({ user }); // All fields, including stripeAccountId, are visible
+  } catch (error) {
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
 
 export default router;
 

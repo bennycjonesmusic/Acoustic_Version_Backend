@@ -1,0 +1,9 @@
+aaron-bond.better-comments
+dbaeumer.vscode-eslint
+github.copilot
+github.copilot-chat
+mongodb.mongodb-vscode
+ritwickdey.liveserver
+rvest.vs-code-prettier-eslint
+streetsidesoftware.code-spell-checker
+usernamehw.errorlens
