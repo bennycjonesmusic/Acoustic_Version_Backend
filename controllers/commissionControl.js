@@ -49,8 +49,10 @@ export const createCommissionRequest = async (req, res) => {
     try {
         const { artist: artistId, requirements, price, ...rest } = req.body;
         const customerId = req.userId;
+        console.log('[createCommissionRequest] artistId:', artistId, 'customerId:', customerId, 'requirements:', requirements, 'price:', price, 'rest:', rest);
         // Fetch artist to get their commissionPrice if price not provided
         const artist = await User.findById(artistId);
+        console.log('[createCommissionRequest] artist lookup result:', artist);
         if (!artist) return res.status(404).json({ error: 'Artist not found' });
         let finalPrice = price;
         if (typeof finalPrice !== 'number' || isNaN(finalPrice) || finalPrice <= 0) {
@@ -67,6 +69,7 @@ export const createCommissionRequest = async (req, res) => {
             status: 'pending_artist',
             ...rest
         });
+        console.log('[createCommissionRequest] created commission:', commission);
 
         const session = await stripeClient.checkout.sessions.create({
             payment_method_types: ['card'],
@@ -83,26 +86,26 @@ export const createCommissionRequest = async (req, res) => {
                 },
             ],
             mode: 'payment',
-            success_url: `${process.env.FRONTEND_URL}/commission/success/${commission._id}`,
-            cancel_url: `${process.env.FRONTEND_URL}/commission/cancel/${commission._id}`,
+            success_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/commission/success/${commission._id}`,
+            cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/commission/cancel/${commission._id}`,
             metadata: {
                 commissionId: commission._id.toString(),
                 customerId: customerId,
                 artistId: artistId,
             }
-
-
         });
+        console.log('[createCommissionRequest] stripe session:', session);
         commission.stripeSessionId = session.id;
         await commission.save();
 
         return res.status(200).json({
             sessionId: session.id,
+            sessionUrl: session.url, // Add the Stripe Checkout URL for frontend/manual use
             commissionId: commission._id,
         });
     }
     catch(error){
-        console.error("Error creating commission request:", error);
+        console.error('[createCommissionRequest] Error creating commission request:', error, error.errors);
         return res.status(500).json({ error: "Internal server error" });
     }
 
@@ -436,6 +439,94 @@ export const approveOrDenyCommission = async (req, res) => {
         }
     } catch (error) {
         console.error('Error in approveOrDenyCommission:', error);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// Get preview for client (authenticated customer only)
+export const getCommissionPreviewForClient = async (req, res) => {
+    const { commissionId } = req.query;
+    const userId = req.userId;
+    try {
+        const commission = await CommissionRequest.findById(commissionId);
+        if (!commission) return res.status(404).json({ error: 'Commission not found' });
+        if (commission.customer.toString() !== userId && !(req.user && req.user.role === 'admin')) {
+            return res.status(403).json({ error: 'Not authorized' });
+        }
+        if (!commission.previewTrackUrl) return res.status(404).json({ error: 'No preview available' });
+        return res.status(200).json({ previewTrackUrl: commission.previewTrackUrl });
+    } catch (err) {
+        return res.status(500).json({ error: 'Internal server error', details: err.message || err });
+    }
+};
+
+// Get finished commission and add to purchasedTracks (customer only, after payment)
+export const getFinishedCommission = async (req, res) => {
+    const { commissionId } = req.query;
+    const userId = req.userId;
+    try {
+        const commission = await CommissionRequest.findById(commissionId);
+        if (!commission) return res.status(404).json({ error: 'Commission not found' });
+        if (commission.customer.toString() !== userId && !(req.user && req.user.role === 'admin')) {
+            return res.status(403).json({ error: 'Not authorized' });
+        }
+        if (commission.status !== 'paid') {
+            return res.status(400).json({ error: 'Commission not paid for yet' });
+        }
+        if (!commission.finishedTrackUrl) return res.status(404).json({ error: 'No finished track available' });
+        // Add to purchasedTracks if not already present
+        const user = await User.findById(userId);
+        const alreadyPurchased = user.purchasedTracks.some(pt => pt.track?.toString() === commissionId);
+        if (!alreadyPurchased) {
+            user.purchasedTracks.push({
+                track: commissionId, // Use commissionId as a marker
+                paymentIntentId: commission.stripePaymentIntentId || 'commission',
+                purchasedAt: new Date(),
+                price: commission.price || 0,
+                refunded: false
+            });
+            await user.save();
+        }
+        return res.status(200).json({ finishedTrackUrl: commission.finishedTrackUrl });
+    } catch (err) {
+        return res.status(500).json({ error: 'Internal server error', details: err.message || err });
+    }
+};
+
+// Cancel a commission (customer only, with reason, before delivery/payout)
+export const cancelCommission = async (req, res) => {
+    const { commissionId, reason } = req.body;
+    const userId = req.userId;
+    if (!reason || typeof reason !== 'string' || reason.trim().length < 5) {
+        return res.status(400).json({ error: 'A valid cancellation reason is required.' });
+    }
+    try {
+        const commission = await CommissionRequest.findById(commissionId);
+        if (!commission) return res.status(404).json({ error: 'Commission not found' });
+        if (commission.customer.toString() !== userId && !(req.user && req.user.role === 'admin')) {
+            return res.status(403).json({ error: 'Not authorized' });
+        }
+        if (["delivered", "paid", "refunded", "cancelled"].includes(commission.status)) {
+            return res.status(400).json({ error: 'Cannot cancel at this stage.' });
+        }
+        if (!commission.stripePaymentIntentId) {
+            return res.status(400).json({ error: 'No payment to refund.' });
+        }
+        // Process Stripe refund
+        try {
+            await stripeClient.refunds.create({
+                payment_intent: commission.stripePaymentIntentId,
+                reason: 'requested_by_customer',
+                metadata: { commissionId: commission._id.toString(), reason }
+            });
+            commission.status = 'cancelled';
+            commission.cancellationReason = reason;
+            await commission.save();
+            return res.status(200).json({ success: true, message: 'Commission cancelled and refunded.' });
+        } catch (err) {
+            return res.status(500).json({ error: 'Failed to issue refund', details: err.message });
+        }
+    } catch (error) {
         return res.status(500).json({ error: 'Internal server error' });
     }
 };

@@ -70,6 +70,11 @@ export const uploadTrack = async (req, res) => {
     if (Artist.role !== 'artist' && Artist.role !== 'admin') {
       return res.status(403).json({ message: "Only artists or admins can upload tracks." })
     }
+    if (Artist.profileStatus !== 'approved') {
+
+
+        return res.status(403).json({ message: "Your profile has not been approved yet. Please await admin approval."});
+    }
     if (error) {
         return res.status(400).json({ message: error.details[0].message });
     }

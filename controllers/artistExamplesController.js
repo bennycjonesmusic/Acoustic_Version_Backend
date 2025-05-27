@@ -24,7 +24,7 @@ const s3Client = new S3Client({
 export const uploadArtistExample = async (req, res) => {
     try {
         const user = await User.findById(req.userId);
-        if (!user || user.role !== 'artist') {
+        if (!user || (user.role !== 'artist' && user.role !== 'admin')) {
             return res.status(403).json({ error: 'Not authorized' });
         }
         if (!req.file) {
@@ -75,7 +75,7 @@ export const uploadArtistExample = async (req, res) => {
 export const getArtistExamples = async (req, res) => {
     try {
         const user = await User.findById(req.params.id || req.userId);
-        if (!user || user.role !== 'artist') {
+        if (!user || (user.role !== 'artist' && user.role !== 'admin')) {
             return res.status(404).json({ error: 'Artist not found' });
         }
         return res.status(200).json({ artistExamples: user.artistExamples.map(e => ({
@@ -92,7 +92,7 @@ export const getArtistExamples = async (req, res) => {
 export const deleteArtistExample = async (req, res) => {
     try {
         const user = await User.findById(req.userId);
-        if (!user || user.role !== 'artist') {
+        if (!user || (user.role !== 'artist' && user.role !== 'admin')) {
             return res.status(403).json({ error: 'Not authorized' });
         }
         const { exampleId } = req.params;

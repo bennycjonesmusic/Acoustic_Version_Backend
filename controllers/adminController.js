@@ -243,3 +243,16 @@ export const rejectArtist = async (req, res) => {
         return res.status(500).json({ message: 'Failed to reject artist', error: err.message });
     }
 };
+
+// TEST-ONLY: Delete a user by email (for test automation)
+export const deleteUserByEmail = async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ message: 'Email required' });
+  try {
+    const user = await User.findOneAndDelete({ email });
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    return res.status(200).json({ message: 'User deleted', userId: user._id });
+  } catch (err) {
+    return res.status(500).json({ message: 'Error deleting user', error: err.message });
+  }
+};

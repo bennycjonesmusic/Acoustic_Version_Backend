@@ -9,12 +9,15 @@ import {
   refundTrackPurchase,
   artistRespondToCommission,
   getArtistCommissions,
-  approveOrDenyCommission
+  approveOrDenyCommission,
+  getCommissionPreviewForClient,
+  getFinishedCommission,
+  cancelCommission
 } from '../controllers/commissionControl.js';
 import { downloadCommissionFile } from '../controllers/commissionDownloadController.js';
 import authMiddleware from '../middleware/customer_auth.js';
-import artistAuth from '../middleware/artist_auth.js';
-import adminAuth from '../middleware/Admin.js';
+import artistOrAdminAuthMiddleware from '../middleware/artist_auth.js';
+import isAdmin from '../middleware/Admin.js';
 import upload from '../middleware/song_upload.js';
 
 const router = express.Router();
@@ -24,10 +27,10 @@ router.post('/request', authMiddleware, createCommissionRequest);
 
 // Approve commission and pay out artist (customer or admin)
 router.post('/approve', authMiddleware, approveCommissionAndPayout);
-router.post('/admin/approve', authMiddleware, adminAuth, approveCommissionAndPayout);
+router.post('/admin/approve', authMiddleware, isAdmin, approveCommissionAndPayout);
 
 // Process expired commissions and refund (admin only, can be called by cron or manually)
-router.post('/process-expired', authMiddleware, adminAuth, processExpiredCommissions);
+router.post('/process-expired', authMiddleware, isAdmin, processExpiredCommissions);
 
 // Artist uploads finished track for commission (audio file)
 router.post('/upload-finished', authMiddleware, upload.single('file'), uploadFinishedTrack);
@@ -39,18 +42,72 @@ router.post('/confirm', authMiddleware, confirmOrDenyCommission);
 router.get('/download', authMiddleware, downloadCommissionFile);
 
 // Admin-only: Issue a refund for a regular track purchase (not commission)
-router.post('/admin/track-refund', adminAuth, refundTrackPurchase);
+router.post('/admin/track-refund', isAdmin, refundTrackPurchase);
 
 // Admin-only: Issue a refund for a commission
-router.post('/admin/refund', adminAuth, refundCommission);
+router.post('/admin/refund', isAdmin, refundCommission);
 
-// Artist accepts or rejects a commission
-router.post('/artist/respond', artistAuth, artistRespondToCommission);
+// Artist or admin accepts or rejects a commission
+router.post('/artist/respond', artistOrAdminAuthMiddleware, artistRespondToCommission);
 
-// Get all commissions for the logged-in artist
-router.get('/artist/commissions', artistAuth, getArtistCommissions);
+// Get all commissions for the logged-in artist or admin
+router.get('/artist/commissions', artistOrAdminAuthMiddleware, getArtistCommissions);
 
-// Artist approves or denies a commission (new, explicit route)
-router.post('/artist/approve-deny', artistAuth, approveOrDenyCommission);
+// Artist or admin approves or denies a commission (new, explicit route)
+router.post('/artist/approve-deny', artistOrAdminAuthMiddleware, approveOrDenyCommission);
+
+// Get preview for client
+router.get('/preview-for-client', authMiddleware, getCommissionPreviewForClient);
+// Get finished commission (adds to purchasedTracks)
+router.get('/finished-commission', authMiddleware, getFinishedCommission);
+
+// Customer cancels a commission (with reason, before delivery/payout)
+router.post('/cancel', authMiddleware, cancelCommission);
+
+// Customer pays for commission after artist accepts (returns Stripe Checkout session)
+router.post('/pay', authMiddleware, async (req, res) => {
+  const { commissionId } = req.body;
+  if (!commissionId) return res.status(400).json({ error: 'Missing commissionId' });
+  try {
+    const CommissionRequest = (await import('../models/CommissionRequest.js')).default;
+    const commission = await CommissionRequest.findById(commissionId).populate('artist customer');
+    if (!commission) return res.status(404).json({ error: 'Commission not found' });
+    if (commission.status !== 'requested') {
+      return res.status(400).json({ error: 'Commission is not ready for payment.' });
+    }
+    const stripeModule = await import('stripe');
+    const stripeClient = stripeModule.default(process.env.STRIPE_SECRET_KEY);
+    const session = await stripeClient.checkout.sessions.create({
+      payment_method_types: ['card'],
+      line_items: [
+        {
+          price_data: {
+            currency: 'gbp',
+            product_data: {
+              name: 'Custom Backing Track Commission',
+              description: commission.requirements || 'Commissioned track',
+            },
+            unit_amount: Math.round(commission.price * 100),
+          },
+          quantity: 1,
+        },
+      ],
+      mode: 'payment',
+      success_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/commission/success/${commission._id}`,
+      cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/commission/cancel/${commission._id}`,
+      metadata: {
+        commissionId: commission._id.toString(),
+        customerId: commission.customer._id.toString(),
+        artistId: commission.artist._id.toString(),
+      },
+    });
+    commission.stripeSessionId = session.id;
+    await commission.save();
+    return res.status(200).json({ sessionId: session.id, sessionUrl: session.url });
+  } catch (err) {
+    console.error('Error creating Stripe session for commission:', err);
+    return res.status(500).json({ error: 'Failed to create Stripe session' });
+  }
+});
 
 export default router;

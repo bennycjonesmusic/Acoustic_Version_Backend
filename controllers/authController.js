@@ -12,6 +12,7 @@ import { sendVerificationEmail, sendPasswordResetEmail } from '../utils/emailAut
 import { registerSchema, loginSchema, artistAboutSchema } from './validationSchemas.js';
 import crypto from 'crypto';
 import adminEmails from '../utils/admins.js';
+import makeAdmin from '../middleware/make_admin.js';
 
 //Create...
 export const register = async (req, res) => {
@@ -80,22 +81,29 @@ export const register = async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, 10);
         // Only send role, about, avatar if artist or admin
         let userData = { username, email, password: hashedPassword };
+        // Always set profileStatus to 'approved' for admins, and to 'pending' for artists, else 'approved' for regular users
         if (adminEmails.includes(email)) {
             userData.role = 'admin';
             userData.about = about;
             userData.avatar = avatar;
+            userData.profileStatus = 'approved';
+            // Admins should also have commission abilities like artists
+            userData.commissionPrice = req.body.commissionPrice || 0;
         } else if (role === 'artist') {
-            userData = { ...userData, role, about, avatar };
+            userData = { ...userData, role, about, avatar, profileStatus: 'pending', commissionPrice: req.body.commissionPrice || 0 };
         } else if (process.env.NODE_ENV === 'test' && role) {
             userData.role = role;
+            userData.profileStatus = 'approved';
+        } else {
+            userData.profileStatus = 'approved';
         }
         const newUser = new User(userData);
         await newUser.save();
 
-        // If artist, remind to upload at least one example
-        if (role === 'artist') {
+        // If artist or admin, remind to upload at least one example (for admin, show similar message)
+        if (role === 'artist' || userData.role === 'admin') {
             return res.status(201).json({
-                message: "Artist registered. Please upload at least one playing example. Your profile will remain hidden and pending approval until reviewed.",
+                message: `${userData.role.charAt(0).toUpperCase() + userData.role.slice(1)} registered. Please upload at least one playing example. Your profile will remain hidden and pending approval until reviewed (for artists).`,
                 userId: newUser._id,
                 profileStatus: newUser.profileStatus
             });
@@ -134,8 +142,13 @@ export const login = async (req, res) => {
         if (!isMatch) {
             return res.status(400).json({ message: "Invalid email or password" });
         }
-        const token = jwt.sign({ id: user._id, email: user.email, role: user.role }, process.env.JWT_SECRET, { expiresIn: '2h' });
-        res.status(200).json({ token, message: "Logged in successfully!" });
+        // Set req.userId for downstream middleware
+        req.userId = user._id;
+        // Call makeAdmin middleware inline
+        await makeAdmin(req, res, async () => {
+            const token = jwt.sign({ id: user._id, email: user.email, role: user.role }, process.env.JWT_SECRET, { expiresIn: '2h' });
+            res.status(200).json({ token, message: "Logged in successfully!" });
+        });
     } catch (error) {
         console.error('Error logging in:', error);
         res.status(500).json({ message: "Internal server error" });

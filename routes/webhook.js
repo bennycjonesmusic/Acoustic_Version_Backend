@@ -76,12 +76,23 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
       try {
         const commissionId = session.metadata.commissionId;
         const CommissionRequest = (await import('../models/CommissionRequest.js')).default;
-        const commission = await CommissionRequest.findById(commissionId);
+        const User = (await import('../models/User.js')).default;
+        const commission = await CommissionRequest.findById(commissionId).populate('artist customer');
         if (commission) {
           commission.stripePaymentIntentId = session.payment_intent;
-          commission.status = 'accepted'; // Mark as accepted/paid
-          await commission.save();
-          console.log(`Commission payment recorded for commission ${commissionId}`);
+          // New flow: after payment, set status to 'in_progress' (do NOT pay out artist yet)
+          if (commission.status !== 'paid') {
+            commission.status = 'in_progress';
+            await commission.save();
+            console.log(`Commission payment received for commission ${commissionId}, status set to in_progress.`);
+            // Send purchase receipt to client and notification to artist (commission)
+            if (commission.customer && commission.customer.email) {
+              await sendPurchaseReceiptEmail(commission.customer.email, commission, commission.artist, session);
+            }
+            if (commission.artist && commission.artist.email) {
+              await sendSaleNotificationEmail(commission.artist.email, commission, commission.customer, session);
+            }
+          }
         } else {
           console.error('Commission not found:', commissionId);
         }
