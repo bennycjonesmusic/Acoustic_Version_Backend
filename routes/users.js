@@ -11,7 +11,7 @@ import {searchUserByName
 
   
 } from '../controllers/publicController.js';
-import { addArtistReview, getArtistReviews, sortUploadedOrBoughtTracks, followArtist, deleteArtistReview } from '../controllers/artistController.js';
+import { addArtistReview, getArtistReviews, sortUploadedOrPurchasedTracks, followArtist, deleteArtistReview } from '../controllers/artistController.js';
 import { uploadArtistExample, getArtistExamples, deleteArtistExample } from '../controllers/artistExamplesController.js';
 import avatarUpload from '../middleware/avatar_upload.js';
 import { updateProfile } from '../controllers/authController.js';
@@ -32,7 +32,7 @@ router.post('/follow/:id', authMiddleware, followArtist);
 router.delete('/delete-review/:id', authMiddleware, deleteArtistReview);
 
 // Sort uploaded and bought tracks for the logged-in user
-router.get('/sort-tracks', authMiddleware, sortUploadedOrBoughtTracks);
+router.get('/sort-tracks', authMiddleware, sortUploadedOrPurchasedTracks);
 
 // Artist example uploads (max 3, 30s each)
 router.post('/artist/examples/upload', authMiddleware, upload.single('file'), uploadArtistExample);

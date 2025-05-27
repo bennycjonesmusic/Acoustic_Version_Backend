@@ -14,67 +14,6 @@ function isValidObjectId(id) {
     return typeof id === 'string' && id.match(/^[a-f\d]{24}$/i);
 }
 
-//create checkout session for backing track purchase
-router.post('/create-checkout-session', authMiddleware, async (req, res) => {
-    try {
-        const { trackId } = req.body;
-        if (!isValidObjectId(trackId)) {
-            return res.status(400).json({ error: 'Invalid track ID' });
-        }
-        const track = await BackingTrack.getById(trackId);
-        if (!track) {
-            return res.status(404).json({ error: 'Track not found' });
-        }
-        // Always use the price from the database
-        const price = Math.round(Number(track.price) * 100); // convert to pence
-        if (!Number.isFinite(price) || price < 0) {
-            return res.status(400).json({ error: 'Track price is not valid' });
-        }
-        // If track is free, skip Stripe and grant access
-        if (Number(track.price) === 0) {
-            const user = await User.findById(req.userId);
-            if (!user) {
-                return res.status(404).json({ error: 'User not found' });
-            }
-            // Only add if not already bought
-            if (!user.boughtTracks.some(id => id.equals(track._id))) {
-                user.boughtTracks.push(track._id);
-                await user.save();
-            }
-            return res.status(200).json({ message: 'Track granted for free', free: true });
-        }
-        const session = await stripeClient.checkout.sessions.create({
-            payment_method_types: ['card'],
-            line_items: [
-                {
-                    price_data: {
-                        currency: 'gbp',
-                        product_data: {
-                            name: 'Backing Track Purchase',
-                        },
-                        unit_amount: price,
-                    },
-                    quantity: 1,
-                },
-            ],
-            mode: 'payment',
-            success_url: `${process.env.CLIENT_URL}/success`,
-            cancel_url: `${process.env.CLIENT_URL}/cancel`,
-            metadata: {
-                userId: req.userId.toString(),
-                trackId: track._id.toString(),
-            }
-        });
-        if (!session) {
-            return res.status(500).json({ error: 'Failed to create checkout session' });
-        }
-        return res.status(200).json({ url: session.url });
-    } catch (error) {
-        console.error('Error creating checkout session:', error);
-        return res.status(500).json({ error: 'Failed to create checkout session' });
-    }
-});
-
 //create account link for Stripe onboarding.
 router.post('/create-account-link', authMiddleware, async (req, res) => {
     try {
@@ -118,13 +57,14 @@ router.post('/create-account-link', authMiddleware, async (req, res) => {
     }
 }); 
 
-router.post('/checkout/artist/:trackId', authMiddleware, async (req, res) => {
+//create checkout session for backing track purchase
+router.post('/create-checkout-session', authMiddleware, async (req, res) => {
     try {
-        const { trackId } = req.params;
+        const { trackId } = req.body;
         if (!isValidObjectId(trackId)) {
             return res.status(400).json({ error: 'Invalid track ID' });
         }
-        const track = await BackingTrack.getById(trackId);
+        const track = await BackingTrack.findById(trackId);
         if (!track) {
             return res.status(404).json({ error: 'Track not found' });
         }
@@ -134,8 +74,14 @@ router.post('/checkout/artist/:trackId', authMiddleware, async (req, res) => {
             if (!user) {
                 return res.status(404).json({ error: 'User not found' });
             }
-            if (!user.boughtTracks.some(id => id.equals(track._id))) {
-                user.boughtTracks.push(track._id);
+            if (!user.purchasedTracks.some(pt => (pt.track?.toString?.() || pt.track) === track._id.toString())) {
+                user.purchasedTracks.push({
+                    track: track._id,
+                    paymentIntentId: 'free',
+                    purchasedAt: new Date(),
+                    price: track.price,
+                    refunded: false
+                });
                 await user.save();
             }
             return res.status(200).json({ message: 'Track granted for free', free: true });
@@ -179,6 +125,10 @@ router.post('/checkout/artist/:trackId', authMiddleware, async (req, res) => {
                     destination: artist.stripeAccountId,
                 },
             },
+            metadata: {
+                userId: req.userId.toString(),
+                trackId: track._id.toString(),
+            }
         });
         if (!session) {
             return res.status(500).json({ error: 'Failed to create checkout session' });

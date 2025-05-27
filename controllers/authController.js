@@ -250,7 +250,7 @@ export const getUserProfile = async(req, res) =>
 
     try{
 
-        const user = await User.findById(req.userId).select('-password').populate('boughtTracks').populate('uploadedTracks'); //exclude password for security reasons
+        const user = await User.findById(req.userId).select('-password').populate('purchasedTracks.track').populate('uploadedTracks'); //exclude password for security reasons
 
         if (! user){
 

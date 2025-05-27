@@ -148,7 +148,7 @@ export const deleteArtistReview = async (req, res) => {
 
 
 
- export const sortUploadedOrBoughtTracks = async (req, res) => {
+ export const sortUploadedOrPurchasedTracks = async (req, res) => {
   try {
     const { uploadedOrder = 'recent', purchasedOrder = 'recent' } = req.query;
     const user = await User.findById(req.userId)

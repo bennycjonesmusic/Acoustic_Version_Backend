@@ -252,21 +252,21 @@ export const getUploadedTracks = async (req, res) => {
     }
 };
 
-export const getBoughtTracks = async (req, res) => {
-  try {
-    if (!req.userId) {
-      return res.status(401).json({ message: 'User not authenticated' });
+export const getPurchasedTracks = async (req, res) => {
+    try {
+        if (!req.userId) {
+            return res.status(401).json({ message: 'User not authenticated' });
+        }
+        const user = await User.findById(req.userId).populate('purchasedTracks.track');
+        if (!user) {
+            return res.status(401).json({ message: "User not found" });
+        }
+        const purchasedTracks = Array.isArray(user.purchasedTracks) ? user.purchasedTracks : [];
+        return res.status(200).json({ tracks: purchasedTracks });
+    } catch (error) {
+        console.error('Error fetching purchased tracks:', error);
+        return res.status(500).json({ message: "Failed to fetch purchased tracks", error: error.message });
     }
-    const user = await User.findById(req.userId).populate('purchasedTracks.track');
-    if (!user) {
-      return res.status(401).json({ message: "User not found" });
-    }
-    const purchasedTracks = Array.isArray(user.purchasedTracks) ? user.purchasedTracks : [];
-    return res.status(200).json({ tracks: purchasedTracks }); //return object for extended frontend manipulation
-  } catch (error) {
-    console.error('Error fetching bought tracks:', error);
-    return res.status(500).json({ message: "Failed to fetch bought tracks", error: error.message });
-  }
 };
 
 export const downloadTrack = async (req, res) => {
