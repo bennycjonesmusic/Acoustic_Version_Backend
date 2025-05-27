@@ -39,13 +39,15 @@ if (! query){
    const limit = 10;
     const skip = (page - 1) * limit;
 
-     let users = await User.find({$text: {$search : query}, role: 'artist'}).sort({score: {$meta: 'textScore'}})
+     let users = await User.find({$text: {$search : query}, role: 'artist', profileStatus: 'approved', 'artistExamples.0': { $exists: true }}).sort({score: {$meta: 'textScore'}})
         .skip(skip).limit(limit).select({ score: { $meta: 'textScore' } }); 
 
          if (!users.length) {
       users = await User.find({
         username: { $regex: query, $options: 'i' },
-        role: 'artist'
+        role: 'artist',
+        profileStatus: 'approved',
+        'artistExamples.0': { $exists: true }
       })
         .skip(skip)
         .limit(limit);
@@ -141,8 +143,16 @@ export const getFeaturedArtists = async (req, res) => {
 
 try {
 
-const featuredArtists = await User.find({role: 'artist'}).sort({ amountOfTracksSold: -1, averageTrackRating: -1}).limit(10);
-const featureRandom = await User.aggregate([ { $match: { role: 'artist' } }, { $sample: { size: 5 } } ]);
+// Only show approved artists with at least one example
+const featuredArtists = await User.find({
+  role: 'artist',
+  profileStatus: 'approved',
+  'artistExamples.0': { $exists: true }
+}).sort({ amountOfTracksSold: -1, averageTrackRating: -1 }).limit(10);
+const featureRandom = await User.aggregate([
+  { $match: { role: 'artist', profileStatus: 'approved', 'artistExamples.0': { $exists: true } } },
+  { $sample: { size: 5 } }
+]);
 const featured = [...featuredArtists, ...featureRandom]; //Merge the arrays in a super array.
 
 return res.status(200).json(toUserSummary(featured))

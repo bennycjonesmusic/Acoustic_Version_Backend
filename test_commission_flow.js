@@ -42,6 +42,14 @@ async function main() {
   });
   const artistId = artistRes.data.id;
 
+  // 2b. Set artist commissionPrice to £10
+  await axios.patch(`${BASE_URL}/auth/update-profile`, {
+    commissionPrice: 10
+  }, {
+    headers: { Authorization: `Bearer ${artistToken}` }
+  });
+  console.log('Set artist commissionPrice to £10');
+
   // 3. Create a commission request as customer
   const commissionReq = await axios.post(`${BASE_URL}/commission/request`, {
     title: "Test Commission Track",
@@ -54,6 +62,34 @@ async function main() {
   });
   const commissionId = commissionReq.data._id || commissionReq.data.id;
   console.log("Commission request created:", commissionId);
+
+  // 3b. Artist accepts the commission (new flow)
+  const acceptRes = await axios.post(`${BASE_URL}/commission/artist/respond`, {
+    commissionId,
+    action: 'accept'
+  }, {
+    headers: { Authorization: `Bearer ${artistToken}` }
+  });
+  console.log('Artist accepted commission:', acceptRes.data);
+
+  // 3c. Artist can also approve/deny using the new explicit endpoint
+  // Approve (accept) the commission
+  const approveRes = await axios.post(`${BASE_URL}/commission/artist/approve-deny`, {
+    commissionId,
+    action: 'approve'
+  }, {
+    headers: { Authorization: `Bearer ${artistToken}` }
+  });
+  console.log('Artist approved commission via /artist/approve-deny:', approveRes.data);
+
+  // Optionally, you could also test the deny path:
+  // const denyRes = await axios.post(`${BASE_URL}/commission/artist/approve-deny`, {
+  //   commissionId,
+  //   action: 'deny'
+  // }, {
+  //   headers: { Authorization: `Bearer ${artistToken}` }
+  // });
+  // console.log('Artist denied commission via /artist/approve-deny:', denyRes.data);
 
   // 4. Upload a track as artist for the commission
   const form = new FormData();
@@ -70,15 +106,6 @@ async function main() {
   });
   const trackId = uploadRes.data._id || uploadRes.data.id;
   console.log("Track uploaded for commission:", trackId);
-
-  // 5. Approve the commission (simulate admin approval if required)
-  // If your flow requires admin approval, login as admin and approve
-  // Otherwise, skip or simulate as artist
-  // Example (uncomment and set credentials if needed):
-  // const adminToken = await login('admin@email.com', 'adminpassword');
-  // await axios.post(`${BASE_URL}/commission/approve/${commissionId}`, {}, {
-  //   headers: { Authorization: `Bearer ${adminToken}` }
-  // });
 
   // 6. Simulate purchase of the track (as customer)
   // If the track is free, this may not be needed

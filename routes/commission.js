@@ -7,7 +7,9 @@ import {
   confirmOrDenyCommission,
   refundCommission,
   refundTrackPurchase,
-  artistRespondToCommission
+  artistRespondToCommission,
+  getArtistCommissions,
+  approveOrDenyCommission
 } from '../controllers/commissionControl.js';
 import { downloadCommissionFile } from '../controllers/commissionDownloadController.js';
 import authMiddleware from '../middleware/customer_auth.js';
@@ -43,6 +45,12 @@ router.post('/admin/track-refund', adminAuth, refundTrackPurchase);
 router.post('/admin/refund', adminAuth, refundCommission);
 
 // Artist accepts or rejects a commission
-router.post('/artist/respond', artistAuth, require('../controllers/commissionControl.js').artistRespondToCommission);
+router.post('/artist/respond', artistAuth, artistRespondToCommission);
+
+// Get all commissions for the logged-in artist
+router.get('/artist/commissions', artistAuth, getArtistCommissions);
+
+// Artist approves or denies a commission (new, explicit route)
+router.post('/artist/approve-deny', artistAuth, approveOrDenyCommission);
 
 export default router;

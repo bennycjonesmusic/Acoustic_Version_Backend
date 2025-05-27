@@ -200,3 +200,46 @@ export const getSalesStatsAndCsv = async (req, res) => {
     return res.status(500).json({ error: 'Internal server error' });
   }
 };
+
+// Admin: List all pending (and optionally rejected) artists
+export const getPendingArtists = async (req, res) => {
+    try {
+        const pendingArtists = await User.find({
+            role: 'artist',
+            profileStatus: { $in: ['pending', 'rejected'] }
+        }).select('-password');
+        return res.status(200).json({ artists: pendingArtists });
+    } catch (err) {
+        return res.status(500).json({ message: 'Failed to fetch pending artists', error: err.message });
+    }
+};
+
+// Admin: Approve an artist profile
+export const approveArtist = async (req, res) => {
+    try {
+        const artist = await User.findById(req.params.id);
+        if (!artist || artist.role !== 'artist') {
+            return res.status(404).json({ message: 'Artist not found' });
+        }
+        artist.profileStatus = 'approved';
+        await artist.save();
+        return res.status(200).json({ message: 'Artist approved', artist });
+    } catch (err) {
+        return res.status(500).json({ message: 'Failed to approve artist', error: err.message });
+    }
+};
+
+// Admin: Reject an artist profile
+export const rejectArtist = async (req, res) => {
+    try {
+        const artist = await User.findById(req.params.id);
+        if (!artist || artist.role !== 'artist') {
+            return res.status(404).json({ message: 'Artist not found' });
+        }
+        artist.profileStatus = 'rejected';
+        await artist.save();
+        return res.status(200).json({ message: 'Artist rejected', artist });
+    } catch (err) {
+        return res.status(500).json({ message: 'Failed to reject artist', error: err.message });
+    }
+};

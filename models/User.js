@@ -70,6 +70,12 @@ const userSchema = new mongoose.Schema({
     default: 0,
     min: 0,
     description: 'Default price (in GBP) for a commission from this artist.'
+  },
+  profileStatus: {
+    type: String,
+    enum: ['pending', 'approved', 'rejected'],
+    default: function() { return this.role === 'artist' ? 'pending' : 'approved'; },
+    description: 'Artist profile approval status. Only approved artists are public.'
   }
 }, {
   timestamps: true, // 

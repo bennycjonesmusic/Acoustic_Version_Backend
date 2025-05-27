@@ -92,13 +92,21 @@ export const register = async (req, res) => {
         const newUser = new User(userData);
         await newUser.save();
 
+        // If artist, remind to upload at least one example
+        if (role === 'artist') {
+            return res.status(201).json({
+                message: "Artist registered. Please upload at least one playing example. Your profile will remain hidden and pending approval until reviewed.",
+                userId: newUser._id,
+                profileStatus: newUser.profileStatus
+            });
+        }
+
         const token = jwt.sign(
         { userId: newUser._id },
          process.env.EMAIL_VERIFICATION_SECRET,
         { expiresIn: '1d' }
         );
-
-await sendVerificationEmail(email, token);
+        await sendVerificationEmail(email, token);
         res.status(201).json({ message: "User has been registered!" });
     } catch (error) {
         console.error('Error checking for existing user:', error);
@@ -287,7 +295,7 @@ export const getUserProfile = async(req, res) =>
 
 }
 
-// Update artist 'about' field
+// Update artist 'about' field... NOW DEPRECATED, USE updateProfile INSTEAD. left here for reference and compatibility purposes.
 export const updateAbout = async (req, res) => {
   try {
     const user = await User.findById(req.userId);
@@ -358,7 +366,7 @@ export const resetPassword = async (req, res) => {
 // Update user profile (avatar, about, etc.)
 export const updateProfile = async (req, res) => {
   try {
-    const allowedFields = ['about', 'commissionPrice', 'artistExamples'];
+    const allowedFields = ['about', 'commissionPrice'];
     const updates = allowedFields.reduce((acc, key) => {
       if (req.body[key] !== undefined) acc[key] = req.body[key];
       return acc;
@@ -377,14 +385,15 @@ export const updateProfile = async (req, res) => {
     if (user.role !== 'artist' && user.role !== 'admin') {
       return res.status(403).json({ message: 'Only artists or admins can update their profile.' });
     }
-    // Profanity and length check for 'about'
+    // Profanity and length check for 'about' using artistAboutSchema
     if (updates.about !== undefined) {
+      const { error } = artistAboutSchema.validate({ about: updates.about });
+      if (error) {
+        return res.status(400).json({ message: error.details[0].message });
+      }
       const profanity = new Filter.Filter();
       if (profanity.isProfane(updates.about)) {
         return res.status(400).json({ message: 'Please avoid using inappropriate language in your about section.' });
-      }
-      if (typeof updates.about !== 'string' || updates.about.length > 1000) {
-        return res.status(400).json({ message: 'About section must be a string and less than 1000 characters.' });
       }
     }
     // Validate commissionPrice if present
@@ -395,17 +404,7 @@ export const updateProfile = async (req, res) => {
       }
       updates.commissionPrice = price;
     }
-    // Validate artistExamples if present (should be an array of objects with url and optional description)
-    if (updates.artistExamples !== undefined) {
-      if (!Array.isArray(updates.artistExamples)) {
-        return res.status(400).json({ message: 'artistExamples must be an array.' });
-      }
-      for (const ex of updates.artistExamples) {
-        if (!ex.url || typeof ex.url !== 'string') {
-          return res.status(400).json({ message: 'Each artist example must have a valid url.' });
-        }
-      }
-    }
+  
     // No need to validate avatar here, multer-s3 already does it
 
     Object.assign(user, updates);

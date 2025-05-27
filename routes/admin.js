@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import authMiddleware from '../middleware/customer_auth.js';
 import isOwner from '../middleware/isOwner.js';
-import { clearS3, deleteAllUsers, getUsers, banUser, getAllSalesAndRefunds, getSalesStatsAndCsv } from '../controllers/adminController.js';
+import { clearS3, deleteAllUsers, getUsers, banUser, getAllSalesAndRefunds, getSalesStatsAndCsv, getPendingArtists, approveArtist, rejectArtist } from '../controllers/adminController.js';
 
 const router = Router();
 
@@ -11,5 +11,8 @@ router.get('/users', getUsers);
 router.post('/ban-user', authMiddleware, banUser);
 router.get('/sales-history', authMiddleware, getAllSalesAndRefunds);
 router.get('/sales-stats-csv', authMiddleware, getSalesStatsAndCsv);
+router.get('/pending-artists', authMiddleware, isOwner, getPendingArtists);
+router.post('/approve-artist/:id', authMiddleware, isOwner, approveArtist);
+router.post('/reject-artist/:id', authMiddleware, isOwner, rejectArtist);
 
 export default router;

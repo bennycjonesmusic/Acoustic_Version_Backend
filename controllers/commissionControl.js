@@ -401,3 +401,41 @@ export const artistRespondToCommission = async (req, res) => {
         return res.status(500).json({ error: 'Internal server error' });
     }
 };
+
+// Get all commissions for the logged-in artist
+export const getArtistCommissions = async (req, res) => {
+    try {
+        const artistId = req.userId;
+        const commissions = await CommissionRequest.find({ artist: artistId }).populate('customer');
+        return res.status(200).json({ commissions });
+    } catch (error) {
+        console.error('Error fetching artist commissions:', error);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// Approve or deny a commission (artist only)
+export const approveOrDenyCommission = async (req, res) => {
+    const { commissionId, action } = req.body; // action: 'approve' or 'deny'
+    const artistId = req.userId;
+    try {
+        const commission = await CommissionRequest.findById(commissionId);
+        if (!commission) return res.status(404).json({ error: 'Commission not found' });
+        if (commission.artist.toString() !== artistId) return res.status(403).json({ error: 'Not authorized' });
+        if (commission.status !== 'pending_artist') return res.status(400).json({ error: 'Commission not awaiting artist response' });
+        if (action === 'approve') {
+            commission.status = 'requested'; // Now customer can pay
+            await commission.save();
+            return res.status(200).json({ success: true, message: 'Commission approved. Awaiting customer payment.' });
+        } else if (action === 'deny') {
+            commission.status = 'rejected_by_artist';
+            await commission.save();
+            return res.status(200).json({ success: true, message: 'Commission denied.' });
+        } else {
+            return res.status(400).json({ error: 'Invalid action' });
+        }
+    } catch (error) {
+        console.error('Error in approveOrDenyCommission:', error);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+};
