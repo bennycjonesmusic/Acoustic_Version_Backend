@@ -46,18 +46,26 @@ export const refundTrackPurchase = async (req, res) => {
 };
 
 export const createCommissionRequest = async (req, res) => {
-
-    const { artistId, requirements, price } = req.body;
-    const customerId = req.userId;
-
     try {
+        const { artist: artistId, requirements, price, ...rest } = req.body;
+        const customerId = req.userId;
+        // Fetch artist to get their commissionPrice if price not provided
+        const artist = await User.findById(artistId);
+        if (!artist) return res.status(404).json({ error: 'Artist not found' });
+        let finalPrice = price;
+        if (typeof finalPrice !== 'number' || isNaN(finalPrice) || finalPrice <= 0) {
+            finalPrice = artist.commissionPrice || 0;
+        }
+        if (!finalPrice || finalPrice <= 0) {
+            return res.status(400).json({ error: 'No valid commission price set for this artist.' });
+        }
         const commission = await CommissionRequest.create({
             customer: customerId,
             artist: artistId,
             requirements,
-            price,
-
-
+            price: finalPrice,
+            status: 'pending_artist',
+            ...rest
         });
 
         const session = await stripeClient.checkout.sessions.create({
@@ -69,7 +77,7 @@ export const createCommissionRequest = async (req, res) => {
                         product_data: {
                             name: 'Custom Backing Track Commission Request',
                         },
-                        unit_amount: Math.round(price * 100), // Convert to pence
+                        unit_amount: Math.round(finalPrice * 100), // Convert to pence
                     },
                     quantity: 1,
                 },
@@ -364,6 +372,32 @@ export const refundCommission = async (req, res) => {
         }
     } catch (error) {
         console.error('Error refunding commission:', error);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// Artist accepts or rejects a commission
+export const artistRespondToCommission = async (req, res) => {
+    const { commissionId, action } = req.body; // action: 'accept' or 'reject'
+    const artistId = req.userId;
+    try {
+        const commission = await CommissionRequest.findById(commissionId);
+        if (!commission) return res.status(404).json({ error: 'Commission not found' });
+        if (commission.artist.toString() !== artistId) return res.status(403).json({ error: 'Not authorized' });
+        if (commission.status !== 'pending_artist') return res.status(400).json({ error: 'Commission not awaiting artist response' });
+        if (action === 'accept') {
+            commission.status = 'requested'; // Now customer can pay
+            await commission.save();
+            return res.status(200).json({ success: true, message: 'Commission accepted. Awaiting customer payment.' });
+        } else if (action === 'reject') {
+            commission.status = 'rejected_by_artist';
+            await commission.save();
+            return res.status(200).json({ success: true, message: 'Commission rejected.' });
+        } else {
+            return res.status(400).json({ error: 'Invalid action' });
+        }
+    } catch (error) {
+        console.error('Error in artistRespondToCommission:', error);
         return res.status(500).json({ error: 'Internal server error' });
     }
 };

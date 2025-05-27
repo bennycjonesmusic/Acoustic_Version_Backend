@@ -4,11 +4,11 @@ const commissionRequestSchema = new mongoose.Schema({
   customer: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   artist: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   requirements: { type: String, required: true },
-  price: { type: Number, required: true },
+  price: { type: Number, required: false }, // Now optional, will be set from artist if not provided
   status: {
     type: String,
-    enum: ['requested', 'accepted', 'in_progress', 'delivered', 'approved', 'paid', 'cancelled'],
-    default: 'requested',
+    enum: ['pending_artist', 'requested', 'accepted', 'in_progress', 'delivered', 'approved', 'paid', 'cancelled', 'rejected_by_artist'],
+    default: 'pending_artist',
   },
   stripeSessionId: { type: String },
   stripePaymentIntentId: { type: String },

@@ -64,6 +64,12 @@ const userSchema = new mongoose.Schema({
   averageTrackRating: {
     type: Number,
     default: 0
+  },
+  commissionPrice: {
+    type: Number,
+    default: 0,
+    min: 0,
+    description: 'Default price (in GBP) for a commission from this artist.'
   }
 }, {
   timestamps: true, // 

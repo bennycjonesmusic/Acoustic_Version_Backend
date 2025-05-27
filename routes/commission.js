@@ -6,7 +6,8 @@ import {
   uploadFinishedTrack,
   confirmOrDenyCommission,
   refundCommission,
-  refundTrackPurchase
+  refundTrackPurchase,
+  artistRespondToCommission
 } from '../controllers/commissionControl.js';
 import { downloadCommissionFile } from '../controllers/commissionDownloadController.js';
 import authMiddleware from '../middleware/customer_auth.js';
@@ -40,5 +41,8 @@ router.post('/admin/track-refund', adminAuth, refundTrackPurchase);
 
 // Admin-only: Issue a refund for a commission
 router.post('/admin/refund', adminAuth, refundCommission);
+
+// Artist accepts or rejects a commission
+router.post('/artist/respond', artistAuth, require('../controllers/commissionControl.js').artistRespondToCommission);
 
 export default router;

@@ -358,7 +358,7 @@ export const resetPassword = async (req, res) => {
 // Update user profile (avatar, about, etc.)
 export const updateProfile = async (req, res) => {
   try {
-    const allowedFields = ['about'];
+    const allowedFields = ['about', 'commissionPrice', 'artistExamples'];
     const updates = allowedFields.reduce((acc, key) => {
       if (req.body[key] !== undefined) acc[key] = req.body[key];
       return acc;
@@ -385,6 +385,25 @@ export const updateProfile = async (req, res) => {
       }
       if (typeof updates.about !== 'string' || updates.about.length > 1000) {
         return res.status(400).json({ message: 'About section must be a string and less than 1000 characters.' });
+      }
+    }
+    // Validate commissionPrice if present
+    if (updates.commissionPrice !== undefined) {
+      const price = Number(updates.commissionPrice);
+      if (isNaN(price) || price < 0) {
+        return res.status(400).json({ message: 'Commission price must be a non-negative number.' });
+      }
+      updates.commissionPrice = price;
+    }
+    // Validate artistExamples if present (should be an array of objects with url and optional description)
+    if (updates.artistExamples !== undefined) {
+      if (!Array.isArray(updates.artistExamples)) {
+        return res.status(400).json({ message: 'artistExamples must be an array.' });
+      }
+      for (const ex of updates.artistExamples) {
+        if (!ex.url || typeof ex.url !== 'string') {
+          return res.status(400).json({ message: 'Each artist example must have a valid url.' });
+        }
       }
     }
     // No need to validate avatar here, multer-s3 already does it
