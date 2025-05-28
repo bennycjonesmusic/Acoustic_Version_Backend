@@ -82,7 +82,11 @@ export const uploadTrack = async (req, res) => {
         if (!req.file) {
             return res.status(400).json({ message: 'No file uploaded' });
         }
-        const fileStream = Buffer.from(req.file.buffer);
+        // Write buffer to temp file
+        const tmp = await import('os');
+        const tmpDir = tmp.tmpdir();
+        const tempFilePath = path.join(tmpDir, `uploadtrack_${Date.now()}_${req.file.originalname}`);
+        fs.writeFileSync(tempFilePath, req.file.buffer);
         const s3Client = new S3Client({
             region: process.env.AWS_REGION,
             credentials: {
@@ -93,24 +97,20 @@ export const uploadTrack = async (req, res) => {
         const uploadParams = {
             Bucket: process.env.AWS_BUCKET_NAME,
             Key: `songs/${Date.now()}-${req.file.originalname}`,
-            Body: fileStream,
+            Body: fs.createReadStream(tempFilePath),
             ACL: 'private',
             StorageClass: 'STANDARD',
         };
         const data = await new Upload({ client: s3Client, params: uploadParams }).done();
+        fs.unlinkSync(tempFilePath);
 
         // --- 30-second preview logic ---
         let previewUrl = null;
-        const tmp = await import('os');
-        const path = await import('path');
         const { getAudioPreview } = await import('../utils/audioPreview.js');
-        const tmpDir = tmp.tmpdir();
-        const previewFilename = `preview-${Date.now()}-${req.file.originalname}`;
-        const previewPath = path.join(tmpDir, previewFilename);
         try {
             // Write buffer to temp file for ffmpeg
-            fs.writeFileSync(previewPath + '-full', fileStream);
-            await getAudioPreview(previewPath + '-full', previewPath, 30);
+            fs.writeFileSync(tempFilePath + '-full', req.file.buffer);
+            await getAudioPreview(tempFilePath + '-full', previewPath, 30);
             // Upload preview to S3
             const previewUploadParams = {
                 Bucket: process.env.AWS_BUCKET_NAME,

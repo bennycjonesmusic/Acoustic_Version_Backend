@@ -50,8 +50,7 @@ export const uploadArtistExample = async (req, res) => {
                 Bucket: process.env.AWS_BUCKET_NAME,
                 Key: key,
                 Body: fs.createReadStream(tmpPreviewPath),
-                ACL: 'public-read',
-                ContentType: req.file.mimetype,
+                StorageClass: 'STANDARD',
             },
         }).done();
         fs.unlinkSync(tmpInputPath);
@@ -88,7 +87,7 @@ export const getArtistExamples = async (req, res) => {
     }
 };
 
-// DELETE /artist/examples/:exampleId
+
 export const deleteArtistExample = async (req, res) => {
     try {
         const user = await User.findById(req.userId);
@@ -96,6 +95,33 @@ export const deleteArtistExample = async (req, res) => {
             return res.status(403).json({ error: 'Not authorized' });
         }
         const { exampleId } = req.params;
+        // Find the example to delete
+        const example = user.artistExamples.find(e => e._id.toString() === exampleId);
+        if (!example) {
+            return res.status(404).json({ error: 'Example not found' });
+        }
+        // Extract S3 key from URL
+        let key;
+        try {
+            const url = new URL(example.url);
+            key = url.pathname.replace(/^\//, '');
+        } catch (e) {
+            key = null;
+        }
+        // Delete from S3 if key is valid
+        if (key) {
+            try {
+                const { DeleteObjectCommand } = await import('@aws-sdk/client-s3');
+                await s3Client.send(new DeleteObjectCommand({
+                    Bucket: process.env.AWS_BUCKET_NAME,
+                    Key: key,
+                }));
+            } catch (s3err) {
+                // Log but do not block deletion if S3 fails
+                console.error('Failed to delete S3 object:', s3err.message);
+            }
+        }
+        // Remove from user's artistExamples
         user.artistExamples = user.artistExamples.filter(e => e._id.toString() !== exampleId);
         await user.save();
         // Map _id to id for response

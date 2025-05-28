@@ -11,7 +11,7 @@ if (process.env.NODE_ENV === 'test') {
 } else {
   registerLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 5,
+    max: 10,
     message: 'Too many registration attempts, please try again later.',
   });
 
