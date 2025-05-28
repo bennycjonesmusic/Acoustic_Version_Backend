@@ -29,6 +29,9 @@ router.post('/request', authMiddleware, createCommissionRequest);
 router.post('/approve', authMiddleware, approveCommissionAndPayout);
 router.post('/admin/approve', authMiddleware, isAdmin, approveCommissionAndPayout);
 
+// Approve commission and pay out artist (customer or admin, explicit endpoint for test script)
+router.post('/approve-and-payout', authMiddleware, approveCommissionAndPayout);
+
 // Process expired commissions and refund (admin only, can be called by cron or manually)
 router.post('/process-expired', authMiddleware, isAdmin, processExpiredCommissions);
 
@@ -67,12 +70,15 @@ router.post('/cancel', authMiddleware, cancelCommission);
 // Customer pays for commission after artist accepts (returns Stripe Checkout session)
 router.post('/pay', authMiddleware, async (req, res) => {
   const { commissionId } = req.body;
+  console.log('[COMMISSION PAY] /commission/pay called with commissionId:', commissionId);
   if (!commissionId) return res.status(400).json({ error: 'Missing commissionId' });
   try {
     const CommissionRequest = (await import('../models/CommissionRequest.js')).default;
     const commission = await CommissionRequest.findById(commissionId).populate('artist customer');
+    console.log('[COMMISSION PAY] Loaded commission:', commission);
     if (!commission) return res.status(404).json({ error: 'Commission not found' });
     if (commission.status !== 'requested') {
+      console.log('[COMMISSION PAY] Commission not ready for payment. Status:', commission.status);
       return res.status(400).json({ error: 'Commission is not ready for payment.' });
     }
     const stripeModule = await import('stripe');
@@ -101,6 +107,7 @@ router.post('/pay', authMiddleware, async (req, res) => {
         artistId: commission.artist._id.toString(),
       },
     });
+    console.log('[COMMISSION PAY] Stripe checkout session created:', session.id, session.url);
     commission.stripeSessionId = session.id;
     await commission.save();
     return res.status(200).json({ sessionId: session.id, sessionUrl: session.url });

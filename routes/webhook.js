@@ -7,14 +7,19 @@ import { sendPurchaseReceiptEmail, sendSaleNotificationEmail } from '../utils/em
 const router = express.Router();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
+console.log('[WEBHOOK DEBUG] webhook.js module loaded');
+console.log('[WEBHOOK DEBUG] Registering /webhook route');
+console.log('[WEBHOOK DEBUG] Loaded STRIPE_WEBHOOK_SECRET:', process.env.STRIPE_WEBHOOK_SECRET ? '***' + process.env.STRIPE_WEBHOOK_SECRET.slice(-6) : 'NOT SET');
 //webhook is used to send data from stripe to my server
 
 //no json for webhook 
 router.post('/', express.raw({ type: 'application/json' }), async (req, res) => {
+  console.log('[WEBHOOK DEBUG] Incoming POST /webhook');
   const sig = req.headers['stripe-signature'];
   let event;
 
   try {
+    console.log('[WEBHOOK DEBUG] Attempting to construct Stripe event');
     event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
     console.log('Webhook event received:', event.type);
   } catch (err) {
@@ -75,26 +80,49 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
     else if (session.metadata && session.metadata.commissionId) {
       try {
         const commissionId = session.metadata.commissionId;
+        console.log('[WEBHOOK DEBUG] Incoming commissionId:', commissionId, 'session.payment_intent:', session.payment_intent);
         const CommissionRequest = (await import('../models/CommissionRequest.js')).default;
         const User = (await import('../models/User.js')).default;
         const commission = await CommissionRequest.findById(commissionId).populate('artist customer');
+        console.log('[WEBHOOK DEBUG] Looking up commission:', commissionId, 'Found:', !!commission);
         if (commission) {
+          console.log('[WEBHOOK DEBUG] Commission before update:', commission);
+          // Always set stripePaymentIntentId, regardless of status
           commission.stripePaymentIntentId = session.payment_intent;
-          // New flow: after payment, set status to 'in_progress' (do NOT pay out artist yet)
-          if (commission.status !== 'paid') {
+          // Only set to 'in_progress' if in a pre-payment state
+          console.log('[WEBHOOK DEBUG] Commission status before possible update:', commission.status);
+          if (
+            commission.status === 'requested' ||
+            commission.status === 'accepted' ||
+            commission.status === 'in_progress'
+          ) {
             commission.status = 'in_progress';
+            console.log('[WEBHOOK DEBUG] Commission status set to in_progress');
+          } else {
+            console.log('[WEBHOOK DEBUG] Commission status NOT set to in_progress (current status:', commission.status, ')');
+          }
+          try {
             await commission.save();
-            console.log(`Commission payment received for commission ${commissionId}, status set to in_progress.`);
-            // Send purchase receipt to client and notification to artist (commission)
-            if (commission.customer && commission.customer.email) {
-              await sendPurchaseReceiptEmail(commission.customer.email, commission, commission.artist, session);
-            }
-            if (commission.artist && commission.artist.email) {
-              await sendSaleNotificationEmail(commission.artist.email, commission, commission.customer, session);
-            }
+            console.log('[WEBHOOK DEBUG] Commission after update:', commission);
+          } catch (saveErr) {
+            console.error('[WEBHOOK DEBUG] Error saving commission:', saveErr);
+          }
+          console.log(`[WEBHOOK DEBUG] Commission payment received for commission ${commissionId}, status is now ${commission.status}.`);
+          // Send purchase receipt to client and notification to artist (commission)
+          if (commission.customer && commission.customer.email) {
+            console.log('[WEBHOOK DEBUG] Sending purchase receipt email to customer:', commission.customer.email);
+            await sendPurchaseReceiptEmail(commission.customer.email, commission, commission.artist, session);
+          } else {
+            console.log('[WEBHOOK DEBUG] No customer email found for commission:', commissionId);
+          }
+          if (commission.artist && commission.artist.email) {
+            console.log('[WEBHOOK DEBUG] Sending sale notification email to artist:', commission.artist.email);
+            await sendSaleNotificationEmail(commission.artist.email, commission, commission.customer, session);
+          } else {
+            console.log('[WEBHOOK DEBUG] No artist email found for commission:', commissionId);
           }
         } else {
-          console.error('Commission not found:', commissionId);
+          console.error('[WEBHOOK DEBUG] Commission not found:', commissionId);
         }
       } catch (err) {
         console.error('Error handling commission payment:', err);

@@ -95,6 +95,7 @@ export const createCommissionRequest = async (req, res) => {
             }
         });
         console.log('[createCommissionRequest] stripe session:', session);
+        console.log('[createCommissionRequest] session metadata:', session.metadata);
         commission.stripeSessionId = session.id;
         await commission.save();
 
@@ -119,7 +120,10 @@ export const approveCommissionAndPayout = async (req, res) => {
     try {
         const commission = await CommissionRequest.findById(commissionId).populate('artist customer');
         if (!commission) return res.status(404).json({ error: 'Commission not found' });
-        if (commission.status !== 'delivered') return res.status(400).json({ error: 'Commission not ready for approval' });
+        // Only allow payout for delivered or approved, NOT cron_pending
+        if (commission.status !== 'delivered' && commission.status !== 'approved') {
+            return res.status(400).json({ error: 'Commission not ready for approval' });
+        }
 
         // Only customer or admin can approve
         if (
@@ -134,18 +138,36 @@ export const approveCommissionAndPayout = async (req, res) => {
             return res.status(400).json({ error: 'Already paid out' });
         }
 
+        // Check if payment has been received
+        if (!commission.stripePaymentIntentId) {
+            return res.status(400).json({ error: 'No payment intent found for this commission.' });
+        }
+        const paymentIntent = await stripeClient.paymentIntents.retrieve(commission.stripePaymentIntentId);
+        if (paymentIntent.status !== 'succeeded') {
+            // Payment not received yet, mark as cron_pending and let cron handle payout
+            commission.status = 'cron_pending';
+            await commission.save();
+            return res.status(200).json({ success: true, message: 'Commission approved. Payout will be processed once payment is received.' });
+        }
+
+        // Payment received, proceed with payout logic
         const artist = commission.artist;
         if (!artist.stripeAccountId) {
             return res.status(400).json({ error: 'Artist has no Stripe account' });
         }
-        // Only allow payout if artist is 'artist' or 'admin'
         if (artist.role !== 'artist' && artist.role !== 'admin') {
             return res.status(403).json({ error: 'Payouts are only allowed to users with role artist or admin.' });
         }
-        // Calculate payout (e.g. 15% platform fee)
         const totalAmount = Math.round(commission.price * 100); // pence
         const platformFee = Math.round(totalAmount * 0.15); // 15% fee
         const artistAmount = totalAmount - platformFee;
+        console.log('[PAYOUT DEBUG]', {
+            commissionId: commission._id.toString(),
+            totalAmount,
+            platformFee,
+            artistAmount,
+            artistStripeAccount: artist.stripeAccountId
+        });
 
         // Transfer to artist
         const transfer = await stripeClient.transfers.create({
@@ -506,8 +528,9 @@ export const cancelCommission = async (req, res) => {
         if (commission.customer.toString() !== userId && !(req.user && req.user.role === 'admin')) {
             return res.status(403).json({ error: 'Not authorized' });
         }
-        if (["delivered", "paid", "refunded", "cancelled"].includes(commission.status)) {
-            return res.status(400).json({ error: 'Cannot cancel at this stage.' });
+        // Only allow cancellation/refund during preview phase (status === 'delivered')
+        if (commission.status !== 'delivered') {
+            return res.status(400).json({ error: 'Can only cancel/refund during the preview phase (after preview upload, before approval/payout).' });
         }
         if (!commission.stripePaymentIntentId) {
             return res.status(400).json({ error: 'No payment to refund.' });

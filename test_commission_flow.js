@@ -258,12 +258,25 @@ async function main() {
   });
   console.log('Customer approved the finished track:', approveRes.data);
 
+  // 6b. Customer triggers payout to artist (must be done after approval)
+  const payoutRes = await axios.post(`${BASE_URL}/commission/approve-and-payout`, {
+    commissionId
+  }, {
+    headers: { Authorization: `Bearer ${customerToken}` }
+  });
+  console.log('Payout triggered:', payoutRes.data);
+
   // 7. Verify commission status after approval and payout
   try {
     const commissionStatusRes = await axios.get(`${BASE_URL}/commission/${commissionId}`, {
       headers: { Authorization: `Bearer ${customerToken}` }
     });
     console.log('Commission after approval:', commissionStatusRes.data);
+    // Check if platform fee logic should be applied
+    const expectedPlatformFee = Math.round(10 * 100 * 0.15); // 15% of £10
+    const expectedArtistAmount = Math.round(10 * 100) - expectedPlatformFee;
+    console.log(`Expected platform fee: £${(expectedPlatformFee/100).toFixed(2)}, expected artist payout: £${(expectedArtistAmount/100).toFixed(2)}`);
+    console.log('NOTE: Check your Stripe dashboard for actual payout and platform balance.');
   } catch (err) {
     console.error('Error fetching commission after approval:', err.response ? err.response.data : err);
   }

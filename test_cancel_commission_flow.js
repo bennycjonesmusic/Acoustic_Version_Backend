@@ -4,11 +4,11 @@ import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
 
-const BASE_URL = 'http://localhost:3001';
-const CUSTOMER_EMAIL = 'canceltestcustomer@example.com';
-const CUSTOMER_PASSWORD = 'TestPassword123!';
-const ARTIST_EMAIL = 'canceltestartist@example.com';
-const ARTIST_PASSWORD = 'TestPassword123!';
+const BASE_URL = 'http://localhost:3000';
+const CUSTOMER_EMAIL = 'acousticversionuk@gmail.com';
+const CUSTOMER_PASSWORD = 'Moobslikejabba123456';
+const ARTIST_EMAIL = 'sarahandbenduo@gmail.com';
+const ARTIST_PASSWORD = 'Moobslikejabba123456';
 
 async function login(email, password) {
   const res = await axios.post(`${BASE_URL}/auth/login`, { login: email, password });
@@ -16,7 +16,7 @@ async function login(email, password) {
 }
 
 async function main() {
-  // Register customer and artist
+  // Register customer and artist (mirror test_commission_flow.js logic)
   try {
     await axios.post(`${BASE_URL}/auth/register`, {
       username: 'CancelTestCustomer',
@@ -30,7 +30,8 @@ async function main() {
       username: 'CancelTestArtist',
       email: ARTIST_EMAIL,
       password: ARTIST_PASSWORD,
-      about: 'Artist for cancel test'
+      about: 'Artist for cancel test',
+      role: 'artist'
     });
   } catch {}
 
@@ -43,42 +44,104 @@ async function main() {
     headers: { Authorization: `Bearer ${artistToken}` }
   });
 
-  // Approve artist (assume admin endpoint exists)
+  // Approve artist (use acousticversionuk@gmail.com as admin, sarahandbenduo@gmail.com as artist)
+  let artistId;
   try {
-    const adminToken = await login('admin@acousticversion.co.uk', 'Moobslikejabba123456');
+    // Use customer (acousticversionuk@gmail.com) as admin for approval
+    const adminToken = await login(CUSTOMER_EMAIL, CUSTOMER_PASSWORD);
     const artistRes = await axios.get(`${BASE_URL}/users/me`, { headers: { Authorization: `Bearer ${artistToken}` } });
-    const artistId = artistRes.data.id || artistRes.data._id;
+    artistId = artistRes.data.id || artistRes.data._id || (artistRes.data.user && (artistRes.data.user.id || artistRes.data.user._id));
     await axios.post(`${BASE_URL}/admin/approve-artist/${artistId}`, {}, { headers: { Authorization: `Bearer ${adminToken}` } });
   } catch {}
 
-  // Create commission request
+  // Create commission request (mirror test_commission_flow.js logic)
   const commissionReq = await axios.post(`${BASE_URL}/commission/request`, {
-    artist: (await axios.get(`${BASE_URL}/users/me`, { headers: { Authorization: `Bearer ${artistToken}` } })).data.id,
-    requirements: 'Test commission for cancellation',
-    price: 10
-  }, { headers: { Authorization: `Bearer ${customerToken}` } });
-  const commissionId = commissionReq.data.commissionId || commissionReq.data._id;
+    title: "Test Commission Track",
+    description: "Please create a test track for automation.",
+    artist: artistId,
+    requirements: "Please create a test track for automation.",
+    key: "C",
+    tempo: 120
+  }, {
+    headers: { Authorization: `Bearer ${customerToken}` }
+  });
+  // Log the full response for debugging
+  console.log("Commission request response:", commissionReq.data);
+  // Try to extract commissionId from multiple possible fields
+  const commissionId = commissionReq.data.commissionId || commissionReq.data._id || commissionReq.data.id;
+  console.log("Commission request created:", commissionId);
 
   // Artist accepts
-  await axios.post(`${BASE_URL}/commission/artist/respond`, {
+  const acceptRes = await axios.post(`${BASE_URL}/commission/artist/respond`, {
     commissionId,
     action: 'accept'
-  }, { headers: { Authorization: `Bearer ${artistToken}` } });
+  }, {
+    headers: { Authorization: `Bearer ${artistToken}` }
+  });
+  console.log('Artist accepted commission:', acceptRes.data);
 
   // Customer pays
-  const paymentSessionRes = await axios.post(`${BASE_URL}/commission/pay`, { commissionId }, { headers: { Authorization: `Bearer ${customerToken}` } });
+  const paymentSessionRes = await axios.post(`${BASE_URL}/commission/pay`, {
+    commissionId
+  }, {
+    headers: { Authorization: `Bearer ${customerToken}` }
+  });
   const paymentCheckoutUrl = paymentSessionRes.data.sessionUrl || (paymentSessionRes.data.sessionId && `https://checkout.stripe.com/pay/${paymentSessionRes.data.sessionId}`);
   if (paymentCheckoutUrl) {
     console.log("\n--- ACTION REQUIRED ---");
     console.log("Open this Stripe Checkout URL in your browser and complete the payment:");
     console.log(paymentCheckoutUrl);
     console.log("----------------------\n");
+    // Wait for user to press Enter before continuing
     const readline = (await import('readline')).default;
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
     await new Promise(resolve => rl.question('Press Enter after completing payment in Stripe Checkout...', () => { rl.close(); resolve(); }));
   }
 
-  // Customer cancels commission (should trigger refund)
+  // Upload finished track as artist (mirror test_commission_flow.js logic)
+  const FormData = (await import('form-data')).default;
+  const form = new FormData();
+  form.append('commissionId', commissionId);
+  let __dirname;
+  if (typeof __filename === 'undefined') {
+    const url = new URL(import.meta.url);
+    __dirname = path.dirname(url.pathname.startsWith('/') && process.platform === 'win32' ? url.pathname.slice(1) : url.pathname);
+  } else {
+    __dirname = path.dirname(__filename);
+  }
+  const samplePath = path.join(__dirname, 'test-assets', 'sample.mp3');
+  form.append('file', fs.createReadStream(samplePath));
+  const uploadRes = await axios.post(`${BASE_URL}/commission/upload-finished`, form, {
+    headers: {
+      ...form.getHeaders(),
+      Authorization: `Bearer ${artistToken}`
+    }
+  });
+  const finishedTrackUrl = uploadRes.data.finishedTrackUrl;
+  const previewTrackUrl = uploadRes.data.previewTrackUrl;
+  console.log("Finished track uploaded for commission:", finishedTrackUrl);
+  console.log("Preview track for client to check:", previewTrackUrl);
+
+  // 5. Customer downloads and checks the preview
+  if (previewTrackUrl) {
+    const previewRes = await axios.get(`${BASE_URL}/commission/preview-for-client`, {
+      params: { commissionId },
+      headers: { Authorization: `Bearer ${customerToken}` },
+      responseType: 'stream'
+    });
+    const previewFilePath = path.join(__dirname, 'test-assets', 'commission_preview.mp3');
+    const writer = fs.createWriteStream(previewFilePath);
+    previewRes.data.pipe(writer);
+    await new Promise((resolve, reject) => {
+      writer.on('finish', resolve);
+      writer.on('error', reject);
+    });
+    console.log('Preview track downloaded to:', previewFilePath);
+  } else {
+    console.warn('No preview track URL returned!');
+  }
+
+  // 6. Customer cancels the commission (should trigger refund, only allowed during preview phase)
   try {
     const cancelRes = await axios.post(`${BASE_URL}/commission/cancel`, {
       commissionId,
@@ -88,6 +151,24 @@ async function main() {
   } catch (err) {
     console.error('Error cancelling commission:', err.response ? err.response.data : err);
   }
+
+  // 7. Try to download finished commission after cancellation (should fail)
+  try {
+    await axios.get(`${BASE_URL}/commission/finished-commission`, {
+      params: { commissionId },
+      headers: { Authorization: `Bearer ${customerToken}` },
+      responseType: 'stream'
+    });
+    console.error('ERROR: Was able to download finished commission after cancellation!');
+  } catch (err) {
+    console.log('As expected, cannot download finished commission after cancellation:', err.response ? err.response.data : err);
+  }
+
+  // Output for manual verification
+  console.log("\n--- Commission Cancel/Refund Flow Test Complete ---");
+  console.log("Commission ID:", commissionId);
+  console.log("Customer Token:", customerToken);
+  console.log("Artist Token:", artistToken);
 }
 
 main().catch(e => {
