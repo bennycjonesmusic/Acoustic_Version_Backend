@@ -102,11 +102,14 @@ let artistId, artistRes;
 
   // 7. Customer pays (get Stripe Checkout URL and wait for manual payment)
   console.log('[TEST DEBUG] Creating Stripe Checkout session for commission payment...');
+  console.log('[TEST] About to trigger Stripe Checkout/payment for commission:', commissionId);
   const paymentSessionRes = await axios.post(`${BASE_URL}/commission/pay`, { commissionId }, {
     headers: { Authorization: `Bearer ${customerToken}` }
   });
   const paymentCheckoutUrl = paymentSessionRes.data.sessionUrl || (paymentSessionRes.data.sessionId && `https://checkout.stripe.com/pay/${paymentSessionRes.data.sessionId}`);
+  console.log('[TEST DEBUG] Stripe Checkout session response:', paymentSessionRes.data);
   if (paymentCheckoutUrl) {
+    console.log('[TEST DEBUG] About to open Stripe Checkout URL:', paymentCheckoutUrl);
     console.log("\n--- ACTION REQUIRED ---");
     console.log("Open this Stripe Checkout URL in your browser and complete the payment:");
     console.log(paymentCheckoutUrl);
@@ -114,6 +117,7 @@ let artistId, artistRes;
     // Wait for user to press Enter before continuing
     const readline = (await import('readline')).default;
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    console.log('[TEST DEBUG] Waiting for user to signal payment completion...');
     await new Promise(resolve => rl.question('Press Enter after completing payment in Stripe Checkout...', () => { rl.close(); resolve(); }));
     console.log('[TEST DEBUG] User signaled payment completed.');
   }

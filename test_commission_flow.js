@@ -167,9 +167,8 @@ async function main() {
   console.log('Artist accepted commission:', acceptRes.data);
 
   // 3c. Customer pays for the commission (Stripe Checkout session)
-  const paymentSessionRes = await axios.post(`${BASE_URL}/commission/pay`, {
-    commissionId
-  }, {
+  console.log('[TEST] About to trigger Stripe Checkout/payment for commission:', commissionId);
+  const paymentSessionRes = await axios.post(`${BASE_URL}/commission/pay`, { commissionId }, {
     headers: { Authorization: `Bearer ${customerToken}` }
   });
   const paymentCheckoutUrl = paymentSessionRes.data.sessionUrl || (paymentSessionRes.data.sessionId && `https://checkout.stripe.com/pay/${paymentSessionRes.data.sessionId}`);

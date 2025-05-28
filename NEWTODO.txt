@@ -1,0 +1,61 @@
+# NEXT STEPS FOR SCALABILITY & FEATURE IMPROVEMENTS
+
+## 1a. Public Endpoint Caching (Redis)
+- Integrate Redis as a cache layer for public GET endpoints (tracks, artists, featured, etc.).
+- Use cache keys based on request params (e.g., `/tracks?page=1&filter=...`).
+- Set sensible TTLs (e.g., 60s for listings, 300s for featured content).
+- Invalidate or update cache on relevant data changes (track upload, artist update, etc.).
+- Add a utility (e.g., `utils/cache.js`) to wrap Redis get/set/del logic for easy reuse.
+- Document which endpoints are cached and how to bypass cache for debugging (e.g., `?noCache=1`).
+- Monitor cache hit/miss rates and tune as needed.
+
+## 1. Scalability & Codebase Improvements
+- Refactor controllers and routes for modularity and maintainability (group by domain, use service layers if needed).
+- Implement pagination and filtering for all list endpoints (tracks, users, commissions, etc.).
+- Add caching (e.g., Redis) for frequently accessed public endpoints (featured tracks, artists, etc.).
+- Use environment-based config for all secrets, S3, DB, and third-party keys.
+- Add request validation and error handling middleware globally.
+- Add logging (e.g., Winston, Morgan) for API requests and errors.
+- Write automated integration and unit tests for all endpoints (Jest, Supertest).
+- Consider rate limiting per-user for sensitive endpoints (not just global/IP).
+- Prepare for horizontal scaling: ensure all file uploads, sessions, and jobs are stateless or externalized (S3, Redis, etc.).
+- Document all endpoints and business logic (Swagger/OpenAPI or markdown docs).
+
+## 2. Artist Schema Improvements
+- Add a boolean field to the Artist schema: `availableForCommissions` (default: false).
+- Add a field to the Artist schema: `maxCommissionTime` (number, in days or hours).
+  - Use this value in the automatic commission expiry/refund logic (instead of a hardcoded 2 weeks).
+- Update commission creation and expiry logic to respect each artist's `maxCommissionTime`.
+
+## 3. Artist Audition Track (Profile Gating)
+- Add a field to the Artist schema: `auditionTrack` (S3 URL or file reference).
+- Implement an endpoint for artists to upload an audition track (with validation, file type, length, etc.).
+- Add logic so that an artist's profile remains private until an audition track is uploaded and approved (by admin or auto-approval logic).
+- Update public endpoints to only show artists with `profileStatus: 'public'` (add this field if needed).
+- Notify artists when their audition track is approved and their profile is public.
+
+## 4. General
+- Review and optimize all DB queries (add indexes where needed).
+- Monitor and optimize S3 usage and costs.
+- Regularly review security (auth, file upload, input validation, etc.).
+
+---
+
+# TODO: Commission Payout Improvements
+
+- Move commission payouts to a cron job:
+  - Regularly check for commissions that are approved and ready for payout.
+  - Before paying out, check if the Stripe payment has been received and is available in the platform's available balance.
+  - Only trigger payout to the artist when funds are confirmed as available.
+- Optionally, log payout attempts and errors for audit and debugging.
+- Remove or disable direct payout trigger from the frontend/customer action (if desired).
+- Consider making payout interval configurable (e.g., every 5 minutes, hourly, etc.).
+
+# Notes
+- This will make payouts more robust and prevent payout failures due to Stripe settlement delays.
+- See server.js and commissionControl.js for current logic.
+
+**Priority:**
+1. Add `availableForCommissions` and `maxCommissionTime` to Artist schema and update commission logic.
+2. Implement audition track upload and profile gating for artists.
+3. Begin scalability and codebase improvements.

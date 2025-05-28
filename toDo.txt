@@ -103,6 +103,8 @@ import User from '../models/User.js';
 
 const router = express.Router();
 
+require('vs/base/common/event').LeakageMonitor._threshold = 50;
+
 ---
 
 MAY 2025: STRATEGIC & FINANCIAL GROWTH IDEAS
