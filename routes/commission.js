@@ -108,6 +108,7 @@ router.post('/pay', authMiddleware, async (req, res) => {
       },
     });
     console.log('[COMMISSION PAY] Stripe checkout session created:', session.id, session.url);
+
     commission.stripeSessionId = session.id;
     await commission.save();
     return res.status(200).json({ sessionId: session.id, sessionUrl: session.url });

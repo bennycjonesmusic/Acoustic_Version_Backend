@@ -32,6 +32,10 @@ async function main() {
   await mongoose.connect(process.env.MONGODB_URI);
   console.log('Connected to MongoDB');
 
+  // Clear CommissionRequest collection before running test
+  await CommissionRequest.deleteMany({});
+  console.log('Cleared CommissionRequest collection.');
+
   // 1. Login as customer and artist
   console.log('[TEST DEBUG] Logging in as customer...');
   const customerToken = await login(CUSTOMER_EMAIL, CUSTOMER_PASSWORD);
@@ -44,7 +48,7 @@ async function main() {
     throw new Error('Login failed, no tokens returned');
     console.error('Customer token:', customerToken);
     console.error('Artist token:', artistToken);
-  }
+  } 
 let artistId, artistRes;
   // 2. Get artist userId
   try { // try-catch because error keeps happening here
@@ -89,7 +93,12 @@ let artistId, artistRes;
     headers: { Authorization: `Bearer ${customerToken}` }
   });
   const commissionId = commissionReq.data.commissionId || commissionReq.data._id || commissionReq.data.id;
+  // Log and assert price breakdown for transparency
   console.log("Commission request created:", commissionId);
+  console.log("Commission price breakdown:", commissionReq.data);
+  if (commissionReq.data.artistPrice !== 10) throw new Error('artistPrice should be 10');
+  if (commissionReq.data.platformCommission !== 1.5) throw new Error('platformCommission should be 1.5');
+  if (commissionReq.data.finalPrice !== 11.5) throw new Error('finalPrice should be 11.5');
 
   // 6. Artist accepts commission
   console.log('[TEST DEBUG] Artist accepting commission...');

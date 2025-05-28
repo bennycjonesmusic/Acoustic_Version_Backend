@@ -2,6 +2,8 @@ import axios from 'axios';
 import FormData from 'form-data';
 import fs from 'fs';
 import path from 'path';
+import mongoose from 'mongoose';
+import CommissionRequest from '../models/CommissionRequest.js'; // Adjust the path as necessary
 
 const BASE_URL = 'http://localhost:3000';
 
@@ -32,6 +34,13 @@ async function login(email, password) {
 }
 
 async function main() {
+  await mongoose.connect(process.env.MONGODB_URI);
+  console.log('Connected to MongoDB');
+
+  // Clear CommissionRequest collection before running test
+  await CommissionRequest.deleteMany({});
+  console.log('Cleared CommissionRequest collection.');
+
   // 0. Register customer and artist if not already present
   try {
     await axios.post(`${BASE_URL}/auth/register`, {
@@ -143,7 +152,7 @@ async function main() {
   // 3. Create a commission request as customer
   const commissionReq = await axios.post(`${BASE_URL}/commission/request`, {
     title: "Test Commission Track",
-    description: "Please create a test track for automation.", // Add required description field
+    description: "Please create a test track for automation.",
     artist: artistId,
     requirements: "Please create a test track for automation.",
     key: "C",
@@ -151,8 +160,12 @@ async function main() {
   }, {
     headers: { Authorization: `Bearer ${customerToken}` }
   });
-  // Log the full response for debugging
+  // Log and assert price breakdown for transparency
   console.log("Commission request response:", commissionReq.data);
+  console.log("Commission price breakdown:", commissionReq.data);
+  if (commissionReq.data.artistPrice !== 10) throw new Error('artistPrice should be 10');
+  if (commissionReq.data.platformCommission !== 1.5) throw new Error('platformCommission should be 1.5');
+  if (commissionReq.data.finalPrice !== 11.5) throw new Error('finalPrice should be 11.5');
   // Try to extract commissionId from multiple possible fields
   const commissionId = commissionReq.data.commissionId || commissionReq.data._id || commissionReq.data.id;
   console.log("Commission request created:", commissionId);

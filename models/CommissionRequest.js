@@ -12,6 +12,7 @@ const commissionRequestSchema = new mongoose.Schema({
   },
   stripeSessionId: { type: String },
   stripePaymentIntentId: { type: String },
+  stripeTransferId: { type: String }, // <-- Add this line
   finishedTrackUrl: { type: String },
   previewTrackUrl: { type: String },
   createdAt: { type: Date, default: Date.now },

@@ -47,18 +47,21 @@ export const refundTrackPurchase = async (req, res) => {
 
 export const createCommissionRequest = async (req, res) => {
     try {
-        const { artist: artistId, requirements, price, ...rest } = req.body;
+        const { artist: artistId, requirements, ...rest } = req.body;
         const customerId = req.userId;
-        console.log('[createCommissionRequest] artistId:', artistId, 'customerId:', customerId, 'requirements:', requirements, 'price:', price, 'rest:', rest);
-        // Fetch artist to get their commissionPrice if price not provided
+        console.log('[createCommissionRequest] artistId:', artistId, 'customerId:', customerId, 'requirements:', requirements, 'rest:', rest);
+        // Fetch artist to get their commissionPrice
         const artist = await User.findById(artistId);
         console.log('[createCommissionRequest] artist lookup result:', artist);
         if (!artist) return res.status(404).json({ error: 'Artist not found' });
-        let finalPrice = price;
-        if (typeof finalPrice !== 'number' || isNaN(finalPrice) || finalPrice <= 0) {
-            finalPrice = artist.commissionPrice || 0;
-        }
-        if (!finalPrice || finalPrice <= 0) {
+        const artistPrice = Number(artist.commissionPrice) || 0;
+        const platformCommissionRate = 0.15; // 15% platform fee
+        const platformCommission = Math.round(artistPrice * platformCommissionRate * 100) / 100; // round to 2 decimals
+        const finalPrice = Math.round((artistPrice + platformCommission) * 100) / 100;
+        console.log('[createCommissionRequest] artist.commissionPrice:', artist.commissionPrice);
+        console.log('[createCommissionRequest] platformCommission:', platformCommission);
+        console.log('[createCommissionRequest] finalPrice (customer pays):', finalPrice);
+        if (!artistPrice || artistPrice <= 0) {
             return res.status(400).json({ error: 'No valid commission price set for this artist.' });
         }
         const commission = await CommissionRequest.create({
@@ -99,10 +102,15 @@ export const createCommissionRequest = async (req, res) => {
         commission.stripeSessionId = session.id;
         await commission.save();
 
+        // Respond with detailed price breakdown for transparency
+        console.log('[createCommissionRequest] Response price breakdown:', { artistPrice, platformCommission, finalPrice });
         return res.status(200).json({
             sessionId: session.id,
             sessionUrl: session.url, // Add the Stripe Checkout URL for frontend/manual use
             commissionId: commission._id,
+            artistPrice,
+            platformCommission,
+            finalPrice
         });
     }
     catch(error){

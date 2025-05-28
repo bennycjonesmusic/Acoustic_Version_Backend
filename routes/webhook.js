@@ -3,6 +3,7 @@ import Stripe from 'stripe';
 import User from '../models/User.js';
 import BackingTrack from '../models/backing_track.js';
 import { sendPurchaseReceiptEmail, sendSaleNotificationEmail } from '../utils/emailAuthentication.js';
+import fs from 'fs';
 
 const router = express.Router();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -14,7 +15,13 @@ console.log('[WEBHOOK DEBUG] Loaded STRIPE_WEBHOOK_SECRET:', process.env.STRIPE_
 
 //no json for webhook 
 router.post('/', express.raw({ type: 'application/json' }), async (req, res) => {
-  console.log('[WEBHOOK DEBUG] Incoming POST /webhook');
+  console.log('[WEBHOOK DEBUG] Incoming POST /webhook - RAW BODY LENGTH:', req.body.length);
+  try {
+    fs.writeFileSync('webhook_raw_body.log', req.body);
+  } catch (e) {
+    console.error('[WEBHOOK DEBUG] Failed to write raw body to file:', e);
+  }
+
   const sig = req.headers['stripe-signature'];
   let event;
 

@@ -103,8 +103,14 @@ mongoose.connect(process.env.MONGODB_URI)
     });
 const app = express();
 
+app.use((req, res, next) => {
+  console.log('[GLOBAL DEBUG]', req.method, req.url);
+  next();
+});
+
 //define the middleware. This will be used to parse the incoming requests. It allows frontend to communicate with the backend.
 app.use(cors());
+console.log('[SERVER DEBUG] Importing and registering /webhook route');
 // Register the webhook route BEFORE any body parsers!
 app.use('/webhook', webhookRoutes);
 app.use(express.json());

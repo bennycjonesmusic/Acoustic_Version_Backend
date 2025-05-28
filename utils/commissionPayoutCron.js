@@ -56,6 +56,7 @@ export async function processCommissionPayouts() {
           artistId: artist._id.toString(),
         }
       });
+      console.log('[PAYOUT CRON] Transfer object:', transfer);
       commission.status = 'paid';
       commission.stripeTransferId = transfer.id;
       await commission.save();
