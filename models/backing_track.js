@@ -62,7 +62,7 @@ const backingTrackSchema = new mongoose.Schema({
 
     type: String,
     enum: ["Acoustic Guitar", "Piano", "Full Arrangement Track", "Other"],
-    default: "Guitar",
+    default: "Acoustic Guitar",
 
 
   },

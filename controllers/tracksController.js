@@ -7,6 +7,7 @@ import { parseKeySignature } from '../utils/parseKeySignature.js';
 import { uploadTrackSchema, reviewSchema, commentSchema } from './validationSchemas.js';
 import * as Filter from 'bad-words';
 import { sendFollowersNewTrack } from '../utils/updateFollowers.js';
+import path from 'path';
 
 
 
@@ -106,6 +107,7 @@ export const uploadTrack = async (req, res) => {
 
         // --- 30-second preview logic ---
         let previewUrl = null;
+        const previewPath = tempFilePath + '-preview.mp3'; // Define previewPath
         const { getAudioPreview } = await import('../utils/audioPreview.js');
         try {
             // Write buffer to temp file for ffmpeg
@@ -125,12 +127,12 @@ export const uploadTrack = async (req, res) => {
             console.log('Assigned previewUrl:', previewUrl);
             // Clean up temp files
             fs.unlinkSync(previewPath);
-            fs.unlinkSync(previewPath + '-full');
+            fs.unlinkSync(tempFilePath + '-full');
         } catch (err) {
             console.error('Error generating/uploading preview:', err);
             // Clean up temp files if they exist
             try { fs.existsSync(previewPath) && fs.unlinkSync(previewPath); } catch {}
-            try { fs.existsSync(previewPath + '-full') && fs.unlinkSync(previewPath + '-full'); } catch {}
+            try { fs.existsSync(tempFilePath + '-full') && fs.unlinkSync(tempFilePath + '-full'); } catch {}
             // Add error message for debugging
             previewUrl = null;
             res.locals.previewError = err && err.message ? err.message : 'Unknown error generating preview';
@@ -234,6 +236,26 @@ export const deleteTrack = async (req, res) => {
         };
         await User.findByIdAndUpdate(req.userId, { $pull: { uploadedTracks: req.params.id } }, { new: true });
         await s3Client.send(new DeleteObjectCommand(deleteParameters));
+        // Delete preview from S3 if it exists
+        if (Track.previewUrl) {
+            try {
+                // Extract the S3 key from the previewUrl
+                const url = new URL(Track.previewUrl);
+                // S3 key is everything after the bucket name
+                // e.g. https://bucket.s3.amazonaws.com/previews/1234-sample.mp3
+                // key = previews/1234-sample.mp3
+                const keyMatch = url.pathname.match(/^\/?(.+)/);
+                const previewKey = keyMatch ? keyMatch[1] : null;
+                if (previewKey) {
+                    await s3Client.send(new DeleteObjectCommand({
+                        Bucket: process.env.AWS_BUCKET_NAME,
+                        Key: previewKey,
+                    }));
+                }
+            } catch (err) {
+                console.error('Error deleting preview from S3:', err);
+            }
+        }
         await BackingTrack.findByIdAndDelete(req.params.id);
         return res.status(200).json({ message: 'Track and file deleted' });
     } catch (error) {
