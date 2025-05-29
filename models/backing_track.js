@@ -190,11 +190,12 @@ backingTrackSchema.methods.getShareUrl = function () {
 backingTrackSchema.methods.calculateAverageRating = function () {
   if (this.ratings.length === 0) {
     this.averageRating = 0;
+    this.numOfRatings = 0;
     return;
   }
-
   const total = this.ratings.reduce((sum, rating) => sum + rating.stars, 0); // Calculate total stars
   this.averageRating = total / this.ratings.length; // Calculate average
+  this.numOfRatings = this.ratings.length;
 }
 
 // Virtual for musical key

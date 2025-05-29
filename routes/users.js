@@ -11,7 +11,7 @@ import {searchUserByName
 
   
 } from '../controllers/publicController.js';
-import { addArtistReview, getArtistReviews, sortUploadedOrPurchasedTracks, followArtist, deleteArtistReview, getUploadedTracksByUser } from '../controllers/artistController.js';
+import { addArtistReview, getArtistReviews, sortUploadedOrPurchasedTracks, followArtist, unfollowArtist, deleteArtistReview, getUploadedTracksByUser } from '../controllers/artistController.js';
 import { uploadArtistExample, getArtistExamples, deleteArtistExample } from '../controllers/artistExamplesController.js';
 import avatarUpload from '../middleware/avatar_upload.js';
 import { updateProfile } from '../controllers/authController.js';
@@ -29,6 +29,8 @@ router.post('/review/:id', authMiddleware, addArtistReview);
 router.get('/reviews/:id', authMiddleware, getArtistReviews);
 // Follow an artist
 router.post('/follow/:id', authMiddleware, followArtist);
+
+router.post('/unfollow/:id', authMiddleware, unfollowArtist);
 // Delete your review for an artist
 router.delete('/delete-review/:id', authMiddleware, deleteArtistReview);
 
@@ -57,6 +59,8 @@ router.get('/me', authMiddleware, async (req, res) => {
 // Get all tracks uploaded by a specific user (artist)
 router.get('/users/:id/tracks', authMiddleware, getUploadedTracksByUser);
 router.get('/:id/tracks', getUploadedTracksByUserId);
+
+// Remove the GET /users/:id route for user details (was added for test, now redundant)
 
 export default router;
 

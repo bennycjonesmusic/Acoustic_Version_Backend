@@ -108,6 +108,12 @@ async function main() {
     const ADMIN_PASSWORD = 'Moobslikejabba123456';
     const adminToken = await login(ADMIN_EMAIL, ADMIN_PASSWORD);
 
+    // Fetch admin's user ID for use in review/reviews routes
+    const adminRes = await axios.get(`${BASE_URL}/users/me`, {
+      headers: { Authorization: `Bearer ${adminToken}` }
+    });
+    const adminId = adminRes.data.id || adminRes.data._id || (adminRes.data.user && (adminRes.data.user.id || adminRes.data.user._id));
+
     // Admin uploads a track (sample.mp3) with same logic as artist
     const filePath = path.join(__dirname, 'test-assets', 'sample.mp3');
     const adminTrackForm = new FormData();
@@ -274,55 +280,129 @@ async function main() {
     if (artistUploadRes.data.previewError) {
       throw new Error('Artist track upload preview failed: ' + artistUploadRes.data.previewError);
     }
+    try {
+      // Customer follows artist
+      const followRes = await axios.post(
+        `${BASE_URL}/users/follow/${artistId}`,
+        {},
+        { headers: { Authorization: `Bearer ${customerToken}` } }
+      );
+      console.log('Customer followed artist:', followRes.data);
+      // Verify artist's followers includes customer
+      const artistAfterFollow = await axios.get(
+        `${BASE_URL}/public/users/${artistId}`
+      );
+      if (!artistAfterFollow.data.followers || !artistAfterFollow.data.followers.includes(customerId)) {
+        throw new Error('Customer not found in artist followers after follow');
+      }
+      // Verify customer's following includes artist
+      const customerAfterFollow = await axios.get(
+        `${BASE_URL}/public/users/${customerId}`
+      );
+      if (!customerAfterFollow.data.following || !customerAfterFollow.data.following.includes(artistId)) {
+        throw new Error('Artist not found in customer following after follow');
+      }
+      // Customer unfollows artist
+      const unfollowRes = await axios.post(
+        `${BASE_URL}/users/unfollow/${artistId}`,
+        {},
+        { headers: { Authorization: `Bearer ${customerToken}` } }
+      );
+      console.log('Customer unfollowed artist:', unfollowRes.data);
+      // Verify artist's followers does NOT include customer
+      const artistAfterUnfollow = await axios.get(
+        `${BASE_URL}/public/users/${artistId}`
+      );
+      if (artistAfterUnfollow.data.followers && artistAfterUnfollow.data.followers.includes(customerId)) {
+        throw new Error('Customer still found in artist followers after unfollow');
+      }
+      // Verify customer's following does NOT include artist
+      const customerAfterUnfollow = await axios.get(
+        `${BASE_URL}/public/users/${customerId}`
+      );
+      if (customerAfterUnfollow.data.following && customerAfterUnfollow.data.following.includes(artistId)) {
+        throw new Error('Artist still found in customer following after unfollow');
+      }
+      console.log('Follow/unfollow artist test passed.');
+    } catch (followErr) {
+      console.error('Error in follow/unfollow test:', followErr);
+    }
 
     // Debug: Check if artist track exists in DB immediately after upload
     const artistTrackInDbAfterUpload = await TrackModel.findById(artistUploadedTrackId);
     console.log('Artist track in DB after upload:', artistTrackInDbAfterUpload ? artistTrackInDbAfterUpload.toObject() : null);
+    //customer rates ADMINS track
+    
+    
+    //review/rating/comment logic
+    
+    const rateTrack = await axios.post(`${BASE_URL}/tracks/rate/${adminUploadedTrackId}`, {rating: 5}, { headers: { Authorization: `Bearer ${customerToken}` } });
 
-    // --- ARTIST DELETES THEIR OWN TRACK (permission/ownership test) ---
-    // Artist deletes their own track (should succeed)
-    const artistDeleteRes = await axios.delete(
-      `${BASE_URL}/tracks/${artistUploadedTrackId}`,
-      { headers: { Authorization: `Bearer ${artistToken}` } }
+    console.log('Customer rated admin track:', rateTrack.data);  
+
+    const leaveReview = await axios.post(`${BASE_URL}/users/review/${adminId}`, {review: "Great musician, very professional!"}, { headers: { Authorization: `Bearer ${customerToken}` } });
+    
+    console.log('Customer left review for admin:', leaveReview.data);
+
+    // Comment on the admin's track
+    const commentTrack = await axios.post(
+      `${BASE_URL}/tracks/comment/${adminUploadedTrackId}`,
+      { comment: "Love this track!" },
+      { headers: { Authorization: `Bearer ${customerToken}` } }
     );
-    console.log('Artist delete track response:', artistDeleteRes.data);
+    console.log('Customer commented on admin track:', commentTrack.data);
+    // Assert comment exists in response
+    if (!commentTrack.data.comments || !commentTrack.data.comments.some(c => c.text === "Love this track!")) {
+      throw new Error('Comment not found in response after creation');
+    }
 
-    // --- END ARTIST FLOW ---
+    // Confirm the comment exists on the track before deleting
+    const trackWithComment = await axios.get(
+      `${BASE_URL}/public/tracks/${adminUploadedTrackId}`
+    );
+    const commentsArray = trackWithComment.data.comments || (trackWithComment.data.track && trackWithComment.data.track.comments) || [];
+    const lastCommentId = commentTrack.data.comments && commentTrack.data.comments.length > 0 ? commentTrack.data.comments[commentTrack.data.comments.length - 1]._id : null;
+    const foundComment = commentsArray.find(c => c._id === lastCommentId);
+    if (foundComment) {
+      console.log('Confirmed comment exists on track before deletion:', foundComment);
+    } else {
+      throw new Error('Comment not found on track before deletion!');
+    }
 
-    // (Do NOT attempt to purchase artist's track, only admin's track is purchased)
-  } catch (error) {
-    console.error('Error in main:', error);
+    // Delete the comment just made (by the same user)
+    const commentId = lastCommentId;
+    if (commentId) {
+      const deleteCommentRes = await axios.delete(
+        `${BASE_URL}/tracks/comment/${commentId}`,
+        { headers: { Authorization: `Bearer ${customerToken}` } }
+      );
+      console.log('Customer deleted their comment:', deleteCommentRes.data);
+      // Assert comment is removed in response
+      if (deleteCommentRes.data.comments && deleteCommentRes.data.comments.some(c => c._id === commentId)) {
+        throw new Error('Comment still present in response after deletion');
+      }
+      // Fetch track again and assert comment is gone
+      const trackAfterDelete = await axios.get(
+        `${BASE_URL}/public/tracks/${adminUploadedTrackId}`
+      );
+      const commentsAfterDelete = trackAfterDelete.data.comments || (trackAfterDelete.data.track && trackAfterDelete.data.track.comments) || [];
+      if (commentsAfterDelete.some(c => c._id === commentId)) {
+        throw new Error('Comment still present on track after deletion');
+      }
+    } else {
+      console.log('No commentId found to delete.');
+    }
+  } catch (err) {
+    console.error('Error in test flow:', err);
   } finally {
-    // Cleanup: remove test users and tracks created during the test
+    // Cleanup: Delete test users and tracks created during the test
     try {
-      // Remove test users
       await User.deleteMany({ email: { $regex: new RegExp('^' + TEST_EMAIL + '$', 'i') } });
       await User.deleteMany({ email: { $regex: new RegExp('^' + CUSTOMER_EMAIL + '$', 'i') } });
-      const TrackModel = (await import('./models/backing_track.js')).default;
-      // Fetch test user IDs
-      const artistUser = await User.findOne({ email: { $regex: new RegExp('^' + TEST_EMAIL + '$', 'i') } });
-      const customerUser = await User.findOne({ email: { $regex: new RegExp('^' + CUSTOMER_EMAIL + '$', 'i') } });
-      const artistUserId = artistUser ? artistUser._id : null;
-      const customerUserId = customerUser ? customerUser._id : null;
-      // Remove tracks uploaded by test users (by user ID or uploader field)
-      const trackDeleteQuery = [];
-      if (artistUserId) trackDeleteQuery.push({ user: artistUserId });
-      if (customerUserId) trackDeleteQuery.push({ user: customerUserId });
-      if (artistUserId) trackDeleteQuery.push({ uploader: artistUserId });
-      if (customerUserId) trackDeleteQuery.push({ uploader: customerUserId });
-      // Also fallback to email-based deletion for legacy/test data
-      trackDeleteQuery.push({ 'uploader.email': TEST_EMAIL });
-      trackDeleteQuery.push({ 'uploader.email': CUSTOMER_EMAIL });
-      if (trackDeleteQuery.length > 0) {
-        await TrackModel.deleteMany({ $or: trackDeleteQuery });
-      }
-      // Optionally, delete by test track titles
-      await TrackModel.deleteMany({ title: { $in: ['Admin Test Track', 'Artist Test Track'] } });
-      console.log('Cleanup completed: test users and tracks deleted');
-    } catch (cleanupError) {
-      console.error('Error during cleanup:', cleanupError);
+      console.log('Cleanup completed: test users deleted');
+    } catch (cleanupErr) {
+      console.error('Error during cleanup:', cleanupErr);
     }
-    mongoose.connection.close();
   }
 }
 

@@ -14,6 +14,7 @@ import {
   getPurchasedTracks,
   rateTrack,
   commentTrack,
+  deleteComment, // import deleteComment
   
 } from '../controllers/tracksController.js';
 
@@ -34,6 +35,7 @@ router.get('/tracks/purchased-tracks',authMiddleware, getPurchasedTracks)
 
 router.post('/tracks/rate/:id', authMiddleware, rateTrack); //rate a track by id
 router.post('/tracks/comment/:id', authMiddleware, commentTrack); //comment on a track by id
+router.delete('/tracks/comment/:commentId', authMiddleware, deleteComment); //delete a comment by commentId
 
 router.get('/tracks/download/:id', downloadLimiter, authMiddleware, downloadTrack); //req.params.id = :id needed in route
 

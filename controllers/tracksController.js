@@ -390,6 +390,41 @@ export const commentTrack = async (req, res) => {
   }
 };
 
+export const deleteComment = async (req, res) => {
+  try {
+    const { commentId } = req.params;
+    const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    // Find the track containing the comment
+    const track = await BackingTrack.findOne({ 'comments._id': commentId });
+    if (!track) {
+      return res.status(404).json({ message: 'Comment or track not found' });
+    }
+    // Find the comment
+    const comment = track.comments.id(commentId);
+    if (!comment) {
+      return res.status(404).json({ message: 'Comment not found' });
+    }
+    // Only the user who made the comment can delete it
+    if (comment.user.toString() !== req.userId) {
+      return res.status(403).json({ message: 'You are not authorized to delete this comment.' });
+    }
+    // Remove the comment using splice instead of .remove()
+    const commentIndex = track.comments.findIndex(c => c._id.toString() === commentId);
+    if (commentIndex === -1) {
+      return res.status(404).json({ message: 'Comment not found' });
+    }
+    track.comments.splice(commentIndex, 1);
+    await track.save();
+    return res.status(200).json({ message: 'Comment deleted successfully', comments: track.comments });
+  } catch (error) {
+    console.error('Error deleting comment:', error);
+    return res.status(500).json({ message: 'Failed to delete comment', error: error.message });
+  }
+};
+
 // Get all tracks uploaded by a specific user (by userId param)
 export const getUploadedTracksByUserId = async (req, res) => {
     try {
@@ -400,7 +435,7 @@ export const getUploadedTracksByUserId = async (req, res) => {
         // Remove Array.isArray check, always return the tracks array
         return res.status(200).json({ tracks });
     } catch (error) {
-        console.error('Error fetching tracks for user:', error);
+        console.error('Error fetching tracks by userId:', error);
         return res.status(500).json({ message: 'Internal server error' });
     }
 };

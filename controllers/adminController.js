@@ -167,6 +167,7 @@ export const getSalesStatsAndCsv = async (req, res) => {
           buyer: user.username,
           buyerEmail: user.email,
           trackTitle: p.track?.title,
+          originalArtist: p.track?.originalArtist, // Add originalArtist
           artist: p.track?.user?.username,
           trackId: p.track?._id,
           paymentIntentId: p.paymentIntentId,

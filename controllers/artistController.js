@@ -10,7 +10,7 @@ export const addArtistReview = async (req, res) => {
       return res.status(400).json({ message: 'Review text is required.' });
     }
     // Profanity check using bad-words
-    const filter = new Filter();
+    const filter = new Filter.Filter();
     if (filter.isProfane(review)) {
       return res.status(400).json({ message: 'Please avoid profanity in your review.' });
     }
@@ -105,6 +105,47 @@ export const followArtist = async (req, res) => {
  
 }
 
+export const unfollowArtist = async (req, res) => {
+
+
+  try {
+
+    const user = await User.findById(req.userId); //get id from token
+    const artist = await User.findById(req.params.id);
+
+    const artistId = artist._id || artist.id; 
+    const userId = user._id || user.id;
+
+    if (!user || !artist) {
+      return res.status(404).json({ message: "User/Artist not found" });
+    }
+
+    const followingIndex = user.following.indexOf(artistId);
+    if (followingIndex === -1) {
+      return res.status(400).json({ message: "You are not following this artist" });
+    }
+
+    user.following.splice(followingIndex, 1);
+    await user.save();
+
+    const followerIndex = artist.followers.indexOf(userId);
+    if (followerIndex === -1) {
+      return res.status(400).json({ message: "Artist is not followed by you" });
+    }
+
+    artist.followers.splice(followerIndex, 1);
+    artist.numOfFollowers = artist.followers.length;
+
+    await artist.save();
+    return res.status(200).json({ message: "Successfully unfollowed artist", following: user.following, followers: artist.followers, numOfFollowers: artist.numOfFollowers });
+
+
+    
+  } catch (err) {
+    console.error('Error unfollowing artist:', err);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+}
 
 
 export const deleteArtistReview = async (req, res) => {
