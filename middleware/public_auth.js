@@ -3,6 +3,9 @@ import dotenv from 'dotenv';
 
 // Optional authentication middleware for public routes
 const publicMiddleware = (req, res, next) => {
+  // Diagnostic log to confirm publicMiddleware is called
+  console.log('[publicMiddleware] called', req.method, req.url);
+
   const authHeader = req.header('Authorization');
 
   if (authHeader?.startsWith('Bearer ')) {

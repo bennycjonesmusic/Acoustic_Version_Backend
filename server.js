@@ -159,3 +159,14 @@ console.log(`Server is running on http://localhost:${port}`); //check the consol
 
  //check aws has loaded properly.
 export default app;
+
+app.use((err, req, res, next) => {
+  const timestamp = new Date().toISOString();
+  console.error(`[GLOBAL ERROR HANDLER] [${timestamp}]`);
+  if (err && err.stack) {
+    console.error('Stack:', err.stack);
+  } else {
+    console.error('Error object:', err);
+  }
+  res.status(500).json({ message: 'Internal server error (global handler)' });
+});

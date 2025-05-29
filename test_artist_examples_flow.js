@@ -41,6 +41,8 @@ async function login(email, password) {
 }
 
 async function main() {
+  let adminUploadedTrackId, artistUploadedTrackId;
+  let adminToken, artistToken; // Declare tokens at top for finally block access
   try {
      await mongoose.connect(process.env.MONGODB_URI);
      console.log('Connected to MongoDB');
@@ -86,7 +88,7 @@ async function main() {
     
 
     const customerToken = await login(CUSTOMER_EMAIL, CUSTOMER_PASSWORD);
-    const artistToken = await login(TEST_EMAIL, TEST_PASSWORD);
+    artistToken = await login(TEST_EMAIL, TEST_PASSWORD);
     // Login to get token
    
     const myRes = await axios.get(`${BASE_URL}/users/me`, {
@@ -101,12 +103,12 @@ async function main() {
    
     //get both customer and artist IDS
     const customerId = cusRes.data.id || cusRes.data._id || (cusRes.data.user && (cusRes.data.user.id || cusRes.data.user._id)); //ensure it is correct
-    const artistId = myRes.data.id || myRes.data._id || (myRes.data.user && (myRes.data.user.id || myRes.data.user._id)); //ensure it is correct
+    artistId = myRes.data.id || myRes.data._id || (myRes.data.user && (myRes.data.user.id || myRes.data.user._id)); //ensure it is correct
 
     // Admin login
     const ADMIN_EMAIL = 'acousticversionuk@gmail.com';
     const ADMIN_PASSWORD = 'Moobslikejabba123456';
-    const adminToken = await login(ADMIN_EMAIL, ADMIN_PASSWORD);
+    adminToken = await login(ADMIN_EMAIL, ADMIN_PASSWORD);
 
     // Fetch admin's user ID for use in review/reviews routes
     const adminRes = await axios.get(`${BASE_URL}/users/me`, {
@@ -141,7 +143,7 @@ async function main() {
     );
     console.log('Admin track upload response:', adminUploadRes.data);
     const adminUploadedTrack = adminUploadRes.data.track;
-    const adminUploadedTrackId = adminUploadedTrack._id || adminUploadedTrack.id;
+    adminUploadedTrackId = adminUploadedTrack._id || adminUploadedTrack.id;
     if (!adminUploadedTrack || !adminUploadedTrackId || !adminUploadedTrack.fileUrl || !adminUploadedTrack.previewUrl) {
       throw new Error('Admin track upload failed: missing _id/id, fileUrl, or previewUrl');
     }
@@ -273,7 +275,7 @@ async function main() {
     );
     console.log('Artist track upload response:', artistUploadRes.data);
     const artistUploadedTrack = artistUploadRes.data.track;
-    const artistUploadedTrackId = artistUploadedTrack._id || artistUploadedTrack.id;
+    artistUploadedTrackId = artistUploadedTrack._id || artistUploadedTrack.id;
     if (!artistUploadedTrack || !artistUploadedTrackId || !artistUploadedTrack.fileUrl || !artistUploadedTrack.previewUrl) {
       throw new Error('Artist track upload failed: missing _id/id, fileUrl, or previewUrl');
     }
@@ -392,10 +394,152 @@ async function main() {
     } else {
       console.log('No commentId found to delete.');
     }
+    // --- TEST: Update artist commission price via controller/route ---
+    // Update commission price (e.g., to 42)
+    const newCommissionPrice = 42;
+    const updateCommissionRes = await axios.patch(
+      `${BASE_URL}/users/profile`,
+      { commissionPrice: newCommissionPrice },
+      { headers: { Authorization: `Bearer ${artistToken}` } }
+    );
+    console.log('Artist commission price update response:', updateCommissionRes.data);
+    // Assert commission price was updated
+    if (!updateCommissionRes.data.commissionPrice && !updateCommissionRes.data.user) {
+      throw new Error('No commissionPrice or user returned in update response');
+    }
+    const updatedPrice = updateCommissionRes.data.commissionPrice || (updateCommissionRes.data.user && updateCommissionRes.data.user.commissionPrice);
+    if (updatedPrice !== newCommissionPrice) {
+      throw new Error(`Expected commissionPrice to be ${newCommissionPrice}, got ${updatedPrice}`);
+    }
+    // Optionally, fetch artist profile and assert commissionPrice
+    const artistProfileRes = await axios.get(
+      `${BASE_URL}/users/me`,
+      { headers: { Authorization: `Bearer ${artistToken}` } }
+    );
+    const profilePrice = artistProfileRes.data.commissionPrice || (artistProfileRes.data.user && artistProfileRes.data.user.commissionPrice);
+    if (profilePrice !== newCommissionPrice) {
+      throw new Error(`Artist profile commissionPrice not updated, expected ${newCommissionPrice}, got ${profilePrice}`);
+    }
+    // --- TEST: Featured tracks endpoint after both tracks are uploaded ---
+    const featuredRes = await axios.get(`${BASE_URL}/public/tracks/featured`);
+    console.log('Featured tracks response:', featuredRes.data);
+    // Accept both array and { featured: [...] } response shapes
+    const featuredTracks = Array.isArray(featuredRes.data) ? featuredRes.data : featuredRes.data.featured;
+    if (!Array.isArray(featuredTracks)) {
+      throw new Error('Featured tracks response is not an array');
+    }
+    // Assert both admin and artist tracks are present in featured
+    const adminTrackFound = featuredTracks.some(t => t._id === adminUploadedTrackId || t.id === adminUploadedTrackId);
+    const artistTrackFound = featuredTracks.some(t => t._id === artistUploadedTrackId || t.id === artistUploadedTrackId);
+    if (!adminTrackFound) {
+      throw new Error('Admin uploaded track not found in featured tracks');
+    }
+    if (!artistTrackFound) {
+      throw new Error('Artist uploaded track not found in featured tracks');
+    }
+
+    // --- TEST: Featured artists endpoint ---
+    const featuredArtistsRes = await axios.get(`${BASE_URL}/public/artists/featured`);
+    console.log('Featured artists response:', featuredArtistsRes.data);
+    const featuredArtists = Array.isArray(featuredArtistsRes.data) ? featuredArtistsRes.data : featuredArtistsRes.data.featured;
+    if (!Array.isArray(featuredArtists)) {
+      throw new Error('Featured artists response is not an array');
+    }
+    // Assert that at least one artist is present (should include the test artist)
+    const testArtistFound = featuredArtists.some(a => a._id === artistId || a.id === artistId);
+    if (!testArtistFound) {
+      throw new Error('Test artist not found in featured artists');
+    }
+    console.log('Featured artists test passed.');
+    // --- TEST: Download purchased track (should succeed) ---
+    const downloadRes = await axios.get(
+      `${BASE_URL}/tracks/download/${adminUploadedTrackId}`,
+      {
+        headers: { Authorization: `Bearer ${customerToken}` },
+        responseType: 'arraybuffer',
+        validateStatus: null
+      }
+    );
+    console.log('Download status:', downloadRes.status);
+    console.log('Download content-type:', downloadRes.headers['content-type']);
+    console.log('First 32 bytes:', Buffer.from(downloadRes.data).toString('hex').slice(0, 64));
+    if (downloadRes.status !== 200) {
+      throw new Error(`Download failed for purchased track, status: ${downloadRes.status}`);
+    }
+    if (!downloadRes.headers['content-type'] || !downloadRes.headers['content-type'].includes('audio')) {
+      throw new Error('Downloaded file is not an audio file');
+    }
+    // Assert that the file is not empty
+    if (!downloadRes.data || downloadRes.data.length < 1000) {
+      throw new Error('Downloaded audio file is unexpectedly small or empty');
+    }
+    console.log('Audio file download test passed.');
+    // Optionally, save the file to disk for manual inspection
+    // fs.writeFileSync(path.join(__dirname, 'downloaded_track.mp3'), downloadRes.data);
+
+    // --- TEST: Download unpurchased track (should fail) ---
+    const deniedRes = await axios.get(
+      `${BASE_URL}/tracks/download/${artistUploadedTrackId}`,
+      {
+        headers: { Authorization: `Bearer ${customerToken}` },
+        responseType: 'arraybuffer',
+        validateStatus: null
+      }
+    );
+    if (deniedRes.status === 200) {
+      throw new Error('Download succeeded for unpurchased track (should fail)');
+    }
   } catch (err) {
     console.error('Error in test flow:', err);
   } finally {
-    // Cleanup: Delete test users and tracks created during the test
+    // --- TEST: Delete uploaded tracks (admin and artist) ---
+    // Delete admin's uploaded track
+    try {
+      const deleteAdminTrackRes = await axios.delete(
+        `${BASE_URL}/tracks/${adminUploadedTrackId}`,
+        { headers: { Authorization: `Bearer ${adminToken}` } }
+      );
+      console.log('Admin track deleted:', deleteAdminTrackRes.data);
+      // Optionally assert success
+      if (deleteAdminTrackRes.status !== 200) {
+        throw new Error('Failed to delete admin uploaded track');
+      }
+      // Try to fetch the track, should 404 or not exist
+      try {
+        await axios.get(`${BASE_URL}/public/tracks/${adminUploadedTrackId}`);
+        throw new Error('Admin track still accessible after deletion');
+      } catch (err) {
+        if (!err.response || err.response.status !== 404) {
+          throw new Error('Unexpected error when fetching deleted admin track: ' + (err.response ? err.response.status : err.message));
+        }
+        console.log('Confirmed admin track is not accessible after deletion.');
+      }
+    } catch (err) {
+      console.error('Error deleting admin uploaded track:', err);
+    }
+    // Delete artist's uploaded track
+    try {
+      const deleteArtistTrackRes = await axios.delete(
+        `${BASE_URL}/tracks/${artistUploadedTrackId}`,
+        { headers: { Authorization: `Bearer ${artistToken}` } }
+      );
+      console.log('Artist track deleted:', deleteArtistTrackRes.data);
+      if (deleteArtistTrackRes.status !== 200) {
+        throw new Error('Failed to delete artist uploaded track');
+      }
+      try {
+        await axios.get(`${BASE_URL}/public/tracks/${artistUploadedTrackId}`);
+        throw new Error('Artist track still accessible after deletion');
+      } catch (err) {
+        if (!err.response || err.response.status !== 404) {
+          throw new Error('Unexpected error when fetching deleted artist track: ' + (err.response ? err.response.status : err.message));
+        }
+        console.log('Confirmed artist track is not accessible after deletion.');
+      }
+    } catch (err) {
+      console.error('Error deleting artist uploaded track:', err);
+    }
+    // Cleanup: Delete test users created during the test
     try {
       await User.deleteMany({ email: { $regex: new RegExp('^' + TEST_EMAIL + '$', 'i') } });
       await User.deleteMany({ email: { $regex: new RegExp('^' + CUSTOMER_EMAIL + '$', 'i') } });
@@ -405,5 +549,8 @@ async function main() {
     }
   }
 }
+
+
+    // ...existing code...
 
 main();

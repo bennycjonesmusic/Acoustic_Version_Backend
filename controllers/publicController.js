@@ -5,6 +5,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken'; //going to use in register as well, to authenticate email
 import User from '../models/User.js';
 import BackingTrack from '../models/backing_track.js';
+import CommissionRequest from '../models/CommissionRequest.js';
 import * as Filter from 'bad-words'; //package to prevent profanity
 import zxcvbn from 'zxcvbn'; //package for password strength
 import { validateEmail } from '../utils/emailValidator.js';
@@ -98,75 +99,86 @@ export const getUserDetails = async (req, res) => {
 // --- PUBLIC TRACK ENDPOINTS MOVED FROM tracksController.js ---
 
 export const getFeaturedTracks = async (req, res) => {
+    console.log('[getFeaturedTracks] ENTERED');
+    // get popular and recent tracks
+    const popularTracks = await BackingTrack.find({ isPrivate: false }).sort({ purchaseCount: -1 }).limit(10).populate('user', 'avatar username');
+    console.log('[getFeaturedTracks] popularTracks:', popularTracks.length);
+    const recentTracks = await BackingTrack.find({ isPrivate: false }).sort({ createdAt: -1 }).limit(10).populate('user', 'avatar username');
+    console.log('[getFeaturedTracks] recentTracks:', recentTracks.length);
 
-    try {
+    // exclude popular and recent tracks from the random selection
+    let excludeIds = [
+        ...popularTracks.map(track => track._id),
+        ...recentTracks.map(track => track._id)
+    ];
+    excludeIds = excludeIds.filter(id => id && typeof id.equals === 'function');
+    console.log('[getFeaturedTracks] excludeIds:', excludeIds.length);
 
-        //get popular and recent tracks
-        const popularTracks = await BackingTrack.find({isPrivate:false}).sort({ purchaseCount: -1}).limit(10).populate('user', 'avatar username');
-        const recentTracks = await BackingTrack.find({isPrivate:false}).sort({ createdAt: -1}).limit(10).populate('user', 'avatar username');
-        
-        // exclude popular and recent tracks from the random selection
-        const excludeIds = [
-            ...popularTracks.map(track => track._id),
-            ...recentTracks.map(track => track._id)
-        ];
-        const randomTracks = await BackingTrack.aggregate([
-            { $match: { _id: { $nin: excludeIds } }, isPrivate:false }, //Exclude popular and recent tracks
-            { $sample: { size: 5 } }
-        ]);
-        // Populate user for randomTracks
-        const randomTrackIds = randomTracks.map(track => track._id);
-        const randomTracksPopulated = await BackingTrack.find({ _id: { $in: randomTrackIds } }).populate('user', 'avatar username');
-        // Merge all tracks
-        const featured = [...popularTracks, ...randomTracksPopulated, ...recentTracks]; //Merge the arrays in a super array
-        return res.status(200).json(toTrackSummary(featured));
-
-
-    } catch (error) {
-        console.error('Error getting featured tracks:', error);
-        return res.status(500).json({message: "Internal server error"});
-
-
-
-
-
+    // If all tracks are excluded, skip aggregation
+    const totalTracks = await BackingTrack.countDocuments({ isPrivate: false });
+    console.log('[getFeaturedTracks] totalTracks:', totalTracks);
+    if (excludeIds.length >= totalTracks) {
+        const featured = [...popularTracks, ...recentTracks];
+        const filtered = featured.filter(Boolean);
+        console.log('[getFeaturedTracks] returning early, filtered.length:', filtered.length);
+        return res.status(200).json(toTrackSummary(filtered));
     }
 
-
-
-
-
-    
+    // isPrivate:false must be inside $match
+    let randomTracks = [];
+    randomTracks = await BackingTrack.aggregate([
+        { $match: { _id: { $nin: excludeIds }, isPrivate: false } },
+        { $sample: { size: 5 } }
+    ]);
+    console.log('[getFeaturedTracks] randomTracks:', randomTracks.length);
+    const randomTrackIds = randomTracks.map(track => track._id).filter(id => id);
+    console.log('[getFeaturedTracks] randomTrackIds:', randomTrackIds.length);
+    let randomTracksPopulated = [];
+    if (randomTrackIds.length > 0) {
+        randomTracksPopulated = await BackingTrack.find({ _id: { $in: randomTrackIds } }).populate('user', 'avatar username');
+        console.log('[getFeaturedTracks] randomTracksPopulated:', randomTracksPopulated.length);
+    }
+    // Merge all tracks
+    const featured = [...popularTracks, ...randomTracksPopulated, ...recentTracks];
+    const filtered = featured.filter(Boolean);
+    console.log('[getFeaturedTracks] final filtered.length:', filtered.length);
+    return res.status(200).json(toTrackSummary(filtered));
 }
 
 export const getFeaturedArtists = async (req, res) => {
-
-try {
-
-// Only show approved artists with at least one example
-const featuredArtists = await User.find({
-  role: 'artist',
-  profileStatus: 'approved',
-  'artistExamples.0': { $exists: true }
-}).sort({ amountOfTracksSold: -1, averageTrackRating: -1 }).limit(10);
-const featureRandom = await User.aggregate([
-  { $match: { role: 'artist', profileStatus: 'approved', 'artistExamples.0': { $exists: true } } },
-  { $sample: { size: 5 } }
-]);
-const featured = [...featuredArtists, ...featureRandom]; //Merge the arrays in a super array.
-
-return res.status(200).json(toUserSummary(featured))
-
-
-}
-catch(error) {
-    console.error('Error getting featured artists:', error);
-    return res.status(500).json({ message: "Internal server error" });
-
-
-
-
-}
+    try {
+        // Find artists with at least one uploaded track OR at least one commission as artist, and approved profile
+        const featuredArtists = await User.find({
+            role: 'artist',
+            profileStatus: 'approved',
+            $or: [
+                { uploadedTracks: { $exists: true, $not: { $size: 0 } } },
+                // Artists with at least one commission as artist
+                { _id: { $in: await CommissionRequest.distinct('artist') } }
+            ]
+        }).limit(10);
+        // Exclude those already found from random selection
+        const excludeIds = featuredArtists.map(a => a._id);
+        // Find random additional artists with same criteria
+        const commissionArtistIds = await CommissionRequest.distinct('artist');
+        const featureRandom = await User.aggregate([
+            { $match: {
+                _id: { $nin: excludeIds },
+                role: 'artist',
+                profileStatus: 'approved',
+                $or: [
+                    { uploadedTracks: { $exists: true, $not: { $size: 0 } } },
+                    { _id: { $in: commissionArtistIds } }
+                ]
+            } },
+            { $sample: { size: 5 } }
+        ]);
+        const featured = [...featuredArtists, ...featureRandom]; //Merge the arrays in a super array.
+        return res.status(200).json(toUserSummary(featured))
+    } catch (error) {
+        console.error('Error getting featured artists:', error);
+        return res.status(500).json({ message: "Internal server error" });
+    }
 }
 
 export const queryTracks = async (req, res) => {

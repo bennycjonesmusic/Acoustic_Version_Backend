@@ -101,6 +101,7 @@ export const uploadTrack = async (req, res) => {
             Body: fs.createReadStream(tempFilePath),
             ACL: 'private',
             StorageClass: 'STANDARD',
+            ContentType: req.file.mimetype, // Ensure correct audio content type
         };
         const data = await new Upload({ client: s3Client, params: uploadParams }).done();
         fs.unlinkSync(tempFilePath);
@@ -435,7 +436,7 @@ export const getUploadedTracksByUserId = async (req, res) => {
         // Remove Array.isArray check, always return the tracks array
         return res.status(200).json({ tracks });
     } catch (error) {
-        console.error('Error fetching tracks by userId:', error);
+        console.error('Error fetching tracks by user ID:', error);
         return res.status(500).json({ message: 'Internal server error' });
     }
 };
