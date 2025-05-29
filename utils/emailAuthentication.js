@@ -27,6 +27,7 @@ export const sendVerificationEmail = async (email, token) => {
     `,
   };
 
+  if (process.env.NODE_ENV === 'test') return;
   await transporter.sendMail(mailOptions);
 };
 
@@ -43,6 +44,7 @@ export const sendPasswordResetEmail = async (email, token) => {
       <p>If you did not request this, you can ignore this email.</p>
     `,
   };
+  if (process.env.NODE_ENV === 'test') return;
   await transporter.sendMail(mailOptions);
 };
 
@@ -61,6 +63,7 @@ export const sendPurchaseReceiptEmail = async (buyerEmail, track, artist, sessio
       <p>Order ID: ${session.id}</p>
     `,
   };
+  if (process.env.NODE_ENV === 'test') return;
   await transporter.sendMail(mailOptions);
 };
 
@@ -76,5 +79,6 @@ export const sendSaleNotificationEmail = async (sellerEmail, track, buyer, sessi
       <p>Order ID: ${session.id}</p>
     `,
   };
+  if (process.env.NODE_ENV === 'test') return;
   await transporter.sendMail(mailOptions);
 };

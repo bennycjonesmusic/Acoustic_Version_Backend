@@ -100,8 +100,31 @@ const backingTrackSchema = new mongoose.Schema({
 
   licenseStatus: {
     type: String,
-    enum: ['unlicensed', 'licensed', 'pending'],
-    default: 'pending',
+    enum: ['unlicensed', 'licensed', 'not_required'],
+    default: 'not_required',
+  },
+
+  licensedFrom: {
+
+    type: String,
+    validate: {
+
+      validator: function(val) {
+      if (this.licenseStatus === 'licensed') {
+
+
+
+        return typeof val === 'string' && val.trim().length > 0; //ensure not empty
+      }
+
+      return true;
+    
+
+    },
+      message: 'Licensed from must be a non-empty string when licenseStatus is "licensed".'
+    }
+
+
   },
 
   downloadCount: {
@@ -194,7 +217,7 @@ backingTrackSchema.set('toJSON', {
     delete ret._id;
     delete ret.__v;
     delete ret.s3Key;
-    delete ret.downloadCount
+
   
 
     const viewerRole = options?.viewerRole || 'user';
@@ -204,10 +227,9 @@ backingTrackSchema.set('toJSON', {
     const isSelf = viewerId && ret.user && ret.user.toString() === viewerId.toString();
     // Show less details if not admin or self (owner)
     if (viewerRole === 'public' || (!isAdmin && !isSelf)) {
-      // Example: hide downloadCount, licenseStatus, etc. (customize as needed)
+      // Hide downloadCount and licenseStatus for public and non-owners
       delete ret.downloadCount;
       delete ret.licenseStatus;
-      
       // add to hide more stuff. Check when on frontend and adjust as needed.
     }
 

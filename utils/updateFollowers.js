@@ -30,6 +30,7 @@ export const sendFollowersNewTrack = async (userEmail, artist, newTrack) => {
     `,
   };
 
+  if (process.env.NODE_ENV === 'test') return;
   await transporter.sendMail(mailOptions);
 };
 
@@ -53,5 +54,6 @@ export const sendCommissionPreviewEmail = async (customerEmail, artist, commissi
     `,
   };
 
+  if (process.env.NODE_ENV === 'test') return;
   await transporter.sendMail(mailOptions);
 };

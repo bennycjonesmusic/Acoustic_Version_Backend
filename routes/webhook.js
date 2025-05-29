@@ -4,6 +4,9 @@ import User from '../models/User.js';
 import BackingTrack from '../models/backing_track.js';
 import { sendPurchaseReceiptEmail, sendSaleNotificationEmail } from '../utils/emailAuthentication.js';
 import fs from 'fs';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const router = express.Router();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -40,6 +43,8 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
   // Handle successful checkout
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object;
+    // Log metadata for debugging
+    console.log('[WEBHOOK DEBUG] session.metadata:', session.metadata);
     // Handle standard track purchase (existing logic)
     if (session.metadata && session.metadata.userId && session.metadata.trackId) {
       const userId = session.metadata.userId;
@@ -49,7 +54,7 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
       if (user && track) {
         // Only add if not already purchased
         const alreadyPurchased = user.purchasedTracks.some(
-          p => p.track.equals(track._id) && !p.refunded
+          p => p.track.toString() === track._id.toString() && !p.refunded
         );
         if (!alreadyPurchased) {
           user.purchasedTracks.push({
@@ -60,9 +65,9 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
             refunded: false
           });
           await user.save();
+          // Only increment purchaseCount if not already purchased
+          track.purchaseCount = (track.purchaseCount || 0) + 1;
         }
-        // Optionally increment download or purchase count
-        track.purchaseCount = (track.purchaseCount || 0) + 1;
         const artist = await User.findById(track.user);
         if (artist) {
           artist.amountOfTracksSold += 1;
@@ -72,11 +77,11 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
         await track.save();
         console.log(`Purchase recorded for ${user.email}`);
         // Send purchase receipt to buyer
-        if (user.email) {
+        if (user.email && process.env.NODE_ENV !== 'test') {
           await sendPurchaseReceiptEmail(user.email, track, artist, session);
         }
         // Send sale notification to seller
-        if (artist && artist.email) {
+        if (artist && artist.email && process.env.NODE_ENV !== 'test') {
           await sendSaleNotificationEmail(artist.email, track, user, session);
         }
       } else {
@@ -116,17 +121,17 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
           }
           console.log(`[WEBHOOK DEBUG] Commission payment received for commission ${commissionId}, status is now ${commission.status}.`);
           // Send purchase receipt to client and notification to artist (commission)
-          if (commission.customer && commission.customer.email) {
+          if (commission.customer && commission.customer.email && process.env.NODE_ENV !== 'test') {
             console.log('[WEBHOOK DEBUG] Sending purchase receipt email to customer:', commission.customer.email);
             await sendPurchaseReceiptEmail(commission.customer.email, commission, commission.artist, session);
           } else {
-            console.log('[WEBHOOK DEBUG] No customer email found for commission:', commissionId);
+            console.log('[WEBHOOK DEBUG] No customer email found for commission or in test mode:', commissionId);
           }
-          if (commission.artist && commission.artist.email) {
+          if (commission.artist && commission.artist.email && process.env.NODE_ENV !== 'test') {
             console.log('[WEBHOOK DEBUG] Sending sale notification email to artist:', commission.artist.email);
             await sendSaleNotificationEmail(commission.artist.email, commission, commission.customer, session);
           } else {
-            console.log('[WEBHOOK DEBUG] No artist email found for commission:', commissionId);
+            console.log('[WEBHOOK DEBUG] No artist email found for commission or in test mode:', commissionId);
           }
         } else {
           console.error('[WEBHOOK DEBUG] Commission not found:', commissionId);

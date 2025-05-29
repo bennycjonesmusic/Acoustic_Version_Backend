@@ -112,7 +112,7 @@ app.use((req, res, next) => {
 app.use(cors());
 console.log('[SERVER DEBUG] Importing and registering /webhook route');
 // Register the webhook route BEFORE any body parsers!
-app.use('/webhook', webhookRoutes);
+app.use('/webhook/stripe', webhookRoutes); // <-- Change to match Stripe CLI forwarding
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

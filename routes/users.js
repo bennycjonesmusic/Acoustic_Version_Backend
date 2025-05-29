@@ -11,11 +11,12 @@ import {searchUserByName
 
   
 } from '../controllers/publicController.js';
-import { addArtistReview, getArtistReviews, sortUploadedOrPurchasedTracks, followArtist, deleteArtistReview } from '../controllers/artistController.js';
+import { addArtistReview, getArtistReviews, sortUploadedOrPurchasedTracks, followArtist, deleteArtistReview, getUploadedTracksByUser } from '../controllers/artistController.js';
 import { uploadArtistExample, getArtistExamples, deleteArtistExample } from '../controllers/artistExamplesController.js';
 import avatarUpload from '../middleware/avatar_upload.js';
 import { updateProfile } from '../controllers/authController.js';
 import User from '../models/User.js';
+import { getUploadedTracksByUserId } from '../controllers/tracksController.js';
 
 
 const router = express.Router();
@@ -52,6 +53,10 @@ router.get('/me', authMiddleware, async (req, res) => {
     res.status(500).json({ message: 'Internal server error' });
   }
 });
+
+// Get all tracks uploaded by a specific user (artist)
+router.get('/users/:id/tracks', authMiddleware, getUploadedTracksByUser);
+router.get('/:id/tracks', getUploadedTracksByUserId);
 
 export default router;
 

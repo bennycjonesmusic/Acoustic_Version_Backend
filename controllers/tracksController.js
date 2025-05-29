@@ -153,7 +153,10 @@ export const uploadTrack = async (req, res) => {
             vocalRange: req.body.vocalRange,
             instructions: req.body.instructions || '',
             youtubeGuideUrl: req.body.youtubeGuideUrl || '',
-            guideTrackUrl: req.body.guideTrackUrl || ''
+            guideTrackUrl: req.body.guideTrackUrl || '',
+            licenseStatus: req.body.licenseStatus,
+            licensedFrom: req.body.licensedFrom
+
         });
         await newTrack.save();
         const updateUser = await User.findByIdAndUpdate(req.userId, { $push: { uploadedTracks: newTrack._id } }, { new: true });
@@ -217,7 +220,11 @@ export const deleteTrack = async (req, res) => {
         if (!Track) {
             return res.status(404).json({ message: "Track not found." });
         }
-        if (Track.user.toString() !== req.userId) {
+        // Only allow the uploader (track.user) or an admin to delete the track
+        const requestingUser = await User.findById(req.userId);
+        const isUploader = Track.user.toString() === req.userId;
+        const isAdmin = requestingUser && requestingUser.role === 'admin';
+        if (!isUploader && !isAdmin) {
             return res.status(403).json({ message: "You are not authorized to delete this track." });
         }
         if (!Track.s3Key) {
@@ -235,6 +242,16 @@ export const deleteTrack = async (req, res) => {
             Key: Track.s3Key,
         };
         await User.findByIdAndUpdate(req.userId, { $pull: { uploadedTracks: req.params.id } }, { new: true });
+        // Remove track from all users' purchasedTracks arrays
+        await User.updateMany(
+          { 'purchasedTracks.track': Track._id },
+          { $pull: { purchasedTracks: { track: Track._id } } }
+        );
+        // Remove track from all users' uploadedTracks arrays (should only be uploader, but for safety)
+        await User.updateMany(
+          { uploadedTracks: Track._id },
+          { $pull: { uploadedTracks: Track._id } }
+        );
         await s3Client.send(new DeleteObjectCommand(deleteParameters));
         // Delete preview from S3 if it exists
         if (Track.previewUrl) {
@@ -371,4 +388,19 @@ export const commentTrack = async (req, res) => {
     console.error('Error adding comment:', error);
     return res.status(500).json({ message: 'Failed to add comment', error: error.message });
   }
+};
+
+// Get all tracks uploaded by a specific user (by userId param)
+export const getUploadedTracksByUserId = async (req, res) => {
+    try {
+        const userId = req.params.id;
+        console.log('[DEBUG] getUploadedTracksByUserId userId param:', userId);
+        const tracks = await BackingTrack.find({ user: userId }).sort({ createdAt: -1 });
+        console.log('[DEBUG] getUploadedTracksByUserId found tracks:', tracks.map(t => ({id: t._id, user: t.user, title: t.title})));
+        // Remove Array.isArray check, always return the tracks array
+        return res.status(200).json({ tracks });
+    } catch (error) {
+        console.error('Error fetching tracks for user:', error);
+        return res.status(500).json({ message: 'Internal server error' });
+    }
 };

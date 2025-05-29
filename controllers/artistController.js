@@ -184,3 +184,17 @@ export const deleteArtistReview = async (req, res) => {
   }
 };
 
+// Get all tracks uploaded by a specific user (artist)
+export const getUploadedTracksByUser = async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id).populate('uploadedTracks');
+    if (!user) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+    return res.status(200).json({ tracks: user.uploadedTracks || [] });
+  } catch (error) {
+    console.error('Error fetching uploaded tracks by user:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+

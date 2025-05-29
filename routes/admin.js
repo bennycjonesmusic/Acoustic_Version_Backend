@@ -17,7 +17,7 @@ router.post('/approve-artist/:id', authMiddleware, isOwner, approveArtist);
 router.post('/reject-artist/:id', authMiddleware, isOwner, rejectArtist);
 
 
-  router.post('/test-delete-user', authMiddleware, isAdmin, deleteUserByEmail);
+router.delete('/test-delete-user', authMiddleware, isAdmin, deleteUserByEmail);
 
 
 export default router;

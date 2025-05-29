@@ -245,10 +245,13 @@ export const rejectArtist = async (req, res) => {
 };
 
 // TEST-ONLY: Delete a user by email (for test automation)
+// This function ONLY deletes the user document. It does NOT delete or modify any tracks, even if the user is an artist/uploader.
+// This ensures that deleting a customer never affects tracks uploaded by other users (artists/admins).
 export const deleteUserByEmail = async (req, res) => {
   const { email } = req.body;
   if (!email) return res.status(400).json({ message: 'Email required' });
   try {
+    // Only delete the user document. Do NOT delete or modify any tracks.
     const user = await User.findOneAndDelete({ email });
     if (!user) return res.status(404).json({ message: 'User not found' });
     return res.status(200).json({ message: 'User deleted', userId: user._id });
