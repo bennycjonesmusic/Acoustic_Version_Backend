@@ -194,3 +194,12 @@ cron.schedule('0 4 * * *', async () => {
 }, {
   timezone: 'Europe/London'
 });
+
+import('./utils/deleteUnusedAvatars.js').then(module => {
+  // Run once on server start
+  module.default?.();
+  // Schedule to run every 24 hours (86,400,000 ms)
+  setInterval(() => {
+    module.default?.();
+  }, 24 * 60 * 60 * 1000);
+});

@@ -91,6 +91,36 @@ async function main() {
 
     const customerToken = await login(CUSTOMER_EMAIL, CUSTOMER_PASSWORD);
     artistToken = await login(TEST_EMAIL, TEST_PASSWORD);
+
+    // --- TEST: Update customer avatar ---
+    const avatarPath = path.join(__dirname, 'test-assets', 'ottopic.jpg');
+    const avatarForm = new FormData();
+    avatarForm.append('avatar', fs.createReadStream(avatarPath));
+    const avatarRes = await axios.patch(
+      `${BASE_URL}/users/profile`,
+      avatarForm,
+      {
+        headers: {
+          ...avatarForm.getHeaders(),
+          Authorization: `Bearer ${customerToken}`
+        }
+      }
+    );
+    console.log('Customer avatar update response:', avatarRes.data);
+    if (!avatarRes.data.user || !avatarRes.data.user.avatar) {
+      throw new Error('Avatar not set after upload');
+    }
+    // --- TEST: Remove customer avatar ---
+    const removeAvatarRes = await axios.patch(
+      `${BASE_URL}/users/profile`,
+      { avatar: '' },
+      { headers: { Authorization: `Bearer ${customerToken}` } }
+    );
+    console.log('Customer avatar remove response:', removeAvatarRes.data);
+    if (removeAvatarRes.data.user && removeAvatarRes.data.user.avatar) {
+      throw new Error('Avatar not removed after setting to empty string');
+    }
+
     // Login to get token
    
     const myRes = await axios.get(`${BASE_URL}/users/me`, {
