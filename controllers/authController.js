@@ -416,13 +416,19 @@ export const updateProfile = async (req, res) => {
         return res.status(400).json({ message: 'Commission price must be a non-negative number.' });
       }
       updates.commissionPrice = price;
+      // Also update customerCommissionPrice to keep in sync (matches User.js logic)
+      const platformCommissionRate = 0.15;
+      updates.customerCommissionPrice = Math.round((price + (price * platformCommissionRate)) * 100) / 100;
     }
   
     // No need to validate avatar here, multer-s3 already does it
 
     Object.assign(user, updates);
     await user.save();
-    return res.status(200).json({ message: 'Profile updated.', user });
+    // Ensure customerCommissionPrice is included in the response
+    const userObj = user.toObject();
+    userObj.customerCommissionPrice = user.customerCommissionPrice;
+    return res.status(200).json({ message: 'Profile updated.', user: userObj });
   } catch (err) {
     return res.status(500).json({ message: 'Failed to update profile.' });
   }

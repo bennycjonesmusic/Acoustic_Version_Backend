@@ -121,6 +121,11 @@ async function main() {
       headers: { Authorization: `Bearer ${artistToken}` }
     });
     console.log('Set artist commissionPrice to £10:', setPriceRes.data);
+    // Test: customerCommissionPrice should be 11.5 (10 + 1.5)
+    if (!setPriceRes.data.user || setPriceRes.data.user.customerCommissionPrice !== 11.5) {
+      throw new Error('customerCommissionPrice should be 11.5 when commissionPrice is 10, got: ' + (setPriceRes.data.user && setPriceRes.data.user.customerCommissionPrice));
+    }
+    console.log('Verified: customerCommissionPrice is correct:', setPriceRes.data.user.customerCommissionPrice);
   } catch (e) {
     console.log('Error setting artist commissionPrice:', e.response ? e.response.data : e);
     throw e;
@@ -313,6 +318,18 @@ async function main() {
     console.error('Error downloading finished commission:', err.response ? err.response.data : err);
   }
 
+  // Client leaves a review for the artist after commission is complete
+  try {
+    const reviewRes = await axios.post(`${BASE_URL}/users/review/${artistId}`, {
+      review: 'Great commission experience! Highly recommended.'
+    }, {
+      headers: { Authorization: `Bearer ${customerToken}` }
+    });
+    console.log('Client review response:', reviewRes.data);
+  } catch (err) {
+    console.error('Error leaving review for artist:', err.response ? err.response.data : err);
+  }
+
   // Query all tracks for the artist and print their averageRating and ratings
   const BackingTrack = (await import('./models/backing_track.js')).default;
   const artistTracks = await BackingTrack.find({ user: artistId });
@@ -338,6 +355,27 @@ async function main() {
   console.log("Customer Token:", customerToken);
   console.log("Artist Token:", artistToken);
   console.log("\nCheck your database and Stripe dashboard to verify commission payout and track ownership.");
+
+  // 11. Output artist commission price and customer commission price for Stripe comparison
+  try {
+    // Fetch artist from API
+    const artistApiRes = await axios.get(`${BASE_URL}/users/me`, {
+      headers: { Authorization: `Bearer ${artistToken}` }
+    });
+    const apiUser = artistApiRes.data.user || artistApiRes.data;
+    console.log('\n--- Artist API values ---');
+    console.log('API commissionPrice:', apiUser.commissionPrice);
+    console.log('API customerCommissionPrice:', apiUser.customerCommissionPrice);
+    // Fetch artist from DB (direct)
+    const UserModel = (await import('./models/User.js')).default;
+    const dbUser = await UserModel.findById(artistId);
+    console.log('\n--- Artist DB values ---');
+    console.log('DB commissionPrice:', dbUser.commissionPrice);
+    console.log('DB customerCommissionPrice:', dbUser.customerCommissionPrice);
+    console.log('-------------------------\n');
+  } catch (err) {
+    console.error('Error fetching artist commission prices for Stripe comparison:', err.response ? err.response.data : err);
+  }
 }
 
 main().catch(err => {

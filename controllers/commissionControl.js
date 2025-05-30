@@ -166,9 +166,12 @@ export const approveCommissionAndPayout = async (req, res) => {
         if (artist.role !== 'artist' && artist.role !== 'admin') {
             return res.status(403).json({ error: 'Payouts are only allowed to users with role artist or admin.' });
         }
-        const totalAmount = Math.round(commission.price * 100); // pence
-        const platformFee = Math.round(totalAmount * 0.15); // 15% fee
-        const artistAmount = totalAmount - platformFee;
+        // Guarantee artist receives their set price
+        const artistPrice = Number(artist.commissionPrice) || 0;
+        const platformCommissionRate = 0.15; // 15% platform fee
+        const platformFee = Math.round(artistPrice * platformCommissionRate * 100); // pence
+        const artistAmount = Math.round(artistPrice * 100); // pence
+        const totalAmount = artistAmount + platformFee; // for reference
         console.log('[PAYOUT DEBUG]', {
             commissionId: commission._id.toString(),
             totalAmount,

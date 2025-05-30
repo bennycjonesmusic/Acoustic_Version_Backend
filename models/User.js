@@ -71,6 +71,11 @@ const userSchema = new mongoose.Schema({
     min: 0,
     description: 'Default price (in GBP) for a commission from this artist.'
   },
+  customerCommissionPrice: {
+    type: Number,
+    default: 0, // Default is 0 (matches commissionPrice + platform fee if commissionPrice is 0)
+    description: 'Total price client pays (artist price + platform fee)'
+  },
   profileStatus: {
     type: String,
     enum: ['pending', 'approved', 'rejected'],
@@ -85,6 +90,13 @@ const userSchema = new mongoose.Schema({
 userSchema.pre('save', function(next) {
   if (this.email && adminEmails.includes(this.email)) {
     this.role = 'admin';
+  }
+  // Auto-calculate customerCommissionPrice if commissionPrice is set, else set to 0
+  const platformCommissionRate = 0.15; // 15% platform fee
+  if (typeof this.commissionPrice === 'number' && this.commissionPrice > 0) {
+    this.customerCommissionPrice = Math.round((this.commissionPrice + (this.commissionPrice * platformCommissionRate)) * 100) / 100;
+  } else {
+    this.customerCommissionPrice = 0;
   }
   next();
 });
