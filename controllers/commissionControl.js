@@ -38,6 +38,12 @@ export const refundTrackPurchase = async (req, res) => {
         // Mark as refunded
         purchase.refunded = true;
         await user.save();
+
+        const index = user.purchasedTracks.findIndex(pt => pt.track.equals(trackId) && !pt.refunded);
+        if (index !== -1) {
+            user.purchasedTracks.splice(index, 1); //remove purchase from users tracks
+            await user.save();
+        }
         return res.status(200).json({ success: true, refund });
     } catch (error) {
         console.error('Error issuing track refund:', error);
