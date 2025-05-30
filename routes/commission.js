@@ -46,10 +46,10 @@ router.post('/confirm', authMiddleware, confirmOrDenyCommission);
 router.get('/download', authMiddleware, downloadCommissionFile);
 
 // Admin-only: Issue a refund for a regular track purchase (not commission)
-router.post('/admin/track-refund', isAdmin, refundTrackPurchase);
+router.post('/admin/track-refund', authMiddleware, isAdmin, refundTrackPurchase);
 
 // Admin-only: Issue a refund for a commission
-router.post('/admin/refund', isAdmin, refundCommission);
+router.post('/admin/refund', authMiddleware, isAdmin, refundCommission);
 
 // Artist or admin accepts or rejects a commission
 router.post('/artist/respond', artistOrAdminAuthMiddleware, artistRespondToCommission);

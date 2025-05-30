@@ -10,6 +10,7 @@ import { Upload } from '@aws-sdk/lib-storage';
 import path from 'path';
 import fs from 'fs';
 
+//in wrong place
 // Admin-only: Issue a refund for a regular track purchase (not commission)
 export const refundTrackPurchase = async (req, res) => {
     try {
@@ -17,11 +18,13 @@ export const refundTrackPurchase = async (req, res) => {
             return res.status(403).json({ error: 'Not authorized' });
         }
         const { userId, trackId } = req.body;
+        console.log('[REFUND DEBUG] Incoming userId:', userId, 'trackId:', trackId, 'typeof userId:', typeof userId);
         if (!userId || !trackId) {
             return res.status(400).json({ error: 'Missing userId or trackId' });
         }
         // Find user and purchase record
         const user = await User.findById(userId);
+        console.log('[REFUND DEBUG] User found:', !!user, user ? user._id : null);
         if (!user) return res.status(404).json({ error: 'User not found' });
         const purchase = user.purchasedTracks.find(
             p => p.track.equals(trackId) && !p.refunded
@@ -35,15 +38,30 @@ export const refundTrackPurchase = async (req, res) => {
             reason: 'requested_by_customer',
             metadata: { userId, trackId }
         });
-        // Mark as refunded
-        purchase.refunded = true;
-        await user.save();
+        // Check refund status
+        if (refund.status !== 'succeeded' && refund.status !== 'pending') {
+            return res.status(500).json({ error: 'Stripe refund failed', refund });
+        }
 
-        const index = user.purchasedTracks.findIndex(pt => pt.track.equals(trackId) && !pt.refunded);
+               const index = user.purchasedTracks.findIndex(pt => pt.track.equals(trackId) && !pt.refunded);
         if (index !== -1) {
             user.purchasedTracks.splice(index, 1); //remove purchase from users tracks
             await user.save();
         }
+        // Mark as refunded
+        purchase.refunded = true;
+        await user.save();
+
+ 
+
+        // Notify user by email (use shared email utility)
+        try {
+            const { sendRefundNotificationEmail } = await import('../utils/emailAuthentication.js');
+            await sendRefundNotificationEmail(user.email, trackId, refund.status);
+        } catch (mailErr) {
+            console.error('Failed to send refund notification email:', mailErr);
+        }
+
         return res.status(200).json({ success: true, refund });
     } catch (error) {
         console.error('Error issuing track refund:', error);

@@ -19,7 +19,7 @@ const TEST_PASSWORD = 'Moobslikejabba123456';
 
 const CUSTOMER_EMAIL = "newcustomer@example.com";
 const CUSTOMER_PASSWORD = "Moobslikejabba123456";
-let artistToken, artistId, exampleId;
+let artistToken, artistId, exampleId, customerId, adminUploadedTrackId;
 
 async function login(email, password) {
 
@@ -43,7 +43,7 @@ async function login(email, password) {
 }
 
 async function main() {
-  let adminUploadedTrackId, artistUploadedTrackId;
+  let artistUploadedTrackId;
   let adminToken, artistToken; // Declare tokens at top for finally block access
   try {
      await mongoose.connect(process.env.MONGODB_URI);
@@ -104,7 +104,7 @@ async function main() {
     });
    
     //get both customer and artist IDS
-    const customerId = cusRes.data.id || cusRes.data._id || (cusRes.data.user && (cusRes.data.user.id || cusRes.data.user._id)); //ensure it is correct
+    customerId = cusRes.data.id || cusRes.data._id || (cusRes.data.user && (cusRes.data.user.id || cusRes.data.user._id)); //ensure it is correct
     artistId = myRes.data.id || myRes.data._id || (myRes.data.user && (myRes.data.user.id || myRes.data.user._id)); //ensure it is correct
 
     // Admin login
@@ -476,8 +476,43 @@ async function main() {
       throw new Error('Downloaded audio file is unexpectedly small or empty');
     }
     console.log('Audio file download test passed.');
-    // Optionally, save the file to disk for manual inspection
-    // fs.writeFileSync(path.join(__dirname, 'downloaded_track.mp3'), downloadRes.data);
+
+    // --- TEST: Admin refunds the purchased track ---
+    console.log('Refund debug: customerId =', customerId, 'adminUploadedTrackId =', adminUploadedTrackId, 'typeof customerId:', typeof customerId, 'typeof adminUploadedTrackId:', typeof adminUploadedTrackId);
+    const refundRes = await axios.post(
+      `${BASE_URL}/commission/admin/track-refund`,
+      { userId: customerId, trackId: adminUploadedTrackId },
+      { headers: { Authorization: `Bearer ${adminToken}` } }
+    );
+    console.log('Refund response:', refundRes.data);
+    if (!refundRes.data.success) {
+      throw new Error('Refund failed: ' + JSON.stringify(refundRes.data));
+    }
+
+    // After refund, customer should no longer have access to the track
+    const customerTracksAfterRefund = await axios.get(
+      `${BASE_URL}/tracks/purchased-tracks`,
+      { headers: { Authorization: `Bearer ${customerToken}` } }
+    );
+    const stillPurchased = (customerTracksAfterRefund.data.tracks || customerTracksAfterRefund.data.purchasedTracks || []).some(
+      pt => pt.track && (pt.track.id === adminUploadedTrackId || pt.track._id === adminUploadedTrackId)
+    );
+    if (stillPurchased) {
+      throw new Error('Track still present in customer purchased tracks after refund');
+    }
+    // Assert download is now denied after refund
+    const deniedAfterRefund = await axios.get(
+      `${BASE_URL}/tracks/download/${adminUploadedTrackId}`,
+      {
+        headers: { Authorization: `Bearer ${customerToken}` },
+        responseType: 'arraybuffer',
+        validateStatus: null
+      }
+    );
+    if (deniedAfterRefund.status === 200) {
+      throw new Error('Download succeeded for refunded track (should fail)');
+    }
+    console.log('Refund test passed: track removed from customer purchased tracks and download is denied.');
 
     // --- TEST: Download unpurchased track (should fail) ---
     const deniedRes = await axios.get(

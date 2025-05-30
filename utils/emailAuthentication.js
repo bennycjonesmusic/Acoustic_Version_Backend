@@ -82,3 +82,14 @@ export const sendSaleNotificationEmail = async (sellerEmail, track, buyer, sessi
   if (process.env.NODE_ENV === 'test') return;
   await transporter.sendMail(mailOptions);
 };
+
+export const sendRefundNotificationEmail = async (email, trackId, refundStatus) => {
+  const mailOptions = {
+    from: `"Backing Tracks" <${process.env.EMAIL_USER}>`,
+    to: email,
+    subject: 'Your track refund has been processed',
+    text: `Your refund for track ID ${trackId} has been processed. If you have any questions, please contact support.\nStripe refund status: ${refundStatus}`
+  };
+  if (process.env.NODE_ENV === 'test') return;
+  await transporter.sendMail(mailOptions);
+};
