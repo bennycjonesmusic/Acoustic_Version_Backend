@@ -7,10 +7,10 @@ import { fileURLToPath } from 'url';
 import path from 'path';
 import dotenv from 'dotenv';
 dotenv.config();
+import mongoose from 'mongoose';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-import mongoose from 'mongoose';
 import User from './models/User.js';
 
 const BASE_URL = 'http://localhost:3000';
@@ -46,7 +46,6 @@ async function main() {
   let artistUploadedTrackId;
   let adminToken, artistToken; // Declare tokens at top for finally block access
   try {
-     await mongoose.connect(process.env.MONGODB_URI);
      console.log('Connected to MongoDB');
    
     
@@ -617,7 +616,10 @@ async function main() {
   }
 }
 
-
-    // ...existing code...
+// Connect to MongoDB before any Mongoose model usage
+await mongoose.connect(process.env.MONGODB_URI);
 
 main();
+
+// At the end of the script, after all DB operations
+await mongoose.disconnect();

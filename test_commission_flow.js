@@ -2,8 +2,8 @@ import axios from 'axios';
 import FormData from 'form-data';
 import fs from 'fs';
 import path from 'path';
-import mongoose from 'mongoose';
 import CommissionRequest from './models/CommissionRequest.js'; // Adjust the path as necessary
+import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 dotenv.config();
 const BASE_URL = 'http://localhost:3000';
@@ -35,8 +35,8 @@ async function login(email, password) {
 }
 
 async function main() {
+  // Connect to MongoDB before any Mongoose model usage
   await mongoose.connect(process.env.MONGODB_URI);
-  console.log('Connected to MongoDB');
 
   // Clear CommissionRequest collection before running test
   await CommissionRequest.deleteMany({});
@@ -376,6 +376,9 @@ async function main() {
   } catch (err) {
     console.error('Error fetching artist commission prices for Stripe comparison:', err.response ? err.response.data : err);
   }
+
+  // At the end of the script, after all DB operations
+  await mongoose.disconnect();
 }
 
 main().catch(err => {

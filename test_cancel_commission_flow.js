@@ -3,6 +3,10 @@
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
+import mongoose from 'mongoose';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const BASE_URL = 'http://localhost:3000';
 const CUSTOMER_EMAIL = 'acousticversionuk@gmail.com';
@@ -16,6 +20,9 @@ async function login(email, password) {
 }
 
 async function main() {
+  // Connect to MongoDB before any Mongoose model usage
+  await mongoose.connect(process.env.MONGODB_URI);
+
   // Register customer and artist (mirror test_commission_flow.js logic)
   try {
     await axios.post(`${BASE_URL}/auth/register`, {
@@ -163,6 +170,9 @@ async function main() {
   } catch (err) {
     console.log('As expected, cannot download finished commission after cancellation:', err.response ? err.response.data : err);
   }
+
+  // At the end of the script, after all DB operations
+  await mongoose.disconnect();
 
   // Output for manual verification
   console.log("\n--- Commission Cancel/Refund Flow Test Complete ---");

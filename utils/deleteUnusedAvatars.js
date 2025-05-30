@@ -15,8 +15,7 @@ const s3 = new S3Client({
 const BUCKET = process.env.AWS_BUCKET_NAME;
 const AVATAR_PREFIX = 'avatars/';
 
-async function main() {
-  await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/backing_tracks');
+export async function deleteUnusedAvatars() {
   // 1. Get all avatar URLs in use
   const users = await User.find({ avatar: { $exists: true, $ne: null } }, 'avatar');
   const usedKeys = new Set();
@@ -51,10 +50,6 @@ async function main() {
     await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }));
   }
   console.log('Done. Deleted', toDelete.length, 'unused avatars.');
-  await mongoose.disconnect();
 }
 
-main().catch(e => {
-  console.error('Error deleting unused avatars:', e);
-  process.exit(1);
-});
+

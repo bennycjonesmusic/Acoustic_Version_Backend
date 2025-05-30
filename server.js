@@ -19,6 +19,7 @@ import { processExpiredCommissions } from './controllers/commissionControl.js';
 import User from './models/User.js';
 import adminEmails from './utils/admins.js'; // Import adminEmails
 import { deleteCron } from './utils/deleteCron.js';
+import { deleteUnusedAvatars } from './utils/deleteUnusedAvatars.js';
 
 // Handle uncaught exceptions and unhandled promise rejections
 process.on('uncaughtException', (err) => {
@@ -28,81 +29,6 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection:', reason);
 });
 
-cron.schedule('0 * * * *', async () => {
-try {
-    console.log("Running cron job to process expired commissions");
-    await processExpiredCommissions({
-
-    body: {},
-    user: {role: "admin"} 
-    }, {
-        status: () => ({ json: (data) => console.log(data) })
-
-    });
-
-
-
-
-
-
-
-
-}
-catch (error) {
-
-    console.error('Error running cron job:', error);
-
-}
-
-
-
-})
-
-//cron job for regular admin adding
-
-cron.schedule('0 * * * *', async () => {
-
-try {
-
-console.log("Running cron job")
-const result = await User.updateMany(
-    { email: {$in: adminEmails} },
-    { $set: { role: 'admin' }}
-
-
-
-
-)
-console.log(`Updated ${result.modifiedCount} users to admin role.`);
-
-} catch (error) {
-    console.error('Error running cron job:', error);
-
-}
-
-});
-// Run admin update immediately on server start
-(async () => {
-  try {
-    console.log("Running initial admin update");
-    const result = await User.updateMany(
-      { email: { $in: adminEmails } },
-      { $set: { role: 'admin' } }
-    );
-    console.log(`Updated ${result.modifiedCount || result.nModified || 0} users to admin role (initial run).`);
-  } catch (error) {
-    console.error('Error running initial admin update:', error);
-  }
-})();
-//connect to MongoDBAtlas. This will store the data.
-mongoose.connect(process.env.MONGODB_URI)
-    
-    .then(() => {
-        console.log('Connected to MongoDB');
-    })
-    .catch((error) => {
-        console.error('Error connecting to MongoDB:', error);
-    });
 const app = express();
 
 app.use((req, res, next) => {
@@ -138,10 +64,7 @@ app.use('/users', userRoutes);
 app.use('/public', publicRoutes);
 app.use('/commission', commissionRoutes);
 app.get('/', (req, res) =>{
-
     res.send('Testing');
-
-
 });
 
 app.use("/protectedUser", authMiddleware, (req, res) => {
@@ -153,13 +76,111 @@ app.use("/protectedArtist", artistAuthMiddleware, (req, res) => {
 });
 const port = 3000; //set the port. This will be the port that the server will listen on. Lovely job.
 
-app.listen(port, () => {
+//connect to MongoDBAtlas. This will store the data.
+mongoose.connect(process.env.MONGODB_URI)
+    .then(() => {
+        console.log('Connected to MongoDB');
+        // --- DB-dependent startup logic below ---
 
+        // Run admin update immediately on server start
+        (async () => {
+          try {
+            console.log("Running initial admin update");
+            const result = await User.updateMany(
+              { email: { $in: adminEmails } },
+              { $set: { role: 'admin' } }
+            );
+            console.log(`Updated ${result.modifiedCount || result.nModified || 0} users to admin role (initial run).`);
+          } catch (error) {
+            console.error('Error running initial admin update:', error);
+          }
+        })();
 
-console.log(`Server is running on http://localhost:${port}`); //check the console to see if server is running
-});
+        // Cron job for regular admin adding
+        cron.schedule('0 * * * *', async () => {
+          try {
+            console.log("Running cron job");
+            const result = await User.updateMany(
+                { email: {$in: adminEmails} },
+                { $set: { role: 'admin' }}
+            );
+            console.log(`Updated ${result.modifiedCount} users to admin role.`);
+          } catch (error) {
+            console.error('Error running cron job:', error);
+          }
+        });
 
- //check aws has loaded properly.
+        // Cron job to process expired commissions
+        cron.schedule('0 * * * *', async () => {
+          try {
+              console.log("Running cron job to process expired commissions");
+              await processExpiredCommissions({
+                body: {},
+                user: {role: "admin"} 
+              }, {
+                  status: () => ({ json: (data) => console.log(data) })
+              });
+          } catch (error) {
+              console.error('Error running cron job:', error);
+          }
+        });
+
+        // Run deleteCron once on server startup
+        (async () => {
+          try {
+            await deleteCron();
+            console.log('Ran deleteCron on server startup.');
+          } catch (err) {
+            console.error('Error running deleteCron on startup:', err);
+          }
+        })();
+
+        // Schedule deleteCron to run every day at 4am UK time (Europe/London)
+        cron.schedule('0 4 * * *', async () => {
+          try {
+            await deleteCron();
+            console.log('Ran deleteCron as scheduled (4am UK time).');
+          } catch (err) {
+            console.error('Error running scheduled deleteCron:', err);
+          }
+        }, {
+          timezone: 'Europe/London'
+        });
+
+        // Run deleteUnusedAvatars on startup and every 24 hours
+        (async () => {
+          try {
+            await deleteUnusedAvatars();
+            setInterval(async () => {
+              await deleteUnusedAvatars();
+            }, 24 * 60 * 60 * 1000);
+          } catch (err) {
+            console.error('Error running deleteUnusedAvatars:', err);
+          }
+        })();
+
+        // Schedule deleteUnusedAvatars to run every 24 hours at 4:05am UK time
+        cron.schedule('5 4 * * *', async () => {
+          try {
+            await deleteUnusedAvatars();
+            console.log('Ran deleteUnusedAvatars as scheduled (4:05am UK time).');
+          } catch (err) {
+            console.error('Error running scheduled deleteUnusedAvatars:', err);
+          }
+        }, {
+          timezone: 'Europe/London'
+        });
+
+        // Start the server only after DB is connected and all startup logic is set up
+        app.listen(port, () => {
+          console.log(`Server is running on http://localhost:${port}`);
+        });
+    })
+    .catch((error) => {
+        console.error('Error connecting to MongoDB:', error);
+    });
+
+//check aws has loaded properly.
 export default app;
 
 app.use((err, req, res, next) => {
@@ -171,35 +192,4 @@ app.use((err, req, res, next) => {
     console.error('Error object:', err);
   }
   res.status(500).json({ message: 'Internal server error (global handler)' });
-});
-
-// Run deleteCron once on server startup
-(async () => {
-  try {
-    await deleteCron();
-    console.log('Ran deleteCron on server startup.');
-  } catch (err) {
-    console.error('Error running deleteCron on startup:', err);
-  }
-})();
-
-// Schedule deleteCron to run every day at 4am UK time (Europe/London)
-cron.schedule('0 4 * * *', async () => {
-  try {
-    await deleteCron();
-    console.log('Ran deleteCron as scheduled (4am UK time).');
-  } catch (err) {
-    console.error('Error running scheduled deleteCron:', err);
-  }
-}, {
-  timezone: 'Europe/London'
-});
-
-import('./utils/deleteUnusedAvatars.js').then(module => {
-  // Run once on server start
-  module.default?.();
-  // Schedule to run every 24 hours (86,400,000 ms)
-  setInterval(() => {
-    module.default?.();
-  }, 24 * 60 * 60 * 1000);
 });

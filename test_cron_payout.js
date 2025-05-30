@@ -29,8 +29,8 @@ async function login(email, password) {
 }
 
 async function main() {
+  // Connect to MongoDB
   await mongoose.connect(process.env.MONGODB_URI);
-  console.log('Connected to MongoDB');
 
   // Clear CommissionRequest collection before running test
   await CommissionRequest.deleteMany({});
@@ -192,6 +192,7 @@ let artistId, artistRes;
   commission = await CommissionRequest.findById(commissionId);
   console.log('Commission after cron payout:', commission.status, commission.stripeTransferId);
 
+  // Disconnect from MongoDB
   await mongoose.disconnect();
   process.exit(0);
 }
