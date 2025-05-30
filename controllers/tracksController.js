@@ -228,6 +228,18 @@ export const deleteTrack = async (req, res) => {
         if (!isUploader && !isAdmin) {
             return res.status(403).json({ message: "You are not authorized to delete this track." });
         }
+
+        if (!isAdmin){ //make it so admin can delete tracks regardless of purchases. DANGEROUS, make sure to only use sparingly.
+        const purchasers = await User.find({ 
+            'purchasedTracks.track': Track._id
+        });
+        if (purchasers.length > 0){
+
+            Track.isDeleted = true; //mark track as deleted, then we will use CRON job to monitor when the track is no longer part of anyones purchases
+            await Track.save();
+            return res.status(200).json({ message: "Track marked as deleted. It will be permanently removed once no longer purchased"});
+        }
+    }
         if (!Track.s3Key) {
             return res.status(400).json({ message: "Track does not have an associated s3Key." });
         }
