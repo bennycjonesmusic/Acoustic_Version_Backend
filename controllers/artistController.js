@@ -22,9 +22,16 @@ export const addArtistReview = async (req, res) => {
     if (artist._id.equals(req.userId)) {
       return res.status(400).json({ message: 'You cannot review yourself.' });
     }
-    // Only allow reviews from users who have bought a track from this artist
+    // Only allow reviews from users who have bought a track or commissioned a track from this artist
     const buyer = await User.findById(req.userId).populate('purchasedTracks.track');
-    const hasPurchased = buyer.purchasedTracks.some(pt => pt.track && pt.track.user && pt.track.user.equals(artist._id) && !pt.refunded);
+    const hasPurchased = buyer.purchasedTracks.some(pt => {
+      if (!pt.track || pt.refunded) return false;
+      // Regular track
+      if (pt.track.user && pt.track.user.equals(artist._id)) return true;
+      // Commission
+      if (pt.track.artist && pt.track.artist.equals(artist._id)) return true;
+      return false;
+    });
     if (!hasPurchased) {
       return res.status(403).json({ message: 'You can only review artists you have purchased from.' });
     }
