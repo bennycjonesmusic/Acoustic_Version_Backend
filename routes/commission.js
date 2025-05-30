@@ -12,7 +12,8 @@ import {
   approveOrDenyCommission,
   getCommissionPreviewForClient,
   getFinishedCommission,
-  cancelCommission
+  cancelCommission,
+  getCommissionById
 } from '../controllers/commissionControl.js';
 import { downloadCommissionFile } from '../controllers/commissionDownloadController.js';
 import authMiddleware from '../middleware/customer_auth.js';
@@ -117,5 +118,8 @@ router.post('/pay', authMiddleware, async (req, res) => {
     return res.status(500).json({ error: 'Failed to create Stripe session' });
   }
 });
+
+// Get commission by ID (customer, artist, or admin)
+router.get('/:id', authMiddleware, getCommissionById);
 
 export default router;

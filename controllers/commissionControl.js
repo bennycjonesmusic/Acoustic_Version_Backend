@@ -561,3 +561,24 @@ export const cancelCommission = async (req, res) => {
         return res.status(500).json({ error: 'Internal server error' });
     }
 };
+
+export const getCommissionById = async (req, res) => {
+  try {
+    const CommissionRequest = (await import('../models/CommissionRequest.js')).default;
+    const commission = await CommissionRequest.findById(req.params.id).populate('artist customer');
+    if (!commission) return res.status(404).json({ error: 'Commission not found' });
+    // Only allow access if user is the customer, artist, or admin
+    const userId = req.userId;
+    const isAdmin = req.user && req.user.role === 'admin';
+    if (
+      commission.customer._id.toString() !== userId &&
+      commission.artist._id.toString() !== userId &&
+      !isAdmin
+    ) {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+    return res.status(200).json(commission);
+  } catch (err) {
+    return res.status(500).json({ error: 'Internal server error', details: err.message || err });
+  }
+};

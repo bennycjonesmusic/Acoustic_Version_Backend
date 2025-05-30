@@ -287,6 +287,13 @@ export const deleteTrack = async (req, res) => {
             }
         }
         await BackingTrack.findByIdAndDelete(req.params.id);
+        // Recalculate averageTrackRating for the user after hard delete
+        if (Track.user) {
+            const artist = await User.findById(Track.user);
+            if (artist && (artist.role === 'artist' || artist.role === 'admin')) {
+                await artist.calculateAverageTrackRating();
+            }
+        }
         return res.status(200).json({ message: 'Track and file deleted' });
     } catch (error) {
         console.error('There was an error deleting track:', error);

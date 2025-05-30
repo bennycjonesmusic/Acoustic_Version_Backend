@@ -174,6 +174,11 @@ const backingTrackSchema = new mongoose.Schema({
   guideTrackUrl: {
     type: String,
     default: ''
+  },
+  isDeleted: {
+
+    type: Boolean,
+    default: false
   }
 
 });

@@ -18,6 +18,8 @@ import cron from 'node-cron';
 import { processExpiredCommissions } from './controllers/commissionControl.js';
 import User from './models/User.js';
 import adminEmails from './utils/admins.js'; // Import adminEmails
+import { deleteCron } from './utils/deleteCron.js';
+
 // Handle uncaught exceptions and unhandled promise rejections
 process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception:', err);
@@ -169,4 +171,26 @@ app.use((err, req, res, next) => {
     console.error('Error object:', err);
   }
   res.status(500).json({ message: 'Internal server error (global handler)' });
+});
+
+// Run deleteCron once on server startup
+(async () => {
+  try {
+    await deleteCron();
+    console.log('Ran deleteCron on server startup.');
+  } catch (err) {
+    console.error('Error running deleteCron on startup:', err);
+  }
+})();
+
+// Schedule deleteCron to run every day at 4am UK time (Europe/London)
+cron.schedule('0 4 * * *', async () => {
+  try {
+    await deleteCron();
+    console.log('Ran deleteCron as scheduled (4am UK time).');
+  } catch (err) {
+    console.error('Error running scheduled deleteCron:', err);
+  }
+}, {
+  timezone: 'Europe/London'
 });

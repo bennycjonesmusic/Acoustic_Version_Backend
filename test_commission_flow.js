@@ -3,8 +3,9 @@ import FormData from 'form-data';
 import fs from 'fs';
 import path from 'path';
 import mongoose from 'mongoose';
-import CommissionRequest from '../models/CommissionRequest.js'; // Adjust the path as necessary
-
+import CommissionRequest from './models/CommissionRequest.js'; // Adjust the path as necessary
+import dotenv from 'dotenv';
+dotenv.config();
 const BASE_URL = 'http://localhost:3000';
 
 const CUSTOMER_EMAIL = 'acousticversionuk@gmail.com';
@@ -311,6 +312,24 @@ async function main() {
   } catch (err) {
     console.error('Error downloading finished commission:', err.response ? err.response.data : err);
   }
+
+  // Query all tracks for the artist and print their averageRating and ratings
+  const BackingTrack = (await import('./models/backing_track.js')).default;
+  const artistTracks = await BackingTrack.find({ user: artistId });
+  console.log('\n--- Artist Tracks and Ratings ---');
+  artistTracks.forEach(track => {
+    console.log(`Track: ${track.title} | averageRating: ${track.averageRating} | ratings:`, track.ratings);
+  });
+  console.log('---------------------------------\n');
+
+  // Query all tracks for the admin and print their averageRating and ratings
+  const adminId = (await (await import('./models/User.js')).default.findOne({ email: ADMIN_EMAIL }))._id;
+  const adminTracks = await BackingTrack.find({ user: adminId });
+  console.log('\n--- Admin Tracks and Ratings ---');
+  adminTracks.forEach(track => {
+    console.log(`Track: ${track.title} | averageRating: ${track.averageRating} | ratings:`, track.ratings);
+  });
+  console.log('---------------------------------\n');
 
   // 10. Output for manual verification
   console.log("\n--- Commission Flow Test Complete ---");
