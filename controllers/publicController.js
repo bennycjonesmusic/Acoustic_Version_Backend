@@ -255,6 +255,11 @@ export const searchTracks = async (req, res) => {
 //find and get a track by id
 export const getTrack = async (req, res) => {
     try {
+
+        const user = req.userId ? await User.findById(req.userId) : null;
+        
+
+     
         if (!req.params.id) {
             return res.status(400).json({ message: 'Please insert a trackId' });
         }
@@ -264,7 +269,8 @@ export const getTrack = async (req, res) => {
         }
         return res.status(200).json(track.toJSON({
             viewerRole: req.user?.role || 'public',
-            viewerId: req.userId || null
+            viewerId: req.userId || null,
+            purchasedTrackIds: user?.purchasedTracks || []
         }));
     } catch (error) {
         return res.status(500).json({ message: 'Internal server error' });

@@ -176,11 +176,9 @@ const backingTrackSchema = new mongoose.Schema({
     default: ''
   },
   isDeleted: {
-
     type: Boolean,
     default: false
-  }
-
+  },
 });
 
 
@@ -243,8 +241,14 @@ backingTrackSchema.set('toJSON', {
     if (doc.previewUrl) {
       ret.previewUrl = doc.previewUrl;
     }
-    // Only show youtubeGuideUrl to buyers or owners or admin
-    if (!(isAdmin || isSelf || (doc.boughtBy && doc.boughtBy.includes(viewerId)))) {
+    // Only show youtubeGuideUrl and guideTrackUrl to buyers, owners, or admin
+    let isBuyer = false;
+    if (Array.isArray(options?.purchasedTrackIds) && ret.id) {
+      isBuyer = options.purchasedTrackIds.some( //grab the purchased track ids from the options passed in by getTrack
+        (trackId) => trackId.toString() === ret.id.toString()
+      );
+    }
+    if (!(isAdmin || isSelf || isBuyer)) {
       delete ret.youtubeGuideUrl;
       delete ret.guideTrackUrl;
     }
