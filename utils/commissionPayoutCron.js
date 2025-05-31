@@ -27,16 +27,19 @@ export async function processCommissionPayouts() {
       }
       // Check available balance
       const balance = await stripeClient.balance.retrieve();
-      const totalAmount = Math.round(commission.price * 100); // pence
-      const platformFee = Math.round(totalAmount * 0.15);
-      const artistAmount = totalAmount - platformFee;
+      // Fetch artist's commissionPrice from populated artist
+      const artist = commission.artist;
+      const artistPrice = Number(artist.commissionPrice) || 0;
+      if (!artistPrice || artistPrice < 1) {
+        console.error(`[PAYOUT CRON] Invalid artist commissionPrice for commission ${commission._id}:`, artist.commissionPrice);
+        continue;
+      }
+      const artistAmount = Math.round(artistPrice * 100); // payout in pence
       const available = balance.available.find(b => b.currency === 'gbp');
       if (!available || available.amount < artistAmount) {
         console.log(`[PAYOUT CRON] Insufficient balance for commission ${commission._id}`);
         continue;
       }
-      // Check artist Stripe account
-      const artist = commission.artist;
       if (!artist.stripeAccountId) {
         console.log(`[PAYOUT CRON] Artist has no Stripe account for commission ${commission._id}`);
         continue;
