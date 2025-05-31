@@ -12,69 +12,69 @@ import { validateEmail } from '../utils/emailValidator.js';
 import { sendVerificationEmail } from '../utils/emailAuthentication.js';
 import { toTrackSummary } from '../utils/trackSummary.js';
 import { toUserSummary } from '../utils/userSummary.js';
+import {escapeRegex, isSafeRegexInput, sanitizeFileName} from '../utils/regexSanitizer.js';
 
 
 
 
 
 export const searchUserByName = async (req, res) => {
-
-try {
-//using this so wont throw error if not logged in :) still want to function as a public route
-    let searcher = null;
-    if (req.userId) {
-      searcher = await User.findById(req.userId);
-    }
-
-const {query, page = 1} = req.query; //destructure query and page from req.query
- 
-if (! query){
-
-    return res.status(400).json({message: "Search query is required"}); //if no query prompt to add query
-
-}
-
-   
-
-
-   const limit = 10;
-    const skip = (page - 1) * limit;
-
-     let users = await User.find({$text: {$search : query}, role: 'artist', profileStatus: 'approved', 'artistExamples.0': { $exists: true }}).sort({score: {$meta: 'textScore'}})
-        .skip(skip).limit(limit).select({ score: { $meta: 'textScore' } }); 
-
-         if (!users.length) {
-      users = await User.find({
-        username: { $regex: query, $options: 'i' },
-        role: 'artist',
-        profileStatus: 'approved',
-        'artistExamples.0': { $exists: true }
-      })
-        .skip(skip)
-        .limit(limit);
-    }
-
-        // Only return summary info for each user
+    try {
+        let searcher = null;
+        if (req.userId) {
+            searcher = await User.findById(req.userId);
+        }
+        const { query, page = 1 } = req.query;
+        // 1. Check for query existence first
+        if (!query) {
+            return res.status(400).json({ message: "Search query is required" });
+        }
+        // 2. Validate query for regex safety
+        if (!isSafeRegexInput(query)) {
+            return res.status(400).json({ message: "Invalid search query" });
+        }
+        // 3. Validate and sanitize pagination
+        let pageNum = parseInt(page, 10);
+        if (isNaN(pageNum) || pageNum < 1) pageNum = 1;
+        const limit = 10;
+        const skip = (pageNum - 1) * limit;
+        // 4. Use raw query for $text search
+        let users = await User.find({ $text: { $search: query }, role: 'artist', profileStatus: 'approved', 'artistExamples.0': { $exists: true } })
+            .sort({ score: { $meta: 'textScore' } })
+            .skip(skip).limit(limit).select({ score: { $meta: 'textScore' } });
+        if (!users.length) {
+            // 5. Use escaped query for $regex fallback
+            const safeQuery = escapeRegex(query);
+            users = await User.find({
+                username: { $regex: safeQuery, $options: 'i' },
+                role: 'artist',
+                profileStatus: 'approved',
+                'artistExamples.0': { $exists: true }
+            })
+                .skip(skip)
+                .limit(limit);
+        }
         return res.status(200).json({ users: toUserSummary(users) });
-        
-
+    } catch (error) {
+        console.error('Error searching user by name:', error);
+        return res.status(500).json({ message: "Internal server error" });
     }
-
-catch (error) {
-    console.error('Error searching user by name:', error);
-    return res.status(500).json({ message: "Internal server error" });
-}
-
-
 }
 
 export const getUserDetails = async (req, res) => {
     try {
         // Populate uploadedTracks if artist/admin
+
+           if (!mongoose.Types.ObjectId.isValid(req.params.id)){
+
+            return res.status(400).json({ message: "Invalid user ID" }); //sanitize inputs to prevent injection attacks.
+        }
         let user = await User.findById(req.params.id);
         if (!user) {
             return res.status(404).json({ message: "User not found" });
         }
+
+     
         // Only populate uploadedTracks for artists/admins... probably redundant since viewerRole edits this out in the toJSON method, but just to be sure.
         if (user.role === 'artist' || user.role === 'admin') {
             // Only show public tracks to public viewers
@@ -183,9 +183,15 @@ export const getFeaturedArtists = async (req, res) => {
 
 export const queryTracks = async (req, res) => {
     try {
-        const { orderBy, page = 1, limit = 10, keySig, "vocal-range": vocalRange } = req.query;
+        const { orderBy, page = 1, limit = 10, keySig, "vocal-range": vocalRange, artistId } = req.query;
         let sort = {};
         let filter = {};
+        // Validate and sanitize pagination
+        let pageNum = parseInt(page, 10);
+        if (isNaN(pageNum) || pageNum < 1) pageNum = 1;
+        let limitNum = parseInt(limit, 10);
+        if (isNaN(limitNum) || limitNum < 1) limitNum = 10;
+        if (limitNum > 50) limitNum = 50;
         if (orderBy == "popularity") sort = { purchaseCount: -1 };
         if (orderBy == "date-uploaded") sort = { createdAt: -1 };
         if (orderBy == "date-uploaded/ascending") sort = { createdAt: 1 };
@@ -207,11 +213,15 @@ export const queryTracks = async (req, res) => {
                 return res.status(400).json({ error: "Something went wrong. Make sure you enter a valid vocal range" });
             }
         }
-        if (req.query.artistId) {
-            filter.user = req.query.artistId;
-        }//filter by artist
-        filter.isPrivate = false; //show show public tracks only
-        const tracks = await BackingTrack.find(filter).sort(sort).skip((page - 1) * limit).limit(limit).populate('user', 'avatar username');
+        // Validate artistId if present
+        if (artistId) {
+            if (!mongoose.Types.ObjectId.isValid(artistId)) {
+                return res.status(400).json({ error: "Invalid artistId" });
+            }
+            filter.user = artistId;
+        }
+        filter.isPrivate = false; //show public tracks only
+        const tracks = await BackingTrack.find(filter).sort(sort).skip((pageNum - 1) * limitNum).limit(limitNum).populate('user', 'avatar username');
         if (!tracks || tracks.length === 0) {
             return res.status(404).json({ message: "No tracks found." });
         }
@@ -225,20 +235,33 @@ export const queryTracks = async (req, res) => {
 export const searchTracks = async (req, res) => {
     try {
         const { query, page = 1 } = req.query;
+
+        // 1. Check for query existence first
         if (!query) {
             return res.status(400).json({ message: "search query is required" });
         }
+        // 2. Validate query for regex safety
+        if (!isSafeRegexInput(query)) {
+            return res.status(400).json({ message: "Invalid search query" });
+        }
+        // 3. Validate and sanitize pagination
+        let pageNum = parseInt(page, 10);
+        if (isNaN(pageNum) || pageNum < 1) pageNum = 1;
         const limit = 10;
-        const skip = (page - 1) * limit;
-        let tracks = await BackingTrack.find({ $text: { $search: query }, isPrivate: false})
+        const skip = (pageNum - 1) * limit;
+
+        // 4. Use raw query for $text search
+        let tracks = await BackingTrack.find({ $text: { $search: query }, isPrivate: false })
             .sort({ score: { $meta: 'textScore' } })
             .skip(skip)
             .limit(limit)
             .select({ score: { $meta: 'textScore' } })
-            .populate('user', 'avatar username'); //we want to be able to display a picture for the tracks
+            .populate('user', 'avatar username');
         if (!tracks.length) {
+            // 5. Use escaped query for $regex fallback
+            const safeQuery = escapeRegex(query);
             tracks = await BackingTrack.find({
-                title: { $regex: query, $options: 'i' },
+                title: { $regex: safeQuery, $options: 'i' },
                 isPrivate: false
             })
                 .skip(skip)
@@ -266,6 +289,11 @@ export const getTrack = async (req, res) => {
         const track = await BackingTrack.findById(req.params.id);
         if (!track) {
             return res.status(404).json({ message: 'Track not found' });
+        }
+
+        if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+
+            return res.status(400).json({ message: 'Invalid track ID' });
         }
         return res.status(200).json(track.toJSON({
             viewerRole: req.user?.role || 'public',

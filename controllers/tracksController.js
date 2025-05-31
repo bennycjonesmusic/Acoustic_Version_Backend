@@ -8,6 +8,7 @@ import { uploadTrackSchema, reviewSchema, commentSchema } from './validationSche
 import * as Filter from 'bad-words';
 import { sendFollowersNewTrack } from '../utils/updateFollowers.js';
 import path from 'path';
+import { sanitizeFileName } from '../utils/regexSanitizer.js';
 
 
 
@@ -67,6 +68,10 @@ try{
 export const uploadTrack = async (req, res) => {
     const { error } = uploadTrackSchema.validate(req.body);
     const Artist = await User.findById(req.userId);
+    const profanity = new Filter.Filter();
+
+
+    
     // Only allow upload if user is artist or admin
     if (Artist.role !== 'artist' && Artist.role !== 'admin') {
       return res.status(403).json({ message: "Only artists or admins can upload tracks." })
@@ -83,10 +88,21 @@ export const uploadTrack = async (req, res) => {
         if (!req.file) {
             return res.status(400).json({ message: 'No file uploaded' });
         }
+            if (profanity.isProfane(req.file.originalname)){
+        return res.status(400).json({ message: "Please avoid using inappropriate language in the track file name."});
+    }
+
+        const sanitizedFileName = sanitizeFileName(req.file.originalname);
+        const fieldsToCheck = ["title", "description", "originalArtist", "instructions"];
+        for (const field of fieldsToCheck) {
+            if (req.body[field] && profanity.isProfane(req.body[field])) {
+                return res.status(400).json({ message: `Please avoid using inappropriate language in the ${field} field.` });
+            }
+        }
         // Write buffer to temp file
         const tmp = await import('os');
         const tmpDir = tmp.tmpdir();
-        const tempFilePath = path.join(tmpDir, `uploadtrack_${Date.now()}_${req.file.originalname}`);
+        const tempFilePath = path.join(tmpDir, `uploadtrack_${Date.now()}_${sanitizedFileName}`);
         fs.writeFileSync(tempFilePath, req.file.buffer);
         const s3Client = new S3Client({
             region: process.env.AWS_REGION,
@@ -97,7 +113,7 @@ export const uploadTrack = async (req, res) => {
         });
         const uploadParams = {
             Bucket: process.env.AWS_BUCKET_NAME,
-            Key: `songs/${Date.now()}-${req.file.originalname}`,
+            Key: `songs/${Date.now()}-${sanitizedFileName}`,
             Body: fs.createReadStream(tempFilePath),            StorageClass: 'STANDARD',
             ContentType: req.file.mimetype, // Ensure correct audio content type
         };
@@ -115,7 +131,7 @@ export const uploadTrack = async (req, res) => {
             // Upload preview to S3
             const previewUploadParams = {
                 Bucket: process.env.AWS_BUCKET_NAME,
-                Key: `previews/${Date.now()}-${req.file.originalname}`,
+                Key: `previews/${Date.now()}-${sanitizedFileName}`,
                 Body: fs.createReadStream(previewPath),                StorageClass: 'STANDARD',
             };
             const previewData = await new Upload({ client: s3Client, params: previewUploadParams }).done();

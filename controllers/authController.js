@@ -13,6 +13,7 @@ import { registerSchema, loginSchema, artistAboutSchema } from './validationSche
 import crypto from 'crypto';
 import adminEmails from '../utils/admins.js';
 import makeAdmin from '../middleware/make_admin.js';
+import { sanitizeFileName } from '../utils/regexSanitizer.js';
 
 //Create...
 export const register = async (req, res) => {
@@ -33,9 +34,11 @@ export const register = async (req, res) => {
                     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
                 },
             });
+            // Sanitize avatar file name
+            const sanitizedAvatarFileName = sanitizeFileName(req.file.originalname);
             const uploadParams = {
                 Bucket: process.env.AWS_BUCKET_NAME,
-                Key: `avatars/${Date.now()}-${req.file.originalname}`,
+                Key: `avatars/${Date.now()}-${sanitizedAvatarFileName}`,
                 Body: Buffer.from(req.file.buffer),
                 ACL: 'private',
                 StorageClass: 'STANDARD',

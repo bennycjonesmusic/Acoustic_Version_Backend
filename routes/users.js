@@ -48,9 +48,9 @@ router.patch('/profile', authMiddleware, avatarUpload.single('avatar'), updatePr
 // Add GET /users/me route
 router.get('/me', authMiddleware, async (req, res) => {
   try {
-    const user = await User.findById(req.userId).lean(); // .lean() returns plain object
+    const user = await User.findById(req.userId); // Removed .lean() to allow .toJSON transform
     if (!user) return res.status(404).json({ message: 'User not found' });
-    res.status(200).json({ user }); // All fields, including stripeAccountId, are visible
+    res.status(200).json({ user });
   } catch (error) {
     res.status(500).json({ message: 'Internal server error' });
   }

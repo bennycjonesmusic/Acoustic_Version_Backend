@@ -141,7 +141,6 @@ userSchema.set('toJSON', {
     const isSelf = viewerId && viewerId.toString() === ret.id;
 
     if (ret.role !== "artist" && ret.role !== "admin") {
-
       delete ret.uploadedTracks;
       delete ret.amountOfTracksSold;
       delete ret.amountOfFollowers;
@@ -149,7 +148,7 @@ userSchema.set('toJSON', {
       delete ret.avatar;
     }
 
-    //show less details if not admin or self
+    // show less details if not admin or self
     if (!isAdmin && !isSelf) {
       delete ret.email;
       delete ret.stripeAccountId;
@@ -157,14 +156,17 @@ userSchema.set('toJSON', {
       delete ret.amountOfFollowers;
       delete ret.purchasedTracks;
       delete ret.totalIncome;
-      // Only show public uploaded tracks to public viewers
       if (Array.isArray(ret.uploadedTracks)) {
         ret.uploadedTracks = ret.uploadedTracks.filter(track => !track.isPrivate);
       }
-      // Hide purchasedTracks from non-admins and non-self
-     
     }
-   
+
+    // Ensure self can always see their own email and stripeAccountId
+    if (isSelf) {
+      if (doc.email) ret.email = doc.email;
+      if (doc.stripeAccountId) ret.stripeAccountId = doc.stripeAccountId;
+    }
+
     return ret;
   }
 });
