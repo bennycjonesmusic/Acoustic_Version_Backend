@@ -23,7 +23,8 @@ const upload = multer({
      storage: multerS3({
         s3: s3,
         bucket: process.env.AWS_BUCKET_NAME,
-        acl: 'public-read', //avatars should be public
+        // avatars should be public
+        acl: 'public-read', // Restored ACL for public avatar access
         contentType: multerS3.AUTO_CONTENT_TYPE,
         key: function (req, file, cb) {
             const ext = getFileExtension(file.originalname);

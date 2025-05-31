@@ -18,6 +18,7 @@ import cron from 'node-cron';
 import { processExpiredCommissions } from './controllers/commissionControl.js';
 import User from './models/User.js';
 import adminEmails from './utils/admins.js'; // Import adminEmails
+import { deleteUnusedAvatars } from './utils/deleteUnusedAvatars.js'; // Import the function to delete unused avatars
 // Handle uncaught exceptions and unhandled promise rejections
 process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception:', err);
@@ -92,6 +93,27 @@ console.log(`Updated ${result.modifiedCount} users to admin role.`);
     console.error('Error running initial admin update:', error);
   }
 })();
+
+// Cron job to delete unused avatars every 24 hours
+cron.schedule('0 3 * * *', async () => {
+  try {
+    console.log('Running daily cron job to delete unused avatars');
+    await deleteUnusedAvatars();
+  } catch (error) {
+    console.error('Error running deleteUnusedAvatars cron job:', error);
+  }
+});
+
+// Run deleteUnusedAvatars immediately on server start
+(async () => {
+  try {
+    console.log('Running initial deleteUnusedAvatars');
+    await deleteUnusedAvatars();
+  } catch (error) {
+    console.error('Error running initial deleteUnusedAvatars:', error);
+  }
+})();
+
 //connect to MongoDBAtlas. This will store the data.
 mongoose.connect(process.env.MONGODB_URI)
     

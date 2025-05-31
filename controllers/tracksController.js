@@ -98,9 +98,7 @@ export const uploadTrack = async (req, res) => {
         const uploadParams = {
             Bucket: process.env.AWS_BUCKET_NAME,
             Key: `songs/${Date.now()}-${req.file.originalname}`,
-            Body: fs.createReadStream(tempFilePath),
-            ACL: 'private',
-            StorageClass: 'STANDARD',
+            Body: fs.createReadStream(tempFilePath),            StorageClass: 'STANDARD',
             ContentType: req.file.mimetype, // Ensure correct audio content type
         };
         const data = await new Upload({ client: s3Client, params: uploadParams }).done();
@@ -118,9 +116,7 @@ export const uploadTrack = async (req, res) => {
             const previewUploadParams = {
                 Bucket: process.env.AWS_BUCKET_NAME,
                 Key: `previews/${Date.now()}-${req.file.originalname}`,
-                Body: fs.createReadStream(previewPath),
-                ACL: 'private',
-                StorageClass: 'STANDARD',
+                Body: fs.createReadStream(previewPath),                StorageClass: 'STANDARD',
             };
             const previewData = await new Upload({ client: s3Client, params: previewUploadParams }).done();
             console.log('S3 preview upload result:', previewData);
@@ -216,6 +212,10 @@ export const listS3 = async (req, res) => {
 
 //delete a track by id
 export const deleteTrack = async (req, res) => {
+    // Validate track ID
+    if (!req.params.id || req.params.id === 'undefined' || !/^[a-fA-F0-9]{24}$/.test(req.params.id)) {
+        return res.status(400).json({ message: "A valid Track ID is required." });
+    }
     try {
         const Track = await BackingTrack.findById(req.params.id);
         if (!Track) {
@@ -455,7 +455,7 @@ export const getUploadedTracksByUserId = async (req, res) => {
         // Remove Array.isArray check, always return the tracks array
         return res.status(200).json({ tracks });
     } catch (error) {
-        console.error('Error fetching tracks by user ID:', error);
+        console.error('Error fetching uploaded tracks by user ID:', error);
         return res.status(500).json({ message: 'Internal server error' });
     }
 };

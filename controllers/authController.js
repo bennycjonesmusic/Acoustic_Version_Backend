@@ -389,6 +389,10 @@ export const updateProfile = async (req, res) => {
     if (req.file && req.file.location) {
       updates.avatar = req.file.location;
     }
+    // If avatar is explicitly set to empty string, remove avatar from user
+    if (req.body.avatar === '') {
+      updates.avatar = undefined;
+    }
 
     if (Object.keys(updates).length === 0) {
       return res.status(400).json({ message: 'No valid fields to update.' });
@@ -430,6 +434,7 @@ export const updateProfile = async (req, res) => {
     userObj.customerCommissionPrice = user.customerCommissionPrice;
     return res.status(200).json({ message: 'Profile updated.', user: userObj });
   } catch (err) {
+    console.error('Error in updateProfile:', err.stack || err);
     return res.status(500).json({ message: 'Failed to update profile.' });
   }
 };

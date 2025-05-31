@@ -115,7 +115,7 @@ async function main() {
 
   // 2b. Set artist commissionPrice to £10
   try {
-    const setPriceRes = await axios.patch(`${BASE_URL}/auth/update-profile`, {
+    const setPriceRes = await axios.patch(`${BASE_URL}/users/profile`, {
       commissionPrice: 10
     }, {
       headers: { Authorization: `Bearer ${artistToken}` }

@@ -47,7 +47,7 @@ async function main() {
   const artistToken = await login(ARTIST_EMAIL, ARTIST_PASSWORD);
 
   // Set artist commissionPrice
-  await axios.patch(`${BASE_URL}/auth/update-profile`, { commissionPrice: 10 }, {
+  await axios.patch(`${BASE_URL}/users/profile`, { commissionPrice: 10 }, {
     headers: { Authorization: `Bearer ${artistToken}` }
   });
 

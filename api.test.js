@@ -1044,13 +1044,13 @@ describe('User Profile and Public Endpoints', () => {
     expect(token).to.exist;
     // Update profile (positive)
     const updateRes = await request(app)
-      .post('/user/update-profile')
+      .patch('/users/profile')
       .set('Authorization', `Bearer ${token}`)
       .send({ about: 'Updated about section.' });
     expect([200, 400, 403, 404]).to.include(updateRes.statusCode);
     // Update profile without auth (negative)
     const unauthRes = await request(app)
-      .post('/user/update-profile')
+      .patch('/users/profile')
       .send({ about: 'Should fail.' });
     expect([401, 403, 404]).to.include(unauthRes.statusCode);
     // Get public endpoints (should always succeed)

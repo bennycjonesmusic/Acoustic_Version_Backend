@@ -64,7 +64,7 @@ let artistId, artistRes;
 }
   // 3. Set artist commissionPrice to £10
   console.log('[TEST DEBUG] Setting artist commission price to £10...');
-  await axios.patch(`${BASE_URL}/auth/update-profile`, { commissionPrice: 10 }, {
+  await axios.patch(`${BASE_URL}/users/profile`, { commissionPrice: 10 }, {
     headers: { Authorization: `Bearer ${artistToken}` }
   });
 

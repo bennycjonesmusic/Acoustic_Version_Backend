@@ -46,6 +46,7 @@ async function main() {
   let artistUploadedTrackId;
   let adminToken, artistToken; // Declare tokens at top for finally block access
   try {
+    await mongoose.connect(process.env.MONGODB_URI);
      console.log('Connected to MongoDB');
    
     
@@ -91,7 +92,7 @@ async function main() {
     const customerToken = await login(CUSTOMER_EMAIL, CUSTOMER_PASSWORD);
     artistToken = await login(TEST_EMAIL, TEST_PASSWORD);
 
-    // --- TEST: Update customer avatar ---
+    // --- TEST: Update artist avatar ---
     const avatarPath = path.join(__dirname, 'test-assets', 'ottopic.jpg');
     const avatarForm = new FormData();
     avatarForm.append('avatar', fs.createReadStream(avatarPath));
@@ -101,26 +102,26 @@ async function main() {
       {
         headers: {
           ...avatarForm.getHeaders(),
-          Authorization: `Bearer ${customerToken}`
+          Authorization: `Bearer ${artistToken}`
         }
       }
     );
-    console.log('Customer avatar update response:', avatarRes.data);
+    console.log('Artist avatar update response:', avatarRes.data);
     if (!avatarRes.data.user || !avatarRes.data.user.avatar) {
       throw new Error('Avatar not set after upload');
     }
-    // --- TEST: Remove customer avatar ---
+    // --- TEST: Remove artist avatar ---
     const removeAvatarRes = await axios.patch(
       `${BASE_URL}/users/profile`,
       { avatar: '' },
-      { headers: { Authorization: `Bearer ${customerToken}` } }
+      { headers: { Authorization: `Bearer ${artistToken}` } }
     );
-    console.log('Customer avatar remove response:', removeAvatarRes.data);
+    console.log('Artist avatar remove response:', removeAvatarRes.data);
     if (removeAvatarRes.data.user && removeAvatarRes.data.user.avatar) {
       throw new Error('Avatar not removed after setting to empty string');
     }
 
-    // Login to get token
+    
    
     const myRes = await axios.get(`${BASE_URL}/users/me`, {
         headers: { Authorization: `Bearer ${artistToken}` }
@@ -556,7 +557,7 @@ async function main() {
       throw new Error('Download succeeded for unpurchased track (should fail)');
     }
   } catch (err) {
-    console.error('Error in test flow:', err);
+    console.error('Error in test flow:', err.stack || err);
   } finally {
     // --- TEST: Delete uploaded tracks (admin and artist) ---
     // Delete admin's uploaded track
@@ -581,7 +582,7 @@ async function main() {
         console.log('Confirmed admin track is not accessible after deletion.');
       }
     } catch (err) {
-      console.error('Error deleting admin uploaded track:', err);
+      console.error('Error deleting admin uploaded track:', err.stack || err);
     }
     // Delete artist's uploaded track
     try {
@@ -603,7 +604,7 @@ async function main() {
         console.log('Confirmed artist track is not accessible after deletion.');
       }
     } catch (err) {
-      console.error('Error deleting artist uploaded track:', err);
+      console.error('Error deleting artist uploaded track:', err.stack || err);
     }
     // Cleanup: Delete test users created during the test
     try {
@@ -611,15 +612,15 @@ async function main() {
       await User.deleteMany({ email: { $regex: new RegExp('^' + CUSTOMER_EMAIL + '$', 'i') } });
       console.log('Cleanup completed: test users deleted');
     } catch (cleanupErr) {
-      console.error('Error during cleanup:', cleanupErr);
+      console.error('Error during cleanup:', cleanupErr.stack || cleanupErr);
     }
   }
 }
 
 // Connect to MongoDB before any Mongoose model usage
-await mongoose.connect(process.env.MONGODB_URI);
+
 
 main();
 
 // At the end of the script, after all DB operations
-await mongoose.disconnect();
+
