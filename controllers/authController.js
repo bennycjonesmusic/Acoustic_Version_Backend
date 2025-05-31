@@ -25,26 +25,9 @@ export const register = async (req, res) => {
     try {
         const { username, email, password, role = "user", about } = req.body;
         let avatar = req.body.avatar;
-        // Handle avatar file upload to S3 if file is provided
-        if (req.file && req.file.buffer) {
-            const s3Client = new S3Client({
-                region: process.env.AWS_REGION,
-                credentials: {
-                    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-                    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-                },
-            });
-            // Sanitize avatar file name
-            const sanitizedAvatarFileName = sanitizeFileName(req.file.originalname);
-            const uploadParams = {
-                Bucket: process.env.AWS_BUCKET_NAME,
-                Key: `avatars/${Date.now()}-${sanitizedAvatarFileName}`,
-                Body: Buffer.from(req.file.buffer),
-                ACL: 'private',
-                StorageClass: 'STANDARD',
-            };
-            const data = await new Upload({ client: s3Client, params: uploadParams }).done();
-            avatar = data.Location;
+        // Use avatarUpload middleware: req.file.location will be set if avatar uploaded
+        if (req.file && req.file.location) {
+            avatar = req.file.location;
         }
         const existingUser = await User.findOne({ $or: [ {email } , { username } ] });
         if (existingUser) {

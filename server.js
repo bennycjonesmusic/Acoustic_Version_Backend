@@ -19,6 +19,7 @@ import { processExpiredCommissions } from './controllers/commissionControl.js';
 import User from './models/User.js';
 import adminEmails from './utils/admins.js'; // Import adminEmails
 import { deleteUnusedAvatars } from './utils/deleteUnusedAvatars.js'; // Import the function to delete unused avatars
+import helmet from 'helmet'; // Import helmet middleware
 // Handle uncaught exceptions and unhandled promise rejections
 process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception:', err);
@@ -137,6 +138,7 @@ console.log('[SERVER DEBUG] Importing and registering /webhook route');
 app.use('/webhook/stripe', webhookRoutes); // <-- Change to match Stripe CLI forwarding
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(helmet()); // Use helmet middleware to set secure HTTP headers
 
 // Global rate limiter: 100 requests per 15 minutes per IP
 const globalLimiter = rateLimit({

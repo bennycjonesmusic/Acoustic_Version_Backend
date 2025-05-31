@@ -14,6 +14,7 @@ import {searchUserByName
 import { addArtistReview, getArtistReviews, sortUploadedOrPurchasedTracks, followArtist, unfollowArtist, deleteArtistReview, getUploadedTracksByUser } from '../controllers/artistController.js';
 import { uploadArtistExample, getArtistExamples, deleteArtistExample } from '../controllers/artistExamplesController.js';
 import avatarUpload from '../middleware/avatar_upload.js';
+import avatarModeration from '../middleware/avatar_moderation.js';
 import { updateProfile } from '../controllers/authController.js';
 import User from '../models/User.js';
 import { getUploadedTracksByUserId } from '../controllers/tracksController.js';
@@ -43,7 +44,7 @@ router.get('/artist/:id/examples', getArtistExamples);
 router.delete('/artist/examples/:exampleId', authMiddleware, deleteArtistExample);
 
 // Update artist/admin profile (with avatar upload to S3)
-router.patch('/profile', authMiddleware, avatarUpload.single('avatar'), updateProfile);
+router.patch('/profile', authMiddleware, avatarUpload.single('avatar'), avatarModeration, updateProfile);
 
 // Add GET /users/me route
 router.get('/me', authMiddleware, async (req, res) => {
@@ -59,6 +60,9 @@ router.get('/me', authMiddleware, async (req, res) => {
 // Get all tracks uploaded by a specific user (artist)
 router.get('/users/:id/tracks', authMiddleware, getUploadedTracksByUser);
 router.get('/:id/tracks', getUploadedTracksByUserId);
+
+// Registration route with avatar upload and moderation
+router.post('/register', avatarUpload.single('avatar'), avatarModeration, register);
 
 // Remove the GET /users/:id route for user details (was added for test, now redundant)
 
