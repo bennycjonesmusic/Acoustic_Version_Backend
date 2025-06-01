@@ -217,42 +217,52 @@ backingTrackSchema.virtual('musicalKey').get(function () {
 // Sanitizing the schema before returning it as JSON
 backingTrackSchema.set('toJSON', {
   transform: (doc, ret, options) => {
-    ret.id = ret._id.toString();
-    delete ret._id;
-    delete ret.__v;
-    delete ret.s3Key;
+    try {
+      ret.id = ret._id?.toString?.() || ret.id;
+      delete ret._id;
+      delete ret.__v;
+      delete ret.s3Key;
 
-  
-
-    const viewerRole = options?.viewerRole || 'user';
-    const viewerId = options?.viewerId || null;
-    const isAdmin = viewerRole === 'admin';
-    // If the track has a user field, check if the viewer is the owner
-    const isSelf = viewerId && ret.user && ret.user.toString() === viewerId.toString();
-    // Show less details if not admin or self (owner)
-    if (viewerRole === 'public' || (!isAdmin && !isSelf)) {
-      // Hide downloadCount and licenseStatus for public and non-owners
-      delete ret.downloadCount;
-      delete ret.licenseStatus;
-      // add to hide more stuff. Check when on frontend and adjust as needed.
+      const viewerRole = options?.viewerRole || 'user';
+      const viewerId = options?.viewerId || null;
+      const isAdmin = viewerRole === 'admin';
+      // Defensive: ret.user can be ObjectId or populated object
+      let userIdString = null;
+      if (ret.user) {
+        if (typeof ret.user === 'object' && ret.user._id) {
+          userIdString = ret.user._id.toString();
+        } else if (typeof ret.user === 'string' || typeof ret.user === 'number') {
+          userIdString = ret.user.toString();
+        } else if (ret.user.toString) {
+          userIdString = ret.user.toString();
+        }
+      }
+      const isSelf = viewerId && userIdString && userIdString === viewerId.toString();
+      // Show less details if not admin or self (owner)
+      if (viewerRole === 'public' || (!isAdmin && !isSelf)) {
+        delete ret.downloadCount;
+        delete ret.licenseStatus;
+      }
+      // Always include previewUrl in output
+      if (doc.previewUrl) {
+        ret.previewUrl = doc.previewUrl;
+      }
+      // Only show youtubeGuideUrl and guideTrackUrl to buyers, owners, or admin
+      var isBuyer = false;
+      if (Array.isArray(options?.purchasedTrackIds) && ret.id) {
+        isBuyer = options.purchasedTrackIds.some(
+          (trackId) => trackId?.toString?.() === ret.id.toString()
+        );
+      }
+      if (!(isAdmin || isSelf || isBuyer)) {
+        delete ret.youtubeGuideUrl;
+        delete ret.guideTrackUrl;
+      }
+      return ret;
+    } catch (err) {
+      console.error('Error in BackingTrack toJSON transform:', err, { ret, options });
+      return ret;
     }
-
-    // Always include previewUrl in output
-    if (doc.previewUrl) {
-      ret.previewUrl = doc.previewUrl;
-    }
-    // Only show youtubeGuideUrl and guideTrackUrl to buyers, owners, or admin
-    let isBuyer = false;
-    if (Array.isArray(options?.purchasedTrackIds) && ret.id) {
-      isBuyer = options.purchasedTrackIds.some( //grab the purchased track ids from the options passed in by getTrack
-        (trackId) => trackId.toString() === ret.id.toString()
-      );
-    }
-    if (!(isAdmin || isSelf || isBuyer)) {
-      delete ret.youtubeGuideUrl;
-      delete ret.guideTrackUrl;
-    }
-    return ret;
   }
 });
 

@@ -19,7 +19,7 @@ const TEST_PASSWORD = 'Moobslikejabba123456';
 
 const CUSTOMER_EMAIL = "newcustomer@example.com";
 const CUSTOMER_PASSWORD = "Moobslikejabba123456";
-let artistToken, artistId, exampleId, customerId, adminUploadedTrackId;
+let artistToken, artistId, exampleId, customerId, adminUploadedTrackId, artistUploadedTrackId, adminToken;
 
 async function login(email, password) {
 
@@ -43,8 +43,6 @@ async function login(email, password) {
 }
 
 async function main() {
-  let artistUploadedTrackId;
-  let adminToken, artistToken; // Declare tokens at top for finally block access
   try {
     await mongoose.connect(process.env.MONGODB_URI);
      console.log('Connected to MongoDB');
@@ -270,6 +268,7 @@ async function main() {
 
     // --- ADMIN APPROVES ARTIST BEFORE ARTIST UPLOADS ---
     // Approve the artist so they can upload tracks (required by business logic)
+    console.log('Before admin approves artist');
     try {
       const approveRes = await axios.post(
         `${BASE_URL}/admin/approve-artist/${artistId}`,
@@ -280,6 +279,9 @@ async function main() {
     } catch (err) {
       console.error('Error approving artist (may already be approved):', err.response ? err.response.data : err);
     }
+    console.log('After admin approves artist');
+    // Debug marker: check if we reach artist upload
+    console.log('Reached artist upload');
 
     // --- ARTIST UPLOADS A TRACK (for artist track access test) ---
     const artistTrackForm = new FormData();
@@ -295,20 +297,35 @@ async function main() {
     artistTrackForm.append('instructions', '');
     artistTrackForm.append('youtubeGuideUrl', '');
     artistTrackForm.append('guideTrackUrl', '');
-    const artistUploadRes = await axios.post(
-      `${BASE_URL}/tracks/upload`,
-      artistTrackForm,
-      {
-        headers: {
-          ...artistTrackForm.getHeaders(),
-          Authorization: `Bearer ${artistToken}`
+    let artistUploadRes, artistUploadedTrack;
+    try {
+      artistUploadRes = await axios.post(
+        `${BASE_URL}/tracks/upload`,
+        artistTrackForm,
+        {
+          headers: {
+            ...artistTrackForm.getHeaders(),
+            Authorization: `Bearer ${artistToken}`
+          }
         }
+      );
+      console.log('Artist track upload response:', artistUploadRes.data);
+      artistUploadedTrack = artistUploadRes.data.track;
+    } catch (err) {
+      if (err.response) {
+        console.error('Artist track upload failed:', {
+          status: err.response.status,
+          data: err.response.data,
+          headers: err.response.headers
+        });
+      } else {
+        console.error('Artist track upload failed:', err.stack || err);
       }
-    );
-    console.log('Artist track upload response:', artistUploadRes.data);
-    const artistUploadedTrack = artistUploadRes.data.track;
-    artistUploadedTrackId = artistUploadedTrack._id || artistUploadedTrack.id;
+      throw err;
+    }
+    artistUploadedTrackId = artistUploadedTrack && (artistUploadedTrack._id || artistUploadedTrack.id);
     if (!artistUploadedTrack || !artistUploadedTrackId || !artistUploadedTrack.fileUrl || !artistUploadedTrack.previewUrl) {
+      console.error('Full artist upload response:', artistUploadRes && artistUploadRes.data);
       throw new Error('Artist track upload failed: missing _id/id, fileUrl, or previewUrl');
     }
     if (artistUploadRes.data.previewError) {
@@ -557,6 +574,8 @@ async function main() {
       throw new Error('Download succeeded for unpurchased track (should fail)');
     }
   } catch (err) {
+    // Pause in debugger and print error if any error occurs before artist upload
+    debugger;
     console.error('Error in test flow:', err.stack || err);
   } finally {
     // --- TEST: Delete uploaded tracks (admin and artist) ---
@@ -586,25 +605,40 @@ async function main() {
     }
     // Delete artist's uploaded track
     try {
-      const deleteArtistTrackRes = await axios.delete(
-        `${BASE_URL}/tracks/${artistUploadedTrackId}`,
-        { headers: { Authorization: `Bearer ${artistToken}` } }
-      );
-      console.log('Artist track deleted:', deleteArtistTrackRes.data);
-      if (deleteArtistTrackRes.status !== 200) {
-        throw new Error('Failed to delete artist uploaded track');
-      }
-      try {
-        await axios.get(`${BASE_URL}/public/tracks/${artistUploadedTrackId}`);
-        throw new Error('Artist track still accessible after deletion');
-      } catch (err) {
-        if (!err.response || err.response.status !== 404) {
-          throw new Error('Unexpected error when fetching deleted artist track: ' + (err.response ? err.response.status : err.message));
+      if (!artistUploadedTrackId) {
+        console.error('artistUploadedTrackId is not set, skipping artist track deletion.');
+      } else {
+        const TrackModel = (await import('./models/backing_track.js')).default;
+        const artistTrack = await TrackModel.findById(artistUploadedTrackId);
+        console.log('Artist track before delete:', artistTrack ? artistTrack.toObject() : null);
+        const deleteArtistTrackRes = await axios.delete(
+          `${BASE_URL}/tracks/${artistUploadedTrackId}`,
+          { headers: { Authorization: `Bearer ${artistToken}` } }
+        );
+        console.log('Artist track deleted:', deleteArtistTrackRes.data);
+        if (deleteArtistTrackRes.status !== 200) {
+          throw new Error('Failed to delete artist uploaded track');
         }
-        console.log('Confirmed artist track is not accessible after deletion.');
+        try {
+          await axios.get(`${BASE_URL}/public/tracks/${artistUploadedTrackId}`);
+          throw new Error('Artist track still accessible after deletion');
+        } catch (err) {
+          if (!err.response || err.response.status !== 404) {
+            throw new Error('Unexpected error when fetching deleted artist track: ' + (err.response ? err.response.status : err.message));
+          }
+          console.log('Confirmed artist track is not accessible after deletion.');
+        }
       }
     } catch (err) {
-      console.error('Error deleting artist uploaded track:', err.stack || err);
+      if (err.response) {
+        console.error('Error deleting artist uploaded track:', {
+          status: err.response.status,
+          data: err.response.data,
+          headers: err.response.headers
+        });
+      } else {
+        console.error('Error deleting artist uploaded track:', err.stack || err);
+      }
     }
     // Cleanup: Delete test users created during the test
     try {
@@ -613,6 +647,41 @@ async function main() {
       console.log('Cleanup completed: test users deleted');
     } catch (cleanupErr) {
       console.error('Error during cleanup:', cleanupErr.stack || cleanupErr);
+    }
+
+    // --- TEST: Public endpoints: /tracks/search, /tracks/query, /users/search ---
+    try {
+      // /public/tracks/search
+      const searchQuery = { query: 'Admin Test Track' }; // Use real track title to pass backend validation
+      console.log('DEBUG: Sending /public/tracks/search with params:', searchQuery);
+      const searchTracksRes = await axios.get(`${BASE_URL}/public/tracks/search`, {
+        params: searchQuery,
+        validateStatus: null
+      });
+      console.log('DEBUG: /public/tracks/search response:', {
+        status: searchTracksRes.status,
+        data: searchTracksRes.data
+      });
+      if (searchTracksRes.status !== 200) throw new Error('/public/tracks/search did not return 200');
+
+      // /public/tracks/query
+      const queryTracksRes = await axios.get(`${BASE_URL}/public/tracks/query`, {
+        params: { page: 1, limit: 5 }, // adjust params as needed
+        validateStatus: null
+      });
+      console.log('/public/tracks/query response:', queryTracksRes.status, queryTracksRes.data);
+      if (queryTracksRes.status !== 200) throw new Error('/public/tracks/query did not return 200');
+
+      // /public/users/search
+      const searchUsersRes = await axios.get(`${BASE_URL}/public/users/search`, {
+        params: { query: 'CommissionArtist' }, // Use correct param name and real username
+        validateStatus: null
+      });
+      console.log('/public/users/search response:', searchUsersRes.status, searchUsersRes.data);
+      if (searchUsersRes.status !== 200) throw new Error('/public/users/search did not return 200');
+    } catch (err) {
+      console.error('Error testing public endpoints:', err.stack || err);
+      throw err;
     }
   }
 }

@@ -61,10 +61,7 @@ router.get('/me', authMiddleware, async (req, res) => {
 router.get('/users/:id/tracks', authMiddleware, getUploadedTracksByUser);
 router.get('/:id/tracks', getUploadedTracksByUserId);
 
-// Registration route with avatar upload and moderation
-router.post('/register', avatarUpload.single('avatar'), avatarModeration, register);
-
-// Remove the GET /users/:id route for user details (was added for test, now redundant)
+// Remove the registration route from users.js (handled in auth.js)
 
 export default router;
 

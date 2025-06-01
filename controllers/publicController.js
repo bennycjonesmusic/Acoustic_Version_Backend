@@ -13,8 +13,7 @@ import { sendVerificationEmail } from '../utils/emailAuthentication.js';
 import { toTrackSummary } from '../utils/trackSummary.js';
 import { toUserSummary } from '../utils/userSummary.js';
 import {escapeRegex, isSafeRegexInput, sanitizeFileName} from '../utils/regexSanitizer.js';
-
-
+import mongoose from 'mongoose';
 
 
 
@@ -278,22 +277,18 @@ export const searchTracks = async (req, res) => {
 //find and get a track by id
 export const getTrack = async (req, res) => {
     try {
-
         const user = req.userId ? await User.findById(req.userId) : null;
-        
 
-     
         if (!req.params.id) {
             return res.status(400).json({ message: 'Please insert a trackId' });
+        }
+        // Validate ObjectId BEFORE querying
+        if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+            return res.status(400).json({ message: 'Invalid track ID' });
         }
         const track = await BackingTrack.findById(req.params.id);
         if (!track) {
             return res.status(404).json({ message: 'Track not found' });
-        }
-
-        if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
-
-            return res.status(400).json({ message: 'Invalid track ID' });
         }
         return res.status(200).json(track.toJSON({
             viewerRole: req.user?.role || 'public',
@@ -301,6 +296,7 @@ export const getTrack = async (req, res) => {
             purchasedTrackIds: user?.purchasedTracks || []
         }));
     } catch (error) {
+        console.error('Error in getTrack:', error); // Log the actual error for debugging
         return res.status(500).json({ message: 'Internal server error' });
     }
 };
