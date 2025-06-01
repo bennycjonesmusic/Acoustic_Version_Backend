@@ -20,6 +20,7 @@ import User from './models/User.js';
 import adminEmails from './utils/admins.js'; // Import adminEmails
 import { deleteUnusedAvatars } from './utils/deleteUnusedAvatars.js'; // Import the function to delete unused avatars
 import helmet from 'helmet'; // Import helmet middleware
+import compression from 'compression'; // Import compression middleware
 // Handle uncaught exceptions and unhandled promise rejections
 process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception:', err);
@@ -139,6 +140,7 @@ app.use('/webhook/stripe', webhookRoutes); // <-- Change to match Stripe CLI for
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(helmet()); // Use helmet middleware to set secure HTTP headers
+app.use(compression()); // Enable gzip compression for all responses
 
 // Global rate limiter: 100 requests per 15 minutes per IP
 const globalLimiter = rateLimit({
@@ -173,6 +175,12 @@ app.use("/protectedArtist", artistAuthMiddleware, (req, res) => {
  res.status(200).json({ message: "Authorized artist"});
 
 });
+
+// Health check endpoint for load balancers and uptime monitoring
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
+
 const port = 3000; //set the port. This will be the port that the server will listen on. Lovely job.
 
 const server = app.listen(port, () => {
@@ -180,6 +188,23 @@ const server = app.listen(port, () => {
 
 console.log(`Server is running on http://localhost:${port}`); //check the console to see if server is running
 });
+
+//make sure the server closes gracefully when the process is terminated
+function gracefulShutdown() {
+
+  console.log('Received shutdown signal, closing server gracefully...');
+  server.close(() => {
+    console.log('Server closed gracefully');
+    mongoose.connection.close(false, () => {
+      console.log('MongoDB connection closed');
+      process.exit(0);
+    });
+  })
+
+}
+process.on('SIGINT', gracefulShutdown);
+process.on('SIGTERM', gracefulShutdown);
+
 
  //check aws has loaded properly.
 export default app;
