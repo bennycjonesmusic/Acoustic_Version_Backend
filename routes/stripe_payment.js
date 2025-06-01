@@ -104,7 +104,10 @@ router.post('/create-checkout-session', authMiddleware, async (req, res) => {
         if (!Number.isFinite(track.price) || track.price <= 0) {
             return res.status(400).json({ error: 'Invalid track price' });
         }
-        const price = Math.round(Number(track.price) * 100); // convert to pence
+        // Use customerPrice for the Stripe line item (customer pays this)
+        const customerPrice = Math.round(Number(track.customerPrice) * 100); // in pence
+        const artistPrice = Math.round(Number(track.price) * 100); // in pence
+        const platformFee = customerPrice - artistPrice;
         if (req.userId === track.user.toString()) {
             return res.status(400).json({ error: 'You cannot purchase your own track.' });
         }
@@ -118,7 +121,7 @@ router.post('/create-checkout-session', authMiddleware, async (req, res) => {
                             name: track.title,
                             description: track.description
                         },
-                        unit_amount: price,
+                        unit_amount: customerPrice, // customer pays this
                     },
                     quantity: 1,
                 },
@@ -127,7 +130,7 @@ router.post('/create-checkout-session', authMiddleware, async (req, res) => {
             success_url: `${process.env.CLIENT_URL}/success?session_id={CHECKOUT_SESSION_ID}`,
             cancel_url: `${process.env.CLIENT_URL}/cancel`,
             payment_intent_data: {
-                application_fee_amount: Math.round(price * 0.1), // 10% fee
+                application_fee_amount: platformFee, // platform receives this
                 transfer_data: {
                     destination: artist.stripeAccountId,
                 },

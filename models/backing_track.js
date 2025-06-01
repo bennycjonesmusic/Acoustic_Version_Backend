@@ -18,7 +18,13 @@ const backingTrackSchema = new mongoose.Schema({
   price: {
     type: Number,
     required: true,
-    min: [0, "Price must be positive"]
+    min: [0, "Price must be positive"] 
+  },
+  // The price the customer pays (artist price + platform commission)
+  customerPrice: {
+    type: Number,
+    required: true,
+    min: [0, "Customer price must be positive"]
   },
 
   //enable users to set their tracks as private
@@ -274,6 +280,16 @@ backingTrackSchema.set('toJSON', {
 
 // Add text index for title
 backingTrackSchema.index({ title: 'text' });
+
+// Pre-validate hook to set customerPrice
+backingTrackSchema.pre('validate', function(next) {
+  // Automatically set customerPrice as price + 12% commission (rounded to 2 decimals)
+  if (typeof this.price === 'number') {
+    const commission = Math.round(this.price * 0.12 * 100) / 100; // 12% commission
+    this.customerPrice = Math.round((this.price + commission) * 100) / 100;
+  }
+  next();
+});
 
 // Create the model
 const BackingTrack = mongoose.model('BackingTrack', backingTrackSchema);

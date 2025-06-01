@@ -29,6 +29,10 @@ export const register = async (req, res) => {
         if (req.file && req.file.location) {
             avatar = req.file.location;
         }
+        // Only require about for artists
+        if (role === 'artist' && (about === undefined || about === null || about === '')) {
+            return res.status(400).json({ message: "About section is required for artists." });
+        }
         const existingUser = await User.findOne({ $or: [ {email } , { username } ] });
         if (existingUser) {
             return res.status(400).json({ message: "User already exists!" });

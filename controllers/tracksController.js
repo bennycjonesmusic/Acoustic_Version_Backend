@@ -114,8 +114,10 @@ export const uploadTrack = async (req, res) => {
         const uploadParams = {
             Bucket: process.env.AWS_BUCKET_NAME,
             Key: `songs/${Date.now()}-${sanitizedFileName}`,
-            Body: fs.createReadStream(tempFilePath),            StorageClass: 'STANDARD',
+            Body: fs.createReadStream(tempFilePath),
+            StorageClass: 'STANDARD',
             ContentType: req.file.mimetype, // Ensure correct audio content type
+            ACL: 'private' // Ensure full song is private
         };
         const data = await new Upload({ client: s3Client, params: uploadParams }).done();
         fs.unlinkSync(tempFilePath);
@@ -132,7 +134,9 @@ export const uploadTrack = async (req, res) => {
             const previewUploadParams = {
                 Bucket: process.env.AWS_BUCKET_NAME,
                 Key: `previews/${Date.now()}-${sanitizedFileName}`,
-                Body: fs.createReadStream(previewPath),                StorageClass: 'STANDARD',
+                Body: fs.createReadStream(previewPath),
+                StorageClass: 'STANDARD',
+                ACL: 'public-read' // Ensure preview is public
             };
             const previewData = await new Upload({ client: s3Client, params: previewUploadParams }).done();
             console.log('S3 preview upload result:', previewData);
@@ -483,7 +487,7 @@ export const getUploadedTracksByUserId = async (req, res) => {
         // Remove Array.isArray check, always return the tracks array
         return res.status(200).json({ tracks });
     } catch (error) {
-        console.error('Error fetching tracks by userId:', error);
+        console.error('Error fetching uploaded tracks by userId:', error);
         return res.status(500).json({ message: 'Internal server error' });
     }
 };

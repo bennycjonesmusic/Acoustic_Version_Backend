@@ -38,12 +38,13 @@ export const uploadArtistExample = async (req, res) => {
         const tmp = await import('os');
         const tmpDir = tmp.tmpdir();
         const tmpInputPath = path.join(tmpDir, `${user._id}_example_input${Date.now()}${ext}`);
-        const tmpPreviewPath = path.join(tmpDir, `${user._id}_example_preview${Date.now()}${ext}`);
+        // Always use .mp3 for preview output to avoid ffmpeg ambiguity
+        const tmpPreviewPath = path.join(tmpDir, `${user._id}_example_preview${Date.now()}.mp3`);
         fs.writeFileSync(tmpInputPath, req.file.buffer);
         // Always generate a 30s preview (even if file is longer)
         await getAudioPreview(tmpInputPath, tmpPreviewPath, 30);
         // Upload preview to S3
-        const key = `examples/${user._id}_${Date.now()}${ext}`;
+        const key = `examples/${user._id}_${Date.now()}.mp3`;
         await new Upload({
             client: s3Client,
             params: {
@@ -51,6 +52,7 @@ export const uploadArtistExample = async (req, res) => {
                 Key: key,
                 Body: fs.createReadStream(tmpPreviewPath),
                 StorageClass: 'STANDARD',
+                ACL: 'public-read' // Ensure the file is public
             },
         }).done();
         fs.unlinkSync(tmpInputPath);

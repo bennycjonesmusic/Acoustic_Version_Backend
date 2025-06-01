@@ -15,9 +15,11 @@ import User from './models/User.js';
 
 const BASE_URL = 'http://localhost:3000';
 const TEST_EMAIL = `artist@example.com`;
-const TEST_PASSWORD = 'Moobslikejabba123456';
+const TEST_PASSWORD = 'Moobslikejabba123456'; 
+const ADMIN_EMAIL = 'acousticversionuk@gmail.com';
+    const ADMIN_PASSWORD = 'Moobslikejabba123456';
 
-const CUSTOMER_EMAIL = "newcustomer@example.com";
+const CUSTOMER_EMAIL = "sarahandbenduo@gmail.com";
 const CUSTOMER_PASSWORD = "Moobslikejabba123456";
 let artistToken, artistId, exampleId, customerId, adminUploadedTrackId, artistUploadedTrackId, adminToken;
 
@@ -49,7 +51,7 @@ async function main() {
    
     
     // Clean up both artist and customer test users before running test (case-insensitive)
-    await User.deleteMany({ email: { $regex: new RegExp('^' + TEST_EMAIL + '$', 'i') } });
+  
     await User.deleteMany({ email: { $regex: new RegExp('^' + CUSTOMER_EMAIL + '$', 'i') } });
     // Double-check deletion
     const artistExists = await User.findOne({ email: { $regex: new RegExp('^' + TEST_EMAIL + '$', 'i') } });
@@ -58,6 +60,8 @@ async function main() {
     console.log('Customer exists after delete?', !!customerExists);
 
     // Register artist
+    let artistUser;
+   
     try {
       await axios.post(`${BASE_URL}/auth/register`, {
         username: 'CommissionArtist',
@@ -68,6 +72,22 @@ async function main() {
       });
     } catch (err) {
       console.error('Artist already exists, skipping.', err.response ? err.response.data : err);
+    }
+    // Always approve and set Stripe account for artist if exists
+    const adminTokenForApproval = await login(ADMIN_EMAIL, ADMIN_PASSWORD);
+    artistUser = await User.findOne({ email: { $regex: new RegExp('^' + TEST_EMAIL + '$', 'i') } });
+    if (artistUser) {
+      await axios.post(
+        `${BASE_URL}/admin/approve-artist/${artistUser._id}`,
+        {},
+        { headers: { Authorization: `Bearer ${adminTokenForApproval}` } }
+      );
+      await User.updateOne(
+        { _id: artistUser._id },
+        { $set: { stripeAccountId: 'acct_1RTB1bCRMWHPkR1y' } }
+      );
+      const updatedArtist = await User.findById(artistUser._id);
+      console.log('CommissionArtist stripeAccountId:', updatedArtist.stripeAccountId);
     }
 
     // Register customer
@@ -136,8 +156,7 @@ async function main() {
     artistId = myRes.data.id || myRes.data._id || (myRes.data.user && (myRes.data.user.id || myRes.data.user._id)); //ensure it is correct
 
     // Admin login
-    const ADMIN_EMAIL = 'acousticversionuk@gmail.com';
-    const ADMIN_PASSWORD = 'Moobslikejabba123456';
+   
     adminToken = await login(ADMIN_EMAIL, ADMIN_PASSWORD);
 
     // Fetch admin's user ID for use in review/reviews routes
@@ -238,6 +257,7 @@ async function main() {
     const trackDetailsRes = await axios.get(
       `${BASE_URL}/public/tracks/${adminUploadedTrackId}`
     );
+    console.log('Track details after purchase:', trackDetailsRes.data);
     console.log('Track details after purchase:', trackDetailsRes.data);
     // Accept both .purchaseCount and .track.purchaseCount (depending on API response shape)
     const purchaseCount = trackDetailsRes.data.purchaseCount !== undefined
@@ -387,7 +407,47 @@ async function main() {
       throw new Error(`Artist storageUsed not updated correctly after upload. Expected at least ${uploadedFileSize}, got ${storageUsed}`);
     }
     console.log('Artist storageUsed successfully updated after upload.');
+      const featuredRes = await axios.get(`${BASE_URL}/public/tracks/featured`);
+    console.log('Featured tracks response:', featuredRes.data);
+    // Accept both array and { featured: [...] } response shapes
+    const featuredTracks = Array.isArray(featuredRes.data) ? featuredRes.data : featuredRes.data.featured;
+    if (!Array.isArray(featuredTracks)) {
+      throw new Error('Featured tracks response is not an array');
+    }
+    // Assert both admin and artist tracks are present in featured
+    const adminTrackFound = featuredTracks.some(t => t._id === adminUploadedTrackId || t.id === adminUploadedTrackId);
+    const artistTrackFound = featuredTracks.some(t => t._id === artistUploadedTrackId || t.id === artistUploadedTrackId);
+    if (!adminTrackFound) {
+      throw new Error('Admin uploaded track not found in featured tracks');
+    }
+    if (!artistTrackFound) {
+      throw new Error('Artist uploaded track not found in featured tracks');
+    }
+    console.log('All featured tracks:', JSON.stringify(featuredTracks, null, 2));
 
+    // --- TEST: Featured artists endpoint ---
+    const featuredArtistsRes = await axios.get(`${BASE_URL}/public/artists/featured`);
+    console.log('Featured artists response:', featuredArtistsRes.data);
+    const featuredArtists = Array.isArray(featuredArtistsRes.data) ? featuredArtistsRes.data : featuredArtistsRes.data.featured;
+    if (!Array.isArray(featuredArtists)) {
+      throw new Error('Featured artists response is not an array');
+    }
+    // Assert that at least one artist is present (should include the test artist)
+    const testArtistFound = featuredArtists.some(a => a._id === artistId || a.id === artistId);
+    if (!testArtistFound) {
+      throw new Error('Test artist not found in featured artists');
+    }
+    console.log('Featured artists test passed.');
+    // --- TEST: Download purchased track (should succeed) ---
+    let downloadRes;
+    downloadRes = await axios.get(
+      `${BASE_URL}/tracks/download/${adminUploadedTrackId}`,
+      {
+        headers: { Authorization: `Bearer ${customerToken}` },
+        responseType: 'arraybuffer',
+        validateStatus: null
+      }
+    );
     // --- ARTIST CANCELS PRO SUBSCRIPTION (Stripe) ---
     try {
       const cancelRes = await axios.post(
@@ -439,7 +499,7 @@ async function main() {
     console.log('About to attempt download for artistUploadedTrackId:', artistUploadedTrackId);
     // --- TEST: Customer downloads purchased artist track ---
     // Wait for up to 5 attempts (2s apart) for track to become downloadable (handles webhook race condition)
-    let downloadRes;
+
     let lastDownloadError;
     for (let attempt = 0; attempt < 5; attempt++) {
       try {
@@ -511,10 +571,25 @@ async function main() {
     console.log('Refund test passed: track removed from customer purchased tracks and download is denied.');
 
     // --- TEST: Download unpurchased track (should fail) ---
+    // Register a new user who has not purchased any tracks
+    const UNPURCHASED_EMAIL = 'unboughtuser@example.com';
+    const UNPURCHASED_PASSWORD = 'UnboughtUser123!';
+    try {
+      await axios.post(`${BASE_URL}/auth/register`, {
+        username: 'UnboughtUser',
+        email: UNPURCHASED_EMAIL,
+        password: UNPURCHASED_PASSWORD,
+        role: 'user',
+        about: 'User who has not purchased any tracks'
+      });
+    } catch (err) {
+      // Ignore if already exists
+    }
+    const unboughtToken = await login(UNPURCHASED_EMAIL, UNPURCHASED_PASSWORD);
     const deniedRes = await axios.get(
       `${BASE_URL}/tracks/download/${artistUploadedTrackId}`,
       {
-        headers: { Authorization: `Bearer ${customerToken}` },
+        headers: { Authorization: `Bearer ${unboughtToken}` },
         responseType: 'arraybuffer',
         validateStatus: null
       }
@@ -522,6 +597,7 @@ async function main() {
     if (deniedRes.status === 200) {
       throw new Error('Download succeeded for unpurchased track (should fail)');
     }
+    console.log('Unpurchased user denied download as expected.');
   } catch (err) {
     // Pause in debugger and print error if any error occurs before artist upload
     debugger;
@@ -568,14 +644,22 @@ async function main() {
         if (deleteArtistTrackRes.status !== 200) {
           throw new Error('Failed to delete artist uploaded track');
         }
-        try {
-          await axios.get(`${BASE_URL}/public/tracks/${artistUploadedTrackId}`);
-          throw new Error('Artist track still accessible after deletion');
-        } catch (err) {
-          if (!err.response || err.response.status !== 404) {
-            throw new Error('Unexpected error when fetching deleted artist track: ' + (err.response ? err.response.status : err.message));
+        // Only expect 404 if the delete response does NOT indicate a soft delete
+        if (
+          !deleteArtistTrackRes.data.message ||
+          !deleteArtistTrackRes.data.message.includes('marked as deleted')
+        ) {
+          try {
+            await axios.get(`${BASE_URL}/public/tracks/${artistUploadedTrackId}`);
+            throw new Error('Artist track still accessible after deletion');
+          } catch (err) {
+            if (!err.response || err.response.status !== 404) {
+              throw new Error('Unexpected error when fetching deleted artist track: ' + (err.response ? err.response.status : err.message));
+            }
+            console.log('Confirmed artist track is not accessible after deletion.');
           }
-          console.log('Confirmed artist track is not accessible after deletion.');
+        } else {
+          console.log('Artist track soft-deleted (still accessible until all purchases are cleared).');
         }
       }
     } catch (err) {
@@ -591,7 +675,7 @@ async function main() {
     }
     // Cleanup: Delete test users created during the test
     try {
-      await User.deleteMany({ email: { $regex: new RegExp('^' + TEST_EMAIL + '$', 'i') } });
+  
       await User.deleteMany({ email: { $regex: new RegExp('^' + CUSTOMER_EMAIL + '$', 'i') } });
       console.log('Cleanup completed: test users deleted');
     } catch (cleanupErr) {
@@ -642,4 +726,3 @@ main();
 
 
 // At the end of the script, after all DB operations
-

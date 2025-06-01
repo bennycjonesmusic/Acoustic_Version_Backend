@@ -47,7 +47,7 @@ export const searchUserByName = async (req, res) => {
         const limit = 10;
         const skip = (pageNum - 1) * limit;
         // 4. Use raw query for $text search
-        let users = await User.find({ $text: { $search: query }, role: 'artist', profileStatus: 'approved', 'artistExamples.0': { $exists: true } })
+        let users = await User.find({ $text: { $search: query }, role: { $in: ['artist', 'admin'] }, profileStatus: 'approved' })
             .sort({ score: { $meta: 'textScore' } })
             .skip(skip).limit(limit).select({ score: { $meta: 'textScore' } });
         if (!users.length) {
@@ -55,9 +55,8 @@ export const searchUserByName = async (req, res) => {
             const safeQuery = escapeRegex(query);
             users = await User.find({
                 username: { $regex: safeQuery, $options: 'i' },
-                role: 'artist',
-                profileStatus: 'approved',
-                'artistExamples.0': { $exists: true }
+                role: { $in: ['artist', 'admin'] },
+                profileStatus: 'approved'
             })
                 .skip(skip)
                 .limit(limit);
@@ -173,24 +172,24 @@ export const getFeaturedArtists = async (req, res) => {
             console.log('[getFeaturedArtists] Returning cached data');
             return res.status(200).json(cached);
         }
-        // Find artists with at least one uploaded track OR at least one commission as artist, and approved profile
+        // Find artists or admins with at least one uploaded track OR at least one commission as artist, and approved profile
         const featuredArtists = await User.find({
-            role: 'artist',
+            role: { $in: ['artist', 'admin'] },
             profileStatus: 'approved',
             $or: [
                 { uploadedTracks: { $exists: true, $not: { $size: 0 } } },
-                // Artists with at least one commission as artist
+                // Artists/admins with at least one commission as artist
                 { _id: { $in: await CommissionRequest.distinct('artist') } }
             ]
         }).limit(10);
         // Exclude those already found from random selection
         const excludeIds = featuredArtists.map(a => a._id);
-        // Find random additional artists with same criteria
+        // Find random additional artists/admins with same criteria
         const commissionArtistIds = await CommissionRequest.distinct('artist');
         const featureRandom = await User.aggregate([
             { $match: {
                 _id: { $nin: excludeIds },
-                role: 'artist',
+                role: { $in: ['artist', 'admin'] },
                 profileStatus: 'approved',
                 $or: [
                     { uploadedTracks: { $exists: true, $not: { $size: 0 } } },
