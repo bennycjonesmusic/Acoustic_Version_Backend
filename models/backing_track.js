@@ -179,6 +179,11 @@ const backingTrackSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  fileSize: {
+    type: Number,
+    required: true,
+    description: 'Size of the uploaded file in bytes.'
+  },
 });
 
 

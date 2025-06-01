@@ -168,22 +168,22 @@ export const uploadTrack = async (req, res) => {
             youtubeGuideUrl: req.body.youtubeGuideUrl || '',
             guideTrackUrl: req.body.guideTrackUrl || '',
             licenseStatus: req.body.licenseStatus,
-            licensedFrom: req.body.licensedFrom
-
+            licensedFrom: req.body.licensedFrom,
+            fileSize: req.file.size // Store file size for storage tracking
         });
         await newTrack.save();
-        const updateUser = await User.findByIdAndUpdate(req.userId, { $push: { uploadedTracks: newTrack._id } }, { new: true });
-        if (!updateUser) {
-            return res.status(404).json({ message: "User not found." });
-        }
+        // Update user's storageUsed
+        await User.findByIdAndUpdate(req.userId, { $inc: { storageUsed: req.file.size }, $push: { uploadedTracks: newTrack._id } });
         // Notify followers by email
-        if (updateUser.followers && updateUser.followers.length > 0) {
+        if (Artist.followers && Artist.followers.length > 0) {
             // Get followers' emails
-            const followers = await User.find({ _id: { $in: updateUser.followers } }, 'email');
+            const followers = await User.find({ _id: { $in: Artist.followers } }, 'email');
             for (const follower of followers) {
                 if (follower.email) {
                     // Send email asynchronously, don't block response
-                    sendFollowersNewTrack(follower.email, updateUser, newTrack).catch(e => console.error('Email error:', e));
+                    sendFollowersNewTrack(follower.email, Artist, newTrack).catch(e => {
+                        console.error('Email error:', e);
+                    });
                 }
             }
         }
@@ -303,6 +303,10 @@ export const deleteTrack = async (req, res) => {
             }
         }
         await BackingTrack.findByIdAndDelete(req.params.id);
+        // Decrement user's storageUsed by the deleted track's fileSize
+        if (Track.user && Track.fileSize) {
+            await User.findByIdAndUpdate(Track.user, { $inc: { storageUsed: -Math.abs(Track.fileSize) } });
+        }
         // Recalculate averageTrackRating for the user after hard delete
         if (Track.user) {
             const artist = await User.findById(Track.user);
@@ -351,15 +355,23 @@ export const getPurchasedTracks = async (req, res) => {
 
 export const downloadTrack = async (req, res) => {
   try {
+    console.log('[downloadTrack] Requested by user:', req.userId, 'for track:', req.params.id);
     const track = await BackingTrack.findById(req.params.id);
     if (!track) {
+      console.warn('[downloadTrack] Track not found:', req.params.id);
       return res.status(404).json({ message: "Track not found." });
     }
     const userId = req.userId;
     const user = await User.findById(userId); //find the user wanting to download track
+    if (!user) {
+      console.warn('[downloadTrack] User not found:', userId);
+      return res.status(404).json({ message: "User not found." });
+    }
     const hasBought = user.purchasedTracks.some(pt => (pt.track?.toString?.() || pt.track) === track._id.toString());
     const hasUploaded = user.uploadedTracks.some(id => id.equals(track._id));
+    console.log('[downloadTrack] hasBought:', hasBought, 'hasUploaded:', hasUploaded);
     if (!hasBought && !hasUploaded) {
+      console.warn('[downloadTrack] Forbidden: user', userId, 'has not bought or uploaded track', track._id.toString());
       return res.status(403).json({ message: "You are not allowed to download this track. Please purchase" });
     }
     const s3Client = new S3Client({
@@ -382,7 +394,7 @@ export const downloadTrack = async (req, res) => {
     data.Body.pipe(res);
     return;
   } catch (error) {
-    console.error('Error downloading track:', error);
+    console.error('[downloadTrack] Error downloading track:', error, 'user:', req.userId, 'track:', req.params.id);
     return res.status(500).json({ message: 'Internal server error' });
   }
 };
@@ -471,7 +483,7 @@ export const getUploadedTracksByUserId = async (req, res) => {
         // Remove Array.isArray check, always return the tracks array
         return res.status(200).json({ tracks });
     } catch (error) {
-        console.error('Error fetching uploaded tracks by user ID:', error);
+        console.error('Error fetching tracks by userId:', error);
         return res.status(500).json({ message: 'Internal server error' });
     }
 };

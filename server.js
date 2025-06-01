@@ -21,6 +21,8 @@ import adminEmails from './utils/admins.js'; // Import adminEmails
 import { deleteUnusedAvatars } from './utils/deleteUnusedAvatars.js'; // Import the function to delete unused avatars
 import helmet from 'helmet'; // Import helmet middleware
 import compression from 'compression'; // Import compression middleware
+import stripeSubscriptionsRouter from './routes/stripe_subscriptions.js'; // Import the new Stripe subscriptions router
+import { recalculateAllUserStorage } from './utils/recalculateUserStorage.js'; // Import the storage recalculation utility
 // Handle uncaught exceptions and unhandled promise rejections
 process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception:', err);
@@ -116,6 +118,14 @@ cron.schedule('0 3 * * *', async () => {
   }
 })();
 
+// Recalculate user storage at server start
+recalculateAllUserStorage().catch(err => console.error('Storage recalculation error:', err));
+
+// Schedule to run every 6 hours
+cron.schedule('0 */6 * * *', () => {
+  recalculateAllUserStorage().catch(err => console.error('Scheduled storage recalculation error:', err));
+});
+
 //connect to MongoDBAtlas. This will store the data.
 mongoose.connect(process.env.MONGODB_URI)
     
@@ -152,15 +162,14 @@ const globalLimiter = rateLimit({
 });
 
 app.use(globalLimiter);
-
-//When /auth is hit, use the authRoutes. 
+app.use('/stripe-subscriptions', stripeSubscriptionsRouter); // Register the new Stripe subscriptions route
+app.use('/stripe', stripeRoutes);
 app.use("/auth", authRoutes);
 app.use("/admin", adminRoutes);
-app.use('/stripe', stripeRoutes);
-app.use('/', tracksRoutes);
 app.use('/users', userRoutes);
 app.use('/public', publicRoutes);
 app.use('/commission', commissionRoutes);
+app.use('/', tracksRoutes);
 app.get('/', (req, res) =>{
 
     res.send('Testing');

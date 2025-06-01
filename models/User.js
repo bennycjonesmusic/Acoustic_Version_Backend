@@ -81,6 +81,21 @@ const userSchema = new mongoose.Schema({
     enum: ['pending', 'approved', 'rejected'],
     default: function() { return this.role === 'artist' ? 'pending' : 'approved'; },
     description: 'Artist profile approval status. Only approved artists are public.'
+  },
+  subscriptionTier: {
+    type: String,
+    enum: ['free', 'pro', 'enterprise'],
+    default: 'free',
+    description: 'User subscription tier for storage and features.'
+  },
+  stripeSubscriptionId: {
+    type: String,
+    description: 'Stripe subscription ID for recurring payments.'
+  },
+  storageUsed: {
+    type: Number,
+    default: 0, // in bytes
+    description: 'Total storage used by the user in bytes.'
   }
 }, {
   timestamps: true, // 
@@ -140,18 +155,11 @@ userSchema.set('toJSON', {
     const isAdmin = viewerRole === 'admin';
     const isSelf = viewerId && viewerId.toString() === ret.id;
 
-    if (ret.role !== "artist" && ret.role !== "admin") {
-      delete ret.uploadedTracks;
-      delete ret.amountOfTracksSold;
-      delete ret.amountOfFollowers;
-      delete ret.stripeAccountId;
-      delete ret.avatar;
-    }
-
     // show less details if not admin or self
     if (!isAdmin && !isSelf) {
       delete ret.email;
       delete ret.stripeAccountId;
+      delete ret.stripeSubscriptionId
       delete ret.amountOfTracksSold;
       delete ret.amountOfFollowers;
       delete ret.purchasedTracks;

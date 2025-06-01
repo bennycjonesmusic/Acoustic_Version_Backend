@@ -37,7 +37,11 @@ router.post('/tracks/rate/:id', authMiddleware, rateTrack); //rate a track by id
 router.post('/tracks/comment/:id', authMiddleware, commentTrack); //comment on a track by id
 router.delete('/tracks/comment/:commentId', authMiddleware, deleteComment); //delete a comment by commentId
 
-router.get('/tracks/download/:id', downloadLimiter, authMiddleware, downloadTrack); //req.params.id = :id needed in route
+// Debug: log all download requests before any middleware
+router.get('/tracks/download/:id', (req, res, next) => {
+  console.log('[ROUTER DEBUG] /tracks/download/:id hit for', req.params.id);
+  next();
+}, downloadLimiter, authMiddleware, downloadTrack); //req.params.id = :id needed in route
 
 router.delete('/tracks/delete/:id', authMiddleware, deleteTrack)
 export default router;

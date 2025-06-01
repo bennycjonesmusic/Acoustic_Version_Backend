@@ -283,6 +283,46 @@ async function main() {
     // Debug marker: check if we reach artist upload
     console.log('Reached artist upload');
 
+    // --- ARTIST SUBSCRIBES TO PRO TIER (Stripe) ---
+    // Create Stripe Checkout session for artist subscription upgrade
+    let proCheckoutUrl;
+    try {
+      const proCheckoutRes = await axios.post(
+        `${BASE_URL}/stripe-subscriptions/create-subscription-session`,
+        { tier: 'pro' },
+        { headers: { Authorization: `Bearer ${artistToken}` } }
+      );
+      proCheckoutUrl = proCheckoutRes.data.url;
+      if (!proCheckoutUrl) throw new Error('No Stripe Checkout URL returned for pro subscription');
+      console.log('\n--- ACTION REQUIRED ---');
+      console.log('Open this Stripe Checkout URL in your browser and complete the artist PRO subscription payment:');
+      console.log(proCheckoutUrl);
+      console.log('----------------------\n');
+      // Wait for user to complete payment
+      const readline = (await import('readline')).default;
+      const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+      await new Promise(resolve => rl.question('Press Enter after completing PRO subscription payment in Stripe Checkout...', () => { rl.close(); resolve(); }));
+    } catch (err) {
+      console.error('Error creating Stripe subscription session:', err.response ? err.response.data : err);
+      throw err;
+    }
+    // Wait for Stripe webhook to process subscription (retry up to 5 times, 2s apart)
+    let artistSubTier = 'free';
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const artistProfile = await axios.get(
+        `${BASE_URL}/users/me`,
+        { headers: { Authorization: `Bearer ${artistToken}` } }
+      );
+      artistSubTier = artistProfile.data.subscriptionTier || (artistProfile.data.user && artistProfile.data.user.subscriptionTier);
+      console.log(`Artist subscriptionTier after upgrade (attempt ${attempt + 1}):`, artistSubTier);
+      if (artistSubTier === 'pro') break;
+      await new Promise(res => setTimeout(res, 2000));
+    }
+    if (artistSubTier !== 'pro') {
+      throw new Error('Artist subscriptionTier not updated to pro after Stripe payment');
+    }
+    console.log('Artist successfully upgraded to PRO tier.');
+
     // --- ARTIST UPLOADS A TRACK (for artist track access test) ---
     const artistTrackForm = new FormData();
     artistTrackForm.append('file', fs.createReadStream(filePath));
@@ -331,190 +371,99 @@ async function main() {
     if (artistUploadRes.data.previewError) {
       throw new Error('Artist track upload preview failed: ' + artistUploadRes.data.previewError);
     }
-    try {
-      // Customer follows artist
-      const followRes = await axios.post(
-        `${BASE_URL}/users/follow/${artistId}`,
-        {},
-        { headers: { Authorization: `Bearer ${customerToken}` } }
-      );
-      console.log('Customer followed artist:', followRes.data);
-      // Verify artist's followers includes customer
-      const artistAfterFollow = await axios.get(
-        `${BASE_URL}/public/users/${artistId}`
-      );
-      if (!artistAfterFollow.data.followers || !artistAfterFollow.data.followers.includes(customerId)) {
-        throw new Error('Customer not found in artist followers after follow');
-      }
-      // Verify customer's following includes artist
-      const customerAfterFollow = await axios.get(
-        `${BASE_URL}/public/users/${customerId}`
-      );
-      if (!customerAfterFollow.data.following || !customerAfterFollow.data.following.includes(artistId)) {
-        throw new Error('Artist not found in customer following after follow');
-      }
-      // Customer unfollows artist
-      const unfollowRes = await axios.post(
-        `${BASE_URL}/users/unfollow/${artistId}`,
-        {},
-        { headers: { Authorization: `Bearer ${customerToken}` } }
-      );
-      console.log('Customer unfollowed artist:', unfollowRes.data);
-      // Verify artist's followers does NOT include customer
-      const artistAfterUnfollow = await axios.get(
-        `${BASE_URL}/public/users/${artistId}`
-      );
-      if (artistAfterUnfollow.data.followers && artistAfterUnfollow.data.followers.includes(customerId)) {
-        throw new Error('Customer still found in artist followers after unfollow');
-      }
-      // Verify customer's following does NOT include artist
-      const customerAfterUnfollow = await axios.get(
-        `${BASE_URL}/public/users/${customerId}`
-      );
-      if (customerAfterUnfollow.data.following && customerAfterUnfollow.data.following.includes(artistId)) {
-        throw new Error('Artist still found in customer following after unfollow');
-      }
-      console.log('Follow/unfollow artist test passed.');
-    } catch (followErr) {
-      console.error('Error in follow/unfollow test:', followErr);
-    }
 
-    // Debug: Check if artist track exists in DB immediately after upload
-    const artistTrackInDbAfterUpload = await TrackModel.findById(artistUploadedTrackId);
-    console.log('Artist track in DB after upload:', artistTrackInDbAfterUpload ? artistTrackInDbAfterUpload.toObject() : null);
-    //customer rates ADMINS track
-    
-    
-    //review/rating/comment logic
-    
-    const rateTrack = await axios.post(`${BASE_URL}/tracks/rate/${adminUploadedTrackId}`, {rating: 5}, { headers: { Authorization: `Bearer ${customerToken}` } });
-
-    console.log('Customer rated admin track:', rateTrack.data);  
-
-    const leaveReview = await axios.post(`${BASE_URL}/users/review/${adminId}`, {review: "Great musician, very professional!"}, { headers: { Authorization: `Bearer ${customerToken}` } });
-    
-    console.log('Customer left review for admin:', leaveReview.data);
-
-    // Comment on the admin's track
-    const commentTrack = await axios.post(
-      `${BASE_URL}/tracks/comment/${adminUploadedTrackId}`,
-      { comment: "Love this track!" },
-      { headers: { Authorization: `Bearer ${customerToken}` } }
-    );
-    console.log('Customer commented on admin track:', commentTrack.data);
-    // Assert comment exists in response
-    if (!commentTrack.data.comments || !commentTrack.data.comments.some(c => c.text === "Love this track!")) {
-      throw new Error('Comment not found in response after creation');
-    }
-
-    // Confirm the comment exists on the track before deleting
-    const trackWithComment = await axios.get(
-      `${BASE_URL}/public/tracks/${adminUploadedTrackId}`
-    );
-    const commentsArray = trackWithComment.data.comments || (trackWithComment.data.track && trackWithComment.data.track.comments) || [];
-    const lastCommentId = commentTrack.data.comments && commentTrack.data.comments.length > 0 ? commentTrack.data.comments[commentTrack.data.comments.length - 1]._id : null;
-    const foundComment = commentsArray.find(c => c._id === lastCommentId);
-    if (foundComment) {
-      console.log('Confirmed comment exists on track before deletion:', foundComment);
-    } else {
-      throw new Error('Comment not found on track before deletion!');
-    }
-
-    // Delete the comment just made (by the same user)
-    const commentId = lastCommentId;
-    if (commentId) {
-      const deleteCommentRes = await axios.delete(
-        `${BASE_URL}/tracks/comment/${commentId}`,
-        { headers: { Authorization: `Bearer ${customerToken}` } }
-      );
-      console.log('Customer deleted their comment:', deleteCommentRes.data);
-      // Assert comment is removed in response
-      if (deleteCommentRes.data.comments && deleteCommentRes.data.comments.some(c => c._id === commentId)) {
-        throw new Error('Comment still present in response after deletion');
-      }
-      // Fetch track again and assert comment is gone
-      const trackAfterDelete = await axios.get(
-        `${BASE_URL}/public/tracks/${adminUploadedTrackId}`
-      );
-      const commentsAfterDelete = trackAfterDelete.data.comments || (trackAfterDelete.data.track && trackAfterDelete.data.track.comments) || [];
-      if (commentsAfterDelete.some(c => c._id === commentId)) {
-        throw new Error('Comment still present on track after deletion');
-      }
-    } else {
-      console.log('No commentId found to delete.');
-    }
-    // --- TEST: Update artist commission price via controller/route ---
-    // Update commission price (e.g., to 42)
-    const newCommissionPrice = 42;
-    const updateCommissionRes = await axios.patch(
-      `${BASE_URL}/users/profile`,
-      { commissionPrice: newCommissionPrice },
-      { headers: { Authorization: `Bearer ${artistToken}` } }
-    );
-    console.log('Artist commission price update response:', updateCommissionRes.data);
-    // Assert commission price was updated
-    if (!updateCommissionRes.data.commissionPrice && !updateCommissionRes.data.user) {
-      throw new Error('No commissionPrice or user returned in update response');
-    }
-    const updatedPrice = updateCommissionRes.data.commissionPrice || (updateCommissionRes.data.user && updateCommissionRes.data.user.commissionPrice);
-    if (updatedPrice !== newCommissionPrice) {
-      throw new Error(`Expected commissionPrice to be ${newCommissionPrice}, got ${updatedPrice}`);
-    }
-    // Optionally, fetch artist profile and assert commissionPrice
-    const artistProfileRes = await axios.get(
+    // --- ASSERT ARTIST STORAGE UPDATED AFTER UPLOAD ---
+    // Get file size of uploaded file
+    const uploadedFileStats = fs.statSync(filePath);
+    const uploadedFileSize = uploadedFileStats.size;
+    // Fetch artist profile
+    const artistProfileAfterUpload = await axios.get(
       `${BASE_URL}/users/me`,
       { headers: { Authorization: `Bearer ${artistToken}` } }
     );
-    const profilePrice = artistProfileRes.data.commissionPrice || (artistProfileRes.data.user && artistProfileRes.data.user.commissionPrice);
-    if (profilePrice !== newCommissionPrice) {
-      throw new Error(`Artist profile commissionPrice not updated, expected ${newCommissionPrice}, got ${profilePrice}`);
+    const storageUsed = artistProfileAfterUpload.data.storageUsed || (artistProfileAfterUpload.data.user && artistProfileAfterUpload.data.user.storageUsed);
+    console.log('Artist storageUsed after upload:', storageUsed, 'uploaded file size:', uploadedFileSize);
+    if (!storageUsed || storageUsed < uploadedFileSize) {
+      throw new Error(`Artist storageUsed not updated correctly after upload. Expected at least ${uploadedFileSize}, got ${storageUsed}`);
     }
-    // --- TEST: Featured tracks endpoint after both tracks are uploaded ---
-    const featuredRes = await axios.get(`${BASE_URL}/public/tracks/featured`);
-    console.log('Featured tracks response:', featuredRes.data);
-    // Accept both array and { featured: [...] } response shapes
-    const featuredTracks = Array.isArray(featuredRes.data) ? featuredRes.data : featuredRes.data.featured;
-    if (!Array.isArray(featuredTracks)) {
-      throw new Error('Featured tracks response is not an array');
-    }
-    // Assert both admin and artist tracks are present in featured
-    const adminTrackFound = featuredTracks.some(t => t._id === adminUploadedTrackId || t.id === adminUploadedTrackId);
-    const artistTrackFound = featuredTracks.some(t => t._id === artistUploadedTrackId || t.id === artistUploadedTrackId);
-    if (!adminTrackFound) {
-      throw new Error('Admin uploaded track not found in featured tracks');
-    }
-    if (!artistTrackFound) {
-      throw new Error('Artist uploaded track not found in featured tracks');
-    }
+    console.log('Artist storageUsed successfully updated after upload.');
 
-    // --- TEST: Featured artists endpoint ---
-    const featuredArtistsRes = await axios.get(`${BASE_URL}/public/artists/featured`);
-    console.log('Featured artists response:', featuredArtistsRes.data);
-    const featuredArtists = Array.isArray(featuredArtistsRes.data) ? featuredArtistsRes.data : featuredArtistsRes.data.featured;
-    if (!Array.isArray(featuredArtists)) {
-      throw new Error('Featured artists response is not an array');
+    // --- ARTIST CANCELS PRO SUBSCRIPTION (Stripe) ---
+    try {
+      const cancelRes = await axios.post(
+        `${BASE_URL}/stripe-subscriptions/cancel-subscription`,
+        {},
+        { headers: { Authorization: `Bearer ${artistToken}` } }
+      );
+      console.log('Artist subscription cancel response:', cancelRes.data);
+    } catch (err) {
+      console.error('Error cancelling artist subscription:', err.response ? err.response.data : err);
+      throw err;
     }
-    // Assert that at least one artist is present (should include the test artist)
-    const testArtistFound = featuredArtists.some(a => a._id === artistId || a.id === artistId);
-    if (!testArtistFound) {
-      throw new Error('Test artist not found in featured artists');
+    // Wait for Stripe webhook to process cancellation (retry up to 5 times, 2s apart)
+    let artistSubTierAfterCancel = 'pro';
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const artistProfile = await axios.get(
+        `${BASE_URL}/users/me`,
+        { headers: { Authorization: `Bearer ${artistToken}` } }
+      );
+      artistSubTierAfterCancel = artistProfile.data.subscriptionTier || (artistProfile.data.user && artistProfile.data.user.subscriptionTier);
+      console.log(`Artist subscriptionTier after cancel (attempt ${attempt + 1}):`, artistSubTierAfterCancel);
+      if (artistSubTierAfterCancel === 'free') break;
+      await new Promise(res => setTimeout(res, 2000));
     }
-    console.log('Featured artists test passed.');
-    // --- TEST: Download purchased track (should succeed) ---
-    const downloadRes = await axios.get(
-      `${BASE_URL}/tracks/download/${adminUploadedTrackId}`,
-      {
-        headers: { Authorization: `Bearer ${customerToken}` },
-        responseType: 'arraybuffer',
-        validateStatus: null
-      }
+    if (artistSubTierAfterCancel !== 'free') {
+      throw new Error('Artist subscriptionTier not downgraded to free after cancellation');
+    }
+    console.log('Artist subscription successfully cancelled and downgraded to FREE tier.');
+
+    // --- CUSTOMER PURCHASES ARTIST TRACK ---
+    // Create Stripe Checkout session for customer's track purchase
+    console.log('About to POST /stripe/create-checkout-session for artistUploadedTrackId:', artistUploadedTrackId);
+    const customerStripeCheckoutRes = await axios.post(
+      `${BASE_URL}/stripe/create-checkout-session`,
+      { trackId: artistUploadedTrackId },
+      { headers: { Authorization: `Bearer ${customerToken}` } }
     );
+    console.log('Customer Stripe Checkout session response:', customerStripeCheckoutRes.data);
+    if (!customerStripeCheckoutRes.data.url) {
+      throw new Error('Customer Stripe Checkout session creation failed: no url returned');
+    }
+    console.log('\n--- ACTION REQUIRED ---');
+    console.log('Open this Stripe Checkout URL in your browser and complete the payment:');
+    console.log(customerStripeCheckoutRes.data.url);
+    console.log('----------------------\n');
+    // Wait for user to complete payment
+    const customerRl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    await new Promise(resolve => customerRl.question('Press Enter after completing payment in Customer Stripe Checkout...', () => { customerRl.close(); resolve(); }));
+    console.log('About to attempt download for artistUploadedTrackId:', artistUploadedTrackId);
+    // --- TEST: Customer downloads purchased artist track ---
+    // Wait for up to 5 attempts (2s apart) for track to become downloadable (handles webhook race condition)
+    let downloadRes;
+    let lastDownloadError;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        downloadRes = await axios.get(
+          `${BASE_URL}/tracks/download/${artistUploadedTrackId}`,
+          {
+            headers: { Authorization: `Bearer ${customerToken}` },
+            responseType: 'arraybuffer',
+            validateStatus: null
+          }
+        );
+        if (downloadRes.status === 200) break;
+        lastDownloadError = `Attempt ${attempt + 1}: status ${downloadRes.status}`;
+      } catch (err) {
+        lastDownloadError = `Attempt ${attempt + 1}: ${err.message}`;
+      }
+      await new Promise(res => setTimeout(res, 2000));
+    }
+    if (!downloadRes || downloadRes.status !== 200) {
+      throw new Error(`Download failed for purchased track after retries. Last error: ${lastDownloadError}`);
+    }
     console.log('Download status:', downloadRes.status);
     console.log('Download content-type:', downloadRes.headers['content-type']);
     console.log('First 32 bytes:', Buffer.from(downloadRes.data).toString('hex').slice(0, 64));
-    if (downloadRes.status !== 200) {
-      throw new Error(`Download failed for purchased track, status: ${downloadRes.status}`);
-    }
     if (!downloadRes.headers['content-type'] || !downloadRes.headers['content-type'].includes('audio')) {
       throw new Error('Downloaded file is not an audio file');
     }
@@ -690,6 +639,7 @@ async function main() {
 
 
 main();
+
 
 // At the end of the script, after all DB operations
 

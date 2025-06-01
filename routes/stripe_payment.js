@@ -9,6 +9,8 @@ const stripeClient = stripe(process.env.STRIPE_SECRET_KEY);
 
 const router = express.Router();
 
+console.log('[stripe_payment.js] Router loaded');
+
 // Helper: Validate MongoDB ObjectId
 function isValidObjectId(id) {
     return typeof id === 'string' && id.match(/^[a-f\d]{24}$/i);
@@ -59,19 +61,23 @@ router.post('/create-account-link', authMiddleware, async (req, res) => {
 
 //create checkout session for backing track purchase
 router.post('/create-checkout-session', authMiddleware, async (req, res) => {
+    console.log('[stripe_payment] /create-checkout-session called, userId:', req.userId, 'body:', req.body);
     try {
         const { trackId } = req.body;
         if (!isValidObjectId(trackId)) {
+            console.log('[stripe_payment] Invalid trackId:', trackId);
             return res.status(400).json({ error: 'Invalid track ID' });
         }
         const track = await BackingTrack.findById(trackId);
         if (!track) {
+            console.log('[stripe_payment] Track not found for trackId:', trackId);
             return res.status(404).json({ error: 'Track not found' });
         }
         // If track is free, skip Stripe and grant access
         if (Number(track.price) === 0) {
             const user = await User.findById(req.userId);
             if (!user) {
+                console.log('[stripe_payment] User not found for free track, userId:', req.userId);
                 return res.status(404).json({ error: 'User not found' });
             }
             if (!user.purchasedTracks.some(pt => (pt.track?.toString?.() || pt.track) === track._id.toString())) {
@@ -88,6 +94,7 @@ router.post('/create-checkout-session', authMiddleware, async (req, res) => {
         }
         const artist = await User.findById(track.user);
         if (!artist || !artist.stripeAccountId) {
+            console.log('[stripe_payment] Artist not found or missing Stripe account. artist:', artist, 'track.user:', track.user);
             return res.status(404).json({ error: 'Artist either not found or does not have a stripe account' });
         }
         // Only allow payout if artist is 'artist' or 'admin'

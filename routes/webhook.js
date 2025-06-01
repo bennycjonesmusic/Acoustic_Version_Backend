@@ -140,6 +140,43 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
         console.error('Error handling commission payment:', err);
       }
     }
+    // Handle subscription upgrade
+    if (session.metadata && session.metadata.userId && session.metadata.tier && session.subscription) {
+      const userId = session.metadata.userId;
+      const tier = session.metadata.tier;
+      const subscriptionId = session.subscription;
+      if (["pro", "enterprise"].includes(tier)) {
+        try {
+          const user = await User.findById(userId);
+          if (user) {
+            user.subscriptionTier = tier;
+            user.stripeSubscriptionId = subscriptionId;
+            await user.save();
+            console.log(`[WEBHOOK] Upgraded user ${user.email} to tier: ${tier}, subscriptionId: ${subscriptionId}`);
+          } else {
+            console.error('[WEBHOOK] User not found for subscription upgrade:', userId);
+          }
+        } catch (err) {
+          console.error('[WEBHOOK] Error upgrading user subscription tier:', err);
+        }
+      }
+    }
+  }
+  // Handle subscription cancellation (downgrade user)
+  else if (event.type === 'customer.subscription.deleted') {
+    const subscription = event.data.object;
+    const subscriptionId = subscription.id;
+    try {
+      const user = await User.findOne({ stripeSubscriptionId: subscriptionId });
+      if (user) {
+        user.subscriptionTier = 'free';
+        user.stripeSubscriptionId = undefined;
+        await user.save();
+        console.log(`[WEBHOOK] Downgraded user ${user.email} to free tier after subscription cancellation.`);
+      }
+    } catch (err) {
+      console.error('[WEBHOOK] Error downgrading user after subscription cancellation:', err);
+    }
   }
 
   res.status(200).send('Received');

@@ -8,13 +8,14 @@ import dotenv from 'dotenv';
    
 const authMiddleware = (req, res, next) => {
     const authHeader = req.header('Authorization'); //pull http header from the request. 
-    
-      if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ message: 'Unauthorized: No token provided' });
-  }
+    console.log('[authMiddleware] Authorization header:', authHeader);
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        console.log('[authMiddleware] No token provided');
+        return res.status(401).json({ message: 'Unauthorized: No token provided' });
+    }
     const token = authHeader.split(' ')[1];  //was getting an error in postman. Let us try this. split the token, access it via index[1]
-    if (! token) {
-
+    if (!token) {
+        console.log('[authMiddleware] Token split failed');
         //if token does not exist, return 401.
    
         return res.status(401).json({message: "Access denied. No token provided."}); //401 means unauthorized. Locked out.
@@ -24,14 +25,12 @@ const authMiddleware = (req, res, next) => {
         const decoded = jwt.verify(token, process.env.JWT_SECRET); //verify the token. This will check for token validity.
         req.user = decoded;  //if token is valid, set the user to the decoded token. 
         req.userId = decoded.id; //we do this so that we can access the user ID in further middleware, because decoded id gives us the user ID.
-       
+        console.log('[authMiddleware] Token valid, userId:', req.userId);
         next(); //call the next middleware function. 
     } catch (error) {
 
             //If token is invalid, return 401.;
-
-
-        console.error("invalid token", error);
+        console.error('[authMiddleware] Invalid token', error);
         return res.status(401).json({message: "Invalid token."});
     }
 

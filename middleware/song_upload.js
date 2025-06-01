@@ -48,7 +48,13 @@ const allowedMimeTypes = [
 // Profanity filter instance
 const profanityFilter = new Filter.Filter();
 
-const MAX_USER_STORAGE = 1024 * 1024 * 1024; // 1GB per user
+// Instead of a hardcoded MAX_USER_STORAGE, use a per-user storage limit (free/paid tier)
+const getUserStorageLimit = (user) => {
+    // Example: free = 1GB, pro = 10GB, enterprise = 100GB
+    if (user.subscriptionTier === 'pro') return 10 * 1024 * 1024 * 1024;
+    if (user.subscriptionTier === 'enterprise') return 100 * 1024 * 1024 * 1024;
+    return 1024 * 1024 * 1024; // default: 1GB
+};
 
 const fileFilter = async (req, file, cb) => {
     // Sanitize file name
@@ -65,23 +71,14 @@ const fileFilter = async (req, file, cb) => {
     // Check user storage quota (async)
     try {
         if (req.userId) {
-            const BackingTrack = (await import('../models/backing_track.js')).default;
-            const userTracks = await BackingTrack.find({ user: req.userId }, 'fileUrl');
-            // Use S3 to get file sizes if not stored in DB, or store size in DB for each track
-            // For now, estimate by summing req.file.size + all user's uploaded files (if available)
-            // If you store file size in DB, use that field instead of fetching from S3
-            let totalSize = 0;
-            for (const track of userTracks) {
-                // If you store file size in DB, use track.fileSize
-                if (track.fileSize) {
-                    totalSize += track.fileSize;
-                }
-            }
-            // Add current file size
-            totalSize += file.size;
-            if (totalSize > MAX_USER_STORAGE) {
-                console.error('[multer fileFilter] Rejected: user storage quota exceeded', totalSize);
-                return cb(new Error('You have exceeded your total upload storage limit (1GB). Please delete old tracks before uploading more.'), false);
+            const User = (await import('../models/User.js')).default;
+            const user = await User.findById(req.userId);
+            const userLimit = getUserStorageLimit(user);
+            // Use storageUsed field for quota check
+            const projectedUsage = (user.storageUsed || 0) + file.size;
+            if (projectedUsage > userLimit) {
+                console.error('[multer fileFilter] Rejected: user storage quota exceeded', projectedUsage, 'limit:', userLimit);
+                return cb(new Error(`You have exceeded your upload storage limit (${(userLimit/1024/1024/1024).toFixed(0)}GB). Please delete old tracks or upgrade your plan.`), false);
             }
         }
     } catch (err) {
