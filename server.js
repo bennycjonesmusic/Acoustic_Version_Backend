@@ -175,7 +175,7 @@ app.use("/protectedArtist", artistAuthMiddleware, (req, res) => {
 });
 const port = 3000; //set the port. This will be the port that the server will listen on. Lovely job.
 
-app.listen(port, () => {
+const server = app.listen(port, () => {
 
 
 console.log(`Server is running on http://localhost:${port}`); //check the console to see if server is running
