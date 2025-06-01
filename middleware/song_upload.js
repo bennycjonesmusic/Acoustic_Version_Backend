@@ -5,6 +5,8 @@ import { Upload } from '@aws-sdk/lib-storage'; // For multipart uploads
 import fs from 'fs';  // Used to read files locally (for temporary storage)
 import dotenv from 'dotenv';
 import crypto from 'crypto';
+import * as Filter from 'bad-words'; //package to prevent profanity
+import { sanitizeFileName } from '../utils/regexSanitizer.js';
 
 // Load environment variables
 dotenv.config();
@@ -43,7 +45,50 @@ const allowedMimeTypes = [
     'audio/x-midi',  // .mid, .midi
 ];
 
-const fileFilter = (req, file, cb) => {
+// Profanity filter instance
+const profanityFilter = new Filter.Filter();
+
+const MAX_USER_STORAGE = 1024 * 1024 * 1024; // 1GB per user
+
+const fileFilter = async (req, file, cb) => {
+    // Sanitize file name
+    const sanitized = sanitizeFileName(file.originalname);
+    if (sanitized !== file.originalname) {
+        console.warn('[multer fileFilter] File name sanitized:', file.originalname, '->', sanitized);
+        file.originalname = sanitized;
+    }
+    // Profanity check for file name
+    if (profanityFilter.isProfane(file.originalname)) {
+        console.error('[multer fileFilter] Rejected: profane file name', file.originalname);
+        return cb(new Error('File name contains inappropriate language.'), false);
+    }
+    // Check user storage quota (async)
+    try {
+        if (req.userId) {
+            const BackingTrack = (await import('../models/backing_track.js')).default;
+            const userTracks = await BackingTrack.find({ user: req.userId }, 'fileUrl');
+            // Use S3 to get file sizes if not stored in DB, or store size in DB for each track
+            // For now, estimate by summing req.file.size + all user's uploaded files (if available)
+            // If you store file size in DB, use that field instead of fetching from S3
+            let totalSize = 0;
+            for (const track of userTracks) {
+                // If you store file size in DB, use track.fileSize
+                if (track.fileSize) {
+                    totalSize += track.fileSize;
+                }
+            }
+            // Add current file size
+            totalSize += file.size;
+            if (totalSize > MAX_USER_STORAGE) {
+                console.error('[multer fileFilter] Rejected: user storage quota exceeded', totalSize);
+                return cb(new Error('You have exceeded your total upload storage limit (1GB). Please delete old tracks before uploading more.'), false);
+            }
+        }
+    } catch (err) {
+        console.error('[multer fileFilter] Error checking user storage quota:', err);
+        return cb(new Error('Error checking user storage quota.'), false);
+    }
+
     console.log('[multer fileFilter] Received file:', {
         fieldname: file.fieldname,
         originalname: file.originalname,

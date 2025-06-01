@@ -14,6 +14,11 @@ import { toTrackSummary } from '../utils/trackSummary.js';
 import { toUserSummary } from '../utils/userSummary.js';
 import {escapeRegex, isSafeRegexInput, sanitizeFileName} from '../utils/regexSanitizer.js';
 import mongoose from 'mongoose';
+import NodeCache from 'node-cache';
+const cache = new NodeCache({ stdTTL: 60 * 60 }); //cache for 1 hour
+
+// Profanity filter instance (bad-words)
+const profanityFilter = new Filter.Filter();
 
 
 
@@ -31,6 +36,10 @@ export const searchUserByName = async (req, res) => {
         // 2. Validate query for regex safety
         if (!isSafeRegexInput(query)) {
             return res.status(400).json({ message: "Invalid search query" });
+        }
+        // Profanity check for search query
+        if (profanityFilter.isProfane(query)) {
+            return res.status(400).json({ message: "Inappropriate search query" });
         }
         // 3. Validate and sanitize pagination
         let pageNum = parseInt(page, 10);
@@ -98,6 +107,14 @@ export const getUserDetails = async (req, res) => {
 // --- PUBLIC TRACK ENDPOINTS MOVED FROM tracksController.js ---
 
 export const getFeaturedTracks = async (req, res) => {
+    //check the ole cachearoo, make sure we don't hit the database TOO much
+    const cached = cache.get('featuredTracks');
+    if (cached) {
+
+
+        console.log('[getFeaturedTracks] Returning cached data');
+        return res.status(200).json(cached); //if we have cached data, return it. simples.
+    }
     console.log('[getFeaturedTracks] ENTERED');
     // get popular and recent tracks
     const popularTracks = await BackingTrack.find({ isPrivate: false }).sort({ purchaseCount: -1 }).limit(10).populate('user', 'avatar username');
@@ -119,8 +136,10 @@ export const getFeaturedTracks = async (req, res) => {
     if (excludeIds.length >= totalTracks) {
         const featured = [...popularTracks, ...recentTracks];
         const filtered = featured.filter(Boolean);
+        const summary = toTrackSummary(filtered);
+        cache.set('featuredTracks', summary);
         console.log('[getFeaturedTracks] returning early, filtered.length:', filtered.length);
-        return res.status(200).json(toTrackSummary(filtered));
+        return res.status(200).json(summary);
     }
 
     // isPrivate:false must be inside $match
@@ -140,12 +159,20 @@ export const getFeaturedTracks = async (req, res) => {
     // Merge all tracks
     const featured = [...popularTracks, ...randomTracksPopulated, ...recentTracks];
     const filtered = featured.filter(Boolean);
+    const summary = toTrackSummary(filtered);
+    cache.set('featuredTracks', summary);
     console.log('[getFeaturedTracks] final filtered.length:', filtered.length);
-    return res.status(200).json(toTrackSummary(filtered));
+    return res.status(200).json(summary);
 }
 
 export const getFeaturedArtists = async (req, res) => {
     try {
+        // Check cache first
+        const cached = cache.get('featuredArtists');
+        if (cached) {
+            console.log('[getFeaturedArtists] Returning cached data');
+            return res.status(200).json(cached);
+        }
         // Find artists with at least one uploaded track OR at least one commission as artist, and approved profile
         const featuredArtists = await User.find({
             role: 'artist',
@@ -173,7 +200,9 @@ export const getFeaturedArtists = async (req, res) => {
             { $sample: { size: 5 } }
         ]);
         const featured = [...featuredArtists, ...featureRandom]; //Merge the arrays in a super array.
-        return res.status(200).json(toUserSummary(featured))
+        const summary = toUserSummary(featured);
+        cache.set('featuredArtists', summary);
+        return res.status(200).json(summary);
     } catch (error) {
         console.error('Error getting featured artists:', error);
         return res.status(500).json({ message: "Internal server error" });
