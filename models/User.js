@@ -145,7 +145,7 @@ userSchema.methods.calculateAverageTrackRating = async function() {
   });
   const tracks = this.uploadedTracks || [];
   const ratings = tracks
-    .map(track => typeof track.averageRating === 'number' ? track.averageRating : null)
+    .map(track => typeof track.averageRating === 'number' && track.averageRating > 0 ? track.averageRating : null)
     .filter(r => r !== null && !isNaN(r));
   if (ratings.length < 10) {
     this.averageTrackRating = 5; // Set to maximum if fewer than 10 ratings

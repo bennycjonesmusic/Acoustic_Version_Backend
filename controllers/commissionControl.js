@@ -314,9 +314,18 @@ export const uploadFinishedTrack = async (req, res) => {
         let tempFullPath, tempPreviewPath;
         try {
             tempFullPath = path.join(tmpDir, `${commissionId}_full${ext}`);
-            tempPreviewPath = path.join(tmpDir, `${commissionId}_preview${ext}`);
+            tempPreviewPath = path.join(tmpDir, `${commissionId}_preview.mp3`);
             fs.writeFileSync(tempFullPath, req.file.buffer);
+            // Debug: check file size and buffer length
+            console.log('[DEBUG] tempFullPath:', tempFullPath, 'size:', fs.statSync(tempFullPath).size, 'buffer length:', req.file.buffer.length);
+            // Try running ffmpeg manually if this fails
             await getAudioPreview(tempFullPath, tempPreviewPath, 30);
+            // Debug: check preview file size
+            if (fs.existsSync(tempPreviewPath)) {
+              console.log('[DEBUG] tempPreviewPath:', tempPreviewPath, 'size:', fs.statSync(tempPreviewPath).size);
+            } else {
+              console.error('[DEBUG] tempPreviewPath was not created!');
+            }
             try {
                 await new Upload({
                     client: s3Client,
@@ -496,7 +505,7 @@ export const getCustomerCommissions = async (req, res) => {
     try { //Now paginated for better performance
         const customerId = req.userId;
         // Only allow the user themselves or admin
-        if (!req.user || (req.user._id.toString() !== customerId && req.user.role !== 'admin')) {
+        if (!req.user || (req.user.id.toString() !== customerId && req.user.role !== 'admin')) {
             return res.status(403).json({ error: 'Not authorized' });
         }
         // Pagination

@@ -94,6 +94,10 @@ async function main() {
   try {
     artistToken = await login(ARTIST_EMAIL, ARTIST_PASSWORD);
     console.log('Artist token:', artistToken);
+    // Set Stripe account for artist directly in DB (test only)
+    const UserModel = (await import('./models/User.js')).default;
+    await UserModel.findOneAndUpdate({ email: ARTIST_EMAIL }, { stripeAccountId: 'acct_1RTB1bCRMWHPkR1y' });
+    console.log('Set artist Stripe accountId for test (direct DB update)');
   } catch (e) {
     console.log('Artist login error:', e.response ? e.response.data : e);
     throw e;
@@ -210,6 +214,22 @@ async function main() {
   // Use the first commission's ID (should be the one just created)
   const commissionFromList = commissionsRes.data.commissions.find(c => c._id === commissionId) || commissionsRes.data.commissions[0];
   const commissionIdToApprove = commissionFromList._id;
+
+  // --- Test: Get all commissions for the customer using the new paginated route ---
+  const customerCommissionsRes = await axios.get(`${BASE_URL}/commission/customer/commissions`, {
+    headers: { Authorization: `Bearer ${customerToken}` },
+    params: { page: 1, limit: 10 }
+  });
+  console.log('Customer commissions (paginated):', customerCommissionsRes.data.commissions);
+  console.log('Customer commissions pagination info:', {
+    page: customerCommissionsRes.data.page,
+    limit: customerCommissionsRes.data.limit,
+    total: customerCommissionsRes.data.total,
+    totalPages: customerCommissionsRes.data.totalPages
+  });
+  if (!Array.isArray(customerCommissionsRes.data.commissions) || customerCommissionsRes.data.commissions.length === 0) {
+    throw new Error('Customer commissions route did not return any commissions!');
+  }
 
   // 3c. Artist can also approve/deny using the new explicit endpoint
   // Approve (accept) the commission
