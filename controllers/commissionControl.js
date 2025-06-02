@@ -493,7 +493,7 @@ export const getArtistCommissions = async (req, res) => {
 
 // Get all commissions for the logged-in customer (secure)
 export const getCustomerCommissions = async (req, res) => {
-    try {
+    try { //Now paginated for better performance
         const customerId = req.userId;
         // Only allow the user themselves or admin
         if (!req.user || (req.user._id.toString() !== customerId && req.user.role !== 'admin')) {
@@ -573,6 +573,7 @@ export const getFinishedCommission = async (req, res) => {
     const userId = req.userId;
     try {
         const commission = await CommissionRequest.findById(commissionId);
+        const artist = await User.findById(commission.artist); 
         if (!commission) return res.status(404).json({ error: 'Commission not found' });
         if (commission.customer.toString() !== userId && !(req.user && req.user.role === 'admin')) {
             return res.status(403).json({ error: 'Not authorized' });
@@ -593,6 +594,8 @@ export const getFinishedCommission = async (req, res) => {
                 refunded: false
             });
             await user.save();
+            artist.numOfCommissions = (artist.numOfCommissions || 0) + 1; 
+            await artist.save();// Increment artist's commission count
         }
         return res.status(200).json({ finishedTrackUrl: commission.finishedTrackUrl });
     } catch (err) {
