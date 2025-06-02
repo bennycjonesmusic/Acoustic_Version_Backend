@@ -1,12 +1,12 @@
-import contactForm from "../models/contact_form";
+import contactForm from "../models/contact_form.js";
 import User from "../models/User.js";
-import contactFormSchema from "../controllers/contactFormSchema.js";
+import { contactForumSchema } from "./validationSchemas.js";
 import * as Filter from 'bad-words'; 
 
 
 export const createContactFormEntry = async (req, res) => {
   try {
-    const { error } = contactFormSchema.validate(req.body);
+    const { error } = contactForumSchema.validate(req.body);
     if (error) {
       return res.status(400).json({ message: error.details[0].message });
     }
@@ -47,32 +47,28 @@ export const getContactFormEntries = async (req, res) => {
 };
 
 export const updateContactFormEntry = async (req, res) => {
-
-
     try {
         const { id } = req.params;
         const { status } = req.body;
-    
+        console.log('[DEBUG] PATCH /report/:id', { id, status, body: req.body });
         if (!['open', 'in_progress', 'resolved', 'closed'].includes(status)) {
-        return res.status(400).json({ message: 'Invalid status value.' });
+            console.log('[DEBUG] Invalid status value:', status);
+            return res.status(400).json({ message: 'Invalid status value.' });
         }
-    
         const entry = await contactForm.findByIdAndUpdate(id, { status }, { new: true });
         if (!entry) {
-        return res.status(404).json({ message: 'Contact form entry not found.' });
+            console.log('[DEBUG] Contact form entry not found for id:', id);
+            return res.status(404).json({ message: 'Contact form entry not found.' });
         }
-
         if (status === 'closed'){
-
-            await entry.remove();
+            await entry.deleteOne();
+            console.log('[DEBUG] Contact form entry closed and removed:', id);
             return res.status(200).json({ message: 'Contact form entry closed and removed successfully.' });
         }
-    
+        console.log('[DEBUG] Contact form entry updated:', entry);
         return res.status(200).json({ message: 'Contact form entry updated successfully.', entry });
     } catch (error) {
         console.error('Error updating contact form entry:', error);
         return res.status(500).json({ error: 'Failed to update contact form entry.' });
     }
-
-
 };

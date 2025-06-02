@@ -23,6 +23,7 @@ import helmet from 'helmet'; // Import helmet middleware
 import compression from 'compression'; // Import compression middleware
 import stripeSubscriptionsRouter from './routes/stripe_subscriptions.js'; // Import the new Stripe subscriptions router
 import { recalculateAllUserStorage } from './utils/recalculateUserStorage.js'; // Import the storage recalculation utility
+import reportRoutes from './routes/report.js'; // Import reportRoutes
 // Handle uncaught exceptions and unhandled promise rejections
 process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception:', err);
@@ -84,19 +85,7 @@ console.log(`Updated ${result.modifiedCount} users to admin role.`);
 }
 
 });
-// Run admin update immediately on server start
-(async () => {
-  try {
-    console.log("Running initial admin update");
-    const result = await User.updateMany(
-      { email: { $in: adminEmails } },
-      { $set: { role: 'admin' } }
-    );
-    console.log(`Updated ${result.modifiedCount || result.nModified || 0} users to admin role (initial run).`);
-  } catch (error) {
-    console.error('Error running initial admin update:', error);
-  }
-})();
+
 
 // Cron job to delete unused avatars every 24 hours
 cron.schedule('0 3 * * *', async () => {
@@ -129,8 +118,18 @@ cron.schedule('0 */6 * * *', () => {
 //connect to MongoDBAtlas. This will store the data.
 mongoose.connect(process.env.MONGODB_URI)
     
-    .then(() => {
+    .then(async() => {
         console.log('Connected to MongoDB');
+          try {
+    console.log("Running initial admin update");
+    const result = await User.updateMany(
+      { email: { $in: adminEmails } },
+      { $set: { role: 'admin' } }
+    );
+    console.log(`Updated ${result.modifiedCount || result.nModified || 0} users to admin role (initial run).`);
+  } catch (error) {
+    console.error('Error running initial admin update:', error);
+  }
     })
     .catch((error) => {
         console.error('Error connecting to MongoDB:', error);
@@ -189,6 +188,8 @@ app.use("/protectedArtist", artistAuthMiddleware, (req, res) => {
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok' });
 });
+
+app.use('/report', reportRoutes);
 
 const port = 3000; //set the port. This will be the port that the server will listen on. Lovely job.
 

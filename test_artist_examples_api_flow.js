@@ -16,8 +16,10 @@ const __dirname = path.dirname(__filename);
 const BASE_URL = 'http://localhost:3000';
 const TEST_EMAIL = `artist@example.com`;
 const TEST_PASSWORD = 'Moobslikejabba123456';
+const ADMIN_EMAIL = 'acousticversionuk@gmail.com';
+const ADMIN_PASSWORD = 'Moobslikejabba123456';
 
-let artistToken, artistId, exampleId;
+let artistToken, artistId, exampleId, adminToken;
 
 async function login(email, password) {
   const response = await axios.post(`${BASE_URL}/auth/login`, {
@@ -117,6 +119,72 @@ async function main() {
       throw new Error('Artist example still present after deletion');
     }
     console.log('Artist example upload, fetch, and delete test passed.');
+    // --- CONTACT FORM ROUTES TEST ---
+    let contactFormId;
+    // 1. Submit a contact form (anonymous)
+    const contactFormRes = await axios.post(`${BASE_URL}/report`, {
+      email: 'testuser@example.com',
+      description: 'This is a test bug report',
+      type: 'bug_report'
+    });
+    console.log('Contact form submit response:', contactFormRes.data);
+    contactFormId = contactFormRes.data.entry._id || contactFormRes.data.entry.id;
+    if (!contactFormId) throw new Error('Contact form submission failed: missing id');
+
+    console.log('Contact form submitted successfully:', contactFormId);
+
+    // Login as admin for report routes
+    adminToken = await login(ADMIN_EMAIL, ADMIN_PASSWORD);
+    console.log('Admin token obtained:', adminToken);
+    const admin = await User.findOne({ email: ADMIN_EMAIL });
+    console.log("Admin role =", admin.role);
+
+    // 2. Fetch all contact forms (admin, using adminToken now)
+    let allFormsRes;
+    try {
+      allFormsRes = await axios.get(`${BASE_URL}/report`, {
+        headers: { Authorization: `Bearer ${adminToken}` }
+      });
+      console.log('Contact form entries (admin):', allFormsRes.data);
+    } catch (err) {
+      if (err.response) {
+        console.error('Contact form fetch failed:', err.response.data);
+      } else {
+        console.error('Contact form fetch failed:', err);
+      }
+      throw err;
+    }
+    const foundForm = (Array.isArray(allFormsRes.data) ? allFormsRes.data : []).find(f => f._id === contactFormId || f.id === contactFormId);
+    if (!foundForm) throw new Error('Submitted contact form not found in admin fetch');
+    
+    // 3. Update (close/delete) the contact form (admin)
+    const updateFormRes = await axios.patch(
+      `${BASE_URL}/report/${contactFormId}`,
+      { status: 'closed' },
+      {
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+    console.log('Contact form update (close/delete) response:', updateFormRes.data);
+    if (updateFormRes.status !== 200) throw new Error('Failed to close/delete contact form');
+    // Confirm deletion
+    try {
+      const afterDeleteRes = await axios.get(`${BASE_URL}/report`, {
+        headers: { Authorization: `Bearer ${adminToken}` }
+      });
+      const stillExists = (Array.isArray(afterDeleteRes.data) ? afterDeleteRes.data : []).some(f => f._id === contactFormId || f.id === contactFormId);
+      if (stillExists) throw new Error('Contact form still present after deletion');
+      console.log('Contact form successfully deleted after closing.');
+    } catch (err) {
+      if (err.response && err.response.status === 403) {
+        console.log('Admin access required for contact form fetch after delete.');
+      } else {
+        throw err;
+      }
+    }
     // Cleanup: Delete test artist
     await User.deleteMany({ email: { $regex: new RegExp('^' + TEST_EMAIL + '$', 'i') } });
     console.log('Cleanup completed: test artist deleted');

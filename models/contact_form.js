@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 
-const contactForumSchema = new mongoose.Schema({
+const contactFormSchema = new mongoose.Schema({
 
     email: {
 
@@ -41,5 +41,7 @@ const contactForumSchema = new mongoose.Schema({
 
 });
 
-export default mongoose.model('ContactForum', contactForumSchema);
+const contactForm = mongoose.model('ContactForm', contactFormSchema);
+export default contactForm;
+// contactForum.js
 // This schema defines a contact forum model for users to report issues, request features, or provide feedback.

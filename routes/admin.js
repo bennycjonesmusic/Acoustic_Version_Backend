@@ -8,10 +8,10 @@ const router = Router();
 
 router.delete('/clear-s3', authMiddleware, isOwner, clearS3);
 router.delete('/delete-all-users', authMiddleware, isOwner, deleteAllUsers); //delete all users now requires special admin code
-router.get('/users', getUsers);
-router.post('/ban-user', authMiddleware, banUser);
-router.get('/sales-history', authMiddleware, getAllSalesAndRefunds);
-router.get('/sales-stats-csv', authMiddleware, getSalesStatsAndCsv);
+router.get('/users', authMiddleware, isOwner, getUsers);
+router.post('/ban-user', authMiddleware, isOwner, banUser);
+router.get('/sales-history', authMiddleware, isOwner, getAllSalesAndRefunds);
+router.get('/sales-stats-csv', authMiddleware, isOwner, getSalesStatsAndCsv);
 router.get('/pending-artists', authMiddleware, isOwner, getPendingArtists);
 router.post('/approve-artist/:id', authMiddleware, isOwner, approveArtist);
 router.post('/reject-artist/:id', authMiddleware, isOwner, rejectArtist);
