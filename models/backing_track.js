@@ -64,6 +64,12 @@ const backingTrackSchema = new mongoose.Schema({
     default: false,
   },
 
+  jamTrack: {
+
+    type: Boolean,
+    default: false
+  },
+
   backingTrackType: {
 
     type: String,

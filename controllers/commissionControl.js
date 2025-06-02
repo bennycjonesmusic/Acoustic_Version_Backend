@@ -466,10 +466,60 @@ export const artistRespondToCommission = async (req, res) => {
 export const getArtistCommissions = async (req, res) => {
     try {
         const artistId = req.userId;
-        const commissions = await CommissionRequest.find({ artist: artistId }).populate('customer');
-        return res.status(200).json({ commissions });
+        // Pagination
+        const page = Math.max(1, parseInt(req.query.page) || 1);
+        const limit = Math.max(1, Math.min(100, parseInt(req.query.limit) || 20));
+        const skip = (page - 1) * limit;
+        const [commissions, total] = await Promise.all([
+            CommissionRequest.find({ artist: artistId })
+                .populate('customer')
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit),
+            CommissionRequest.countDocuments({ artist: artistId })
+        ]);
+        return res.status(200).json({
+            commissions,
+            page,
+            limit,
+            total,
+            totalPages: Math.ceil(total / limit)
+        });
     } catch (error) {
         console.error('Error fetching artist commissions:', error);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// Get all commissions for the logged-in customer (secure)
+export const getCustomerCommissions = async (req, res) => {
+    try {
+        const customerId = req.userId;
+        // Only allow the user themselves or admin
+        if (!req.user || (req.user._id.toString() !== customerId && req.user.role !== 'admin')) {
+            return res.status(403).json({ error: 'Not authorized' });
+        }
+        // Pagination
+        const page = Math.max(1, parseInt(req.query.page) || 1);
+        const limit = Math.max(1, Math.min(100, parseInt(req.query.limit) || 20));
+        const skip = (page - 1) * limit;
+        const [commissions, total] = await Promise.all([
+            CommissionRequest.find({ customer: customerId })
+                .populate('artist')
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit),
+            CommissionRequest.countDocuments({ customer: customerId })
+        ]);
+        return res.status(200).json({
+            commissions,
+            page,
+            limit,
+            total,
+            totalPages: Math.ceil(total / limit)
+        });
+    } catch (error) {
+        console.error('Error fetching customer commissions:', error);
         return res.status(500).json({ error: 'Internal server error' });
     }
 };

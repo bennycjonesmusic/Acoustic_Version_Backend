@@ -9,6 +9,7 @@ import {
   refundTrackPurchase,
   artistRespondToCommission,
   getArtistCommissions,
+  getCustomerCommissions,
   approveOrDenyCommission,
   getCommissionPreviewForClient,
   getFinishedCommission,
@@ -59,6 +60,9 @@ router.get('/artist/commissions', artistOrAdminAuthMiddleware, getArtistCommissi
 
 // Artist or admin approves or denies a commission (new, explicit route)
 router.post('/artist/approve-deny', artistOrAdminAuthMiddleware, approveOrDenyCommission);
+
+// Get all commissions for the logged-in customer (secure)
+router.get('/customer/commissions', authMiddleware, getCustomerCommissions);
 
 // Get preview for client
 router.get('/preview-for-client', authMiddleware, getCommissionPreviewForClient);

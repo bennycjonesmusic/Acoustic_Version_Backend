@@ -96,6 +96,11 @@ const userSchema = new mongoose.Schema({
     type: Number,
     default: 0, // in bytes
     description: 'Total storage used by the user in bytes.'
+  },
+  numOfCommissions: {
+    type: Number,
+    default: 0,
+    description: 'Number of completed commissions for this user.'
   }
 }, {
   timestamps: true, // 
