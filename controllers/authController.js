@@ -134,6 +134,9 @@ export const login = async (req, res) => {
         }
         // Set req.userId for downstream middleware
         req.userId = user._id;
+        // Update lastOnline timestamp
+        user.lastOnline = new Date();
+        await user.save();
         // Call makeAdmin middleware inline
         await makeAdmin(req, res, async () => {
             const token = jwt.sign({ id: user._id, email: user.email, role: user.role }, process.env.JWT_SECRET, { expiresIn: '2h' });

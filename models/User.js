@@ -106,6 +106,11 @@ const userSchema = new mongoose.Schema({
     type: Number,
     default: 0,
     description: 'Number of completed commissions for this user.'
+  },
+  lastOnline: {
+    type: Date,
+    default: null,
+    description: 'Timestamp of the user\'s last activity.'
   }
 }, {
   timestamps: true, // 
