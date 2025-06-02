@@ -5,7 +5,7 @@ import adminEmails from '../utils/admins.js';
 
 const userSchema = new mongoose.Schema({
   username: { type: String, unique: true },
-  email: { type: String, required: true, unique: true },
+  email: { type: String, required: true }, // removed unique: true to avoid duplicate index warning
   password: { type: String, required: true }, //perhaps use bcrypt here
   verified: {
   type: Boolean,
