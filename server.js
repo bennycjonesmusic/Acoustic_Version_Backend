@@ -24,6 +24,9 @@ import compression from 'compression'; // Import compression middleware
 import stripeSubscriptionsRouter from './routes/stripe_subscriptions.js'; // Import the new Stripe subscriptions router
 import { recalculateAllUserStorage } from './utils/recalculateUserStorage.js'; // Import the storage recalculation utility
 import reportRoutes from './routes/report.js'; // Import reportRoutes
+import swaggerUi from 'swagger-ui-express';
+import YAML from 'yamljs';
+
 // Handle uncaught exceptions and unhandled promise rejections
 process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception:', err);
@@ -190,6 +193,9 @@ app.get('/health', (req, res) => {
 });
 
 app.use('/report', reportRoutes);
+
+const swaggerDocument = YAML.load('./openapi.yaml');
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 const port = 3000; //set the port. This will be the port that the server will listen on. Lovely job.
 

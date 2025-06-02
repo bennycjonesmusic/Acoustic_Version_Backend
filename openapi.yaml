@@ -1,0 +1,184 @@
+openapi: 3.0.0
+info:
+  title: Backing Tracks API
+  version: 1.0.0
+servers:
+  - url: http://localhost:3000
+paths:
+  /auth/login:
+    post:
+      summary: User login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                login:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Login successful
+  /auth/register:
+    post:
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                email:
+                  type: string
+                password:
+                  type: string
+                role:
+                  type: string
+      responses:
+        '201':
+          description: User registered successfully
+  /users/me:
+    get:
+      summary: Get current user profile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User profile data
+  /report:
+    post:
+      summary: Submit a contact or bug report
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                description:
+                  type: string
+                type:
+                  type: string
+      responses:
+        '200':
+          description: Report submitted
+    get:
+      summary: Get all reports (admin only)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of reports
+  /report/{id}:
+    patch:
+      summary: Update or close a report (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+      responses:
+        '200':
+          description: Report updated or closed
+  /public/featured-tracks:
+    get:
+      summary: Get featured tracks
+      description: Returns a list of featured backing tracks for the homepage or discovery section.
+      responses:
+        '200':
+          description: List of featured tracks
+  /public/featured-artists:
+    get:
+      summary: Get featured artists
+      description: Returns a list of featured artists for the homepage or discovery section.
+      responses:
+        '200':
+          description: List of featured artists
+  /tracks/{id}:
+    get:
+      summary: Get a backing track by ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Backing track details
+  /users/artist/{id}/examples:
+    get:
+      summary: Get artist examples by artist ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of artist examples
+  /public/tracks:
+    get:
+      summary: Get all public tracks
+      description: Returns a list of all public backing tracks.
+      responses:
+        '200':
+          description: List of public tracks
+  /public/artists:
+    get:
+      summary: Get all public artists
+      description: Returns a list of all public artists.
+      responses:
+        '200':
+          description: List of public artists
+  /public/artist/{id}:
+    get:
+      summary: Get public artist profile by ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Public artist profile
+  /public/track/{id}:
+    get:
+      summary: Get public track by ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Public track details
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
