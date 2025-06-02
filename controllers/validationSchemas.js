@@ -13,7 +13,7 @@ export const uploadTrackSchema = Joi.object({
   instructions: Joi.string().max(1000).allow('').optional(),
   youtubeGuideUrl: Joi.string().uri().allow('').optional(),
   guideTrackUrl: Joi.string().uri().allow('').optional(),
-  // You can add more fields as needed, e.g.:
+
   // key: Joi.string().valid('A', 'B', 'C', 'D', 'E', 'F', 'G').optional(),
 });
 
@@ -47,4 +47,12 @@ export const commentSchema = Joi.object({
 
 export const artistAboutSchema = Joi.object({
   about: Joi.string().min(1).max(500).required(),
+});
+
+export const contactForumSchema = Joi.object({
+  email: Joi.string().email().required(),
+  description: Joi.string().min(1).max(1000).required(),
+  type: Joi.string().valid('general', 'bug_report', 'feature_request', 'user_report', 'other').required(),
+
+
 });
