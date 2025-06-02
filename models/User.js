@@ -97,6 +97,11 @@ const userSchema = new mongoose.Schema({
     default: 0, // in bytes
     description: 'Total storage used by the user in bytes.'
   },
+  availableForCommission: {
+
+    type: Boolean,
+    default: true,
+  }, // Whether the artist is currently available for commissions
   numOfCommissions: {
     type: Number,
     default: 0,
