@@ -27,5 +27,8 @@ commissionRequestSchema.pre('save', function(next) {
   next();
 });
 
+commissionRequestSchema.index({ customer: 1 }); // Fast lookup of commissions by customer
+commissionRequestSchema.index({ artist: 1 });   // Fast lookup of commissions by artist
+
 const CommissionRequest = mongoose.model('CommissionRequest', commissionRequestSchema);
 export default CommissionRequest;

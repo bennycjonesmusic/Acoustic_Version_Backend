@@ -284,8 +284,9 @@ backingTrackSchema.set('toJSON', {
 });
 
 
-// Add text index for title
-backingTrackSchema.index({ title: 'text' });
+// Indexes for optimized queries
+backingTrackSchema.index({ user: 1 }); // Fast lookup of tracks by artist/owner
+backingTrackSchema.index({ title: 'text' }); // Already present for text search
 
 // Pre-validate hook to set customerPrice
 backingTrackSchema.pre('validate', function(next) {

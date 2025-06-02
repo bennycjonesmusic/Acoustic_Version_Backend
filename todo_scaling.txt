@@ -1,0 +1,40 @@
+# Scaling To-Do (Backend)
+
+1. **Database Indexes**
+   - Ensure indexes on frequently queried fields (userId, artistId, commission status, email, etc.).
+   - Review and optimize existing indexes.
+
+2. **N+1 Query Problem**
+   - Audit population of references (e.g., uploadedTracks) for large arrays.
+   - Consider aggregation pipelines for analytics and reporting.
+
+3. **File Storage**
+   - Monitor S3 usage and errors.
+   - Set up S3 lifecycle rules for cleaning up unused files.
+
+4. **Stripe Integration**
+   - Monitor for Stripe API rate limits.
+   - Add retry/backoff logic for Stripe errors.
+
+5. **Job Queues**
+   - Move slow/background tasks (audio preview, email sending) to a job queue (e.g., Bull, RabbitMQ) as user base grows.
+
+6. **Horizontal Scaling**
+   - Prepare for running multiple Node.js processes/containers behind a load balancer.
+
+7. **Database Scaling**
+   - Plan for sharding or read replicas in MongoDB for very large datasets.
+
+8. **Monitoring & Logging**
+   - Add structured logging (e.g., Winston).
+   - Integrate error monitoring (e.g., Sentry).
+
+9. **API Rate Limiting**
+   - Ensure rate limiting is in place to prevent abuse.
+
+10. **Testing & Load Testing**
+    - Add automated load tests to simulate high user/commission/track volume.
+
+---
+
+This list is based on the current backend structure and MVP state. Review and update as the platform grows.

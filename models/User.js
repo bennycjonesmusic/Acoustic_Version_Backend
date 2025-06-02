@@ -195,6 +195,7 @@ userSchema.set('toJSON', {
 });
 
 userSchema.index({username: "text"}); //add index to search for username
+userSchema.index({ email: 1 }, { unique: true }); // Ensure fast lookups and uniqueness for email
 
 const User = mongoose.model('User', userSchema);
 export default User;
