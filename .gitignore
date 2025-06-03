@@ -46,5 +46,8 @@ audit.json
 
 next-steps-review.txt
 
+# Test assets and temporary test files
+test-assets/
+
 # Misc
 toDo.txt
