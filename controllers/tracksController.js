@@ -116,6 +116,12 @@ export const uploadTrack = async (req, res) => {
     const Artist = await User.findById(req.userId);
     const profanity = new Filter.Filter();
 
+    // Check for duplicate title by same user
+    const existingTrack = await BackingTrack.findOne({ title: req.body.title, user: req.userId });
+    if (existingTrack) {
+        return res.status(400).json({ message: "You already have a track with this title. Please choose a different title." });
+    }
+
 
     
     // Only allow upload if user is artist or admin
