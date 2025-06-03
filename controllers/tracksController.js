@@ -4,13 +4,59 @@ import { Upload } from '@aws-sdk/lib-storage'; // for streaming uploads to S3
 import BackingTrack from '../models/backing_track.js';
 import User from '../models/User.js'; // 
 import { parseKeySignature } from '../utils/parseKeySignature.js';
-import { uploadTrackSchema, reviewSchema, commentSchema } from './validationSchemas.js';
+import { uploadTrackSchema, editTrackSchema, reviewSchema, commentSchema } from './validationSchemas.js';
 import * as Filter from 'bad-words';
 import { sendFollowersNewTrack } from '../utils/updateFollowers.js';
 import path from 'path';
 import { sanitizeFileName } from '../utils/regexSanitizer.js';
 
+/**
+ * @typedef {Object} BackingTrack
+ * @property {string} _id - Track ID
+ * @property {string} title - Track title
+ * @property {string} description - Track description
+ * @property {number} price - Track price
+ * @property {string} fileUrl - S3 file URL
+ * @property {string} [previewUrl] - S3 preview URL
+ * @property {string} user - User ID who uploaded
+ * @property {string} originalArtist - Original artist name
+ * @property {'karaoke'|'instrumental'|'both'} backingTrackType - Type of track
+ * @property {string} genre - Music genre
+ * @property {string} [vocalRange] - Vocal range description
+ * @property {string} [instructions] - Instructions for use
+ * @property {string} [youtubeGuideUrl] - YouTube guide URL
+ * @property {string} [guideTrackUrl] - Guide track URL
+ * @property {'licensed'|'original'|'public_domain'} [licenseStatus] - License status
+ * @property {string} [licensedFrom] - License source
+ * @property {number} averageRating - Average rating
+ * @property {number} downloadCount - Download count
+ * @property {Date} createdAt - Creation date
+ * @property {Date} updatedAt - Last update date
+ */
 
+/**
+ * @typedef {Object} APIResponse
+ * @property {string} message - Response message
+ * @property {BackingTrack} [track] - Single track data
+ * @property {BackingTrack[]} [tracks] - Array of tracks
+ * @property {string} [error] - Error message
+ */
+
+/**
+ * @typedef {Object} TrackEditRequest
+ * @property {string} [title] - Track title
+ * @property {string} [description] - Track description
+ * @property {number} [price] - Track price
+ * @property {string} [originalArtist] - Original artist
+ * @property {'karaoke'|'instrumental'|'both'} [backingTrackType] - Track type
+ * @property {string} [genre] - Music genre
+ * @property {string} [vocalRange] - Vocal range
+ * @property {string} [instructions] - Usage instructions
+ * @property {string} [youtubeGuideUrl] - YouTube guide URL
+ * @property {string} [guideTrackUrl] - Guide track URL
+ * @property {'licensed'|'original'|'public_domain'} [licenseStatus] - License status
+ * @property {string} [licensedFrom] - License source
+ */
 
 export const rateTrack = async(req, res) => {
 try{
@@ -492,10 +538,16 @@ export const getUploadedTracksByUserId = async (req, res) => {
     }
 };
 
-export const editTrack = async (req, res) => {
+/**
+ * Edit a backing track
+ * @param {Express.Request & {userId: string, params: {id: string}, body: TrackEditRequest}} req - Express request with auth and track edit data
+ * @param {Express.Response} res - Express response
+ * @returns {Promise<APIResponse>} Promise resolving to API response with updated track
+ */
+export async function editTrack(req, res) {
     try {
-        // Validate input first
-        const { error } = uploadTrackSchema.validate(req.body);
+        // Validate request body
+        const { error, value } = editTrackSchema.validate(req.body);
         if (error) {
             return res.status(400).json({ message: error.details[0].message });
         }
@@ -513,53 +565,69 @@ export const editTrack = async (req, res) => {
             return res.status(404).json({ message: 'Track not found' });
         }
         
-        // Check ownership (fixed: track.user not track.User)
+        // Check ownership
         if (track.user.toString() !== user._id.toString()) {
             return res.status(403).json({ message: "You are not authorized to edit this track" });
         }
         
-        // Extract fields from request body
-        const { description, title, originalArtist, instructions, youtubeGuideUrl, guideTrackUrl, licenseStatus, licensedFrom, price, backingTrackType, genre, vocalRange } = req.body;
+        // Extract validated fields from value
+        const { description, title, originalArtist, instructions, youtubeGuideUrl, guideTrackUrl, licenseStatus, licensedFrom, price, backingTrackType, genre, vocalRange } = value;
         
-        // Validate and parse price
-        let parsedPrice = undefined;
-        if (price !== undefined && price !== null && price !== '') {
-            parsedPrice = parseFloat(price);
-            if (isNaN(parsedPrice) || parsedPrice < 0) {
-                return res.status(400).json({ message: 'Price must be a valid positive number' });
+        // Validate and parse price if present
+        let parsedPrice = track.price; // Default to existing price
+        if (price !== undefined) { // Check if price is explicitly provided in the request
+            if (price === null || price === '') { // Allow unsetting price or setting to 0
+                 parsedPrice = 0;
+            } else {
+                parsedPrice = parseFloat(price);
+                if (isNaN(parsedPrice) || parsedPrice < 0) {
+                    return res.status(400).json({ message: 'Price must be a valid positive number or zero' });
+                }
             }
-        }        
+        }
+
+        // Conditional validation for licensedFrom
+        if (licenseStatus === 'licensed') {
+            if (!licensedFrom || typeof licensedFrom !== 'string' || licensedFrom.trim() === '') {
+                return res.status(400).json({ message: 'Licensed from must be a non-empty string when licenseStatus is "licensed".' });
+            }
+        } else if (licenseStatus === 'unlicensed' || licenseStatus === 'not_required') {
+            // If changing to unlicensed or not_required, clear licensedFrom
+            if (Object.prototype.hasOwnProperty.call(value, 'licenseStatus') && !Object.prototype.hasOwnProperty.call(value, 'licensedFrom')) {
+                 track.licensedFrom = '';
+            }
+        }
+
+
         // Create object with field names and values for easier iteration
-        const fieldsToUpdate = {
-            description,
-            title, 
-            originalArtist,
-            instructions,
-            youtubeGuideUrl,
-            guideTrackUrl,
-            licenseStatus,
-            licensedFrom,
-            price: parsedPrice,
-            backingTrackType,
-            genre,
-            vocalRange
-        };
+        // Only include fields that were actually in the validated 'value' object
+        const fieldsToUpdate = {};
+        if (description !== undefined) fieldsToUpdate.description = description;
+        if (title !== undefined) fieldsToUpdate.title = title;
+        if (originalArtist !== undefined) fieldsToUpdate.originalArtist = originalArtist;
+        if (instructions !== undefined) fieldsToUpdate.instructions = instructions;
+        if (youtubeGuideUrl !== undefined) fieldsToUpdate.youtubeGuideUrl = youtubeGuideUrl;
+        if (guideTrackUrl !== undefined) fieldsToUpdate.guideTrackUrl = guideTrackUrl;
+        if (licenseStatus !== undefined) fieldsToUpdate.licenseStatus = licenseStatus;
+        if (licensedFrom !== undefined) fieldsToUpdate.licensedFrom = licensedFrom;
+        if (price !== undefined) fieldsToUpdate.price = parsedPrice; // Use parsedPrice
+        if (backingTrackType !== undefined) fieldsToUpdate.backingTrackType = backingTrackType;
+        if (genre !== undefined) fieldsToUpdate.genre = genre;
+        if (vocalRange !== undefined) fieldsToUpdate.vocalRange = vocalRange;
         
         // Check profanity and update fields
         for (const [fieldName, fieldValue] of Object.entries(fieldsToUpdate)) {
-            if (fieldValue !== undefined && fieldValue !== null && fieldValue !== '') {
-                // Check for profanity (fixed: isProfane not IsProfane)
-                if (typeof fieldValue === 'string' && profanity.isProfane(fieldValue)) {
-                    return res.status(400).json({ message: `Please avoid inappropriate language in the ${fieldName} field` });
-                }
-                
-                // Basic XSS prevention - strip HTML tags
+            // fieldValue can be an empty string (e.g. for instructions), so we don't check for empty string here
+            // null or undefined means the field was not provided or explicitly set to null by Joi's .optional()
+            if (fieldValue !== undefined) { 
                 let sanitizedValue = fieldValue;
                 if (typeof fieldValue === 'string') {
+                    if (profanity.isProfane(fieldValue)) {
+                        return res.status(400).json({ message: `Please avoid inappropriate language in the ${fieldName} field` });
+                    }
                     sanitizedValue = fieldValue.replace(/<[^>]*>/g, '').trim();
                 }
                 
-                // Update the track field (fixed: use fieldName as key, fieldValue as value)
                 track[fieldName] = sanitizedValue;
             }
         }

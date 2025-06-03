@@ -99,86 +99,312 @@ paths:
                   type: string
       responses:
         '200':
-          description: Report updated or closed
-  /public/featured-tracks:
+          description: Report updated or closed  /public/tracks/search:
+    get:
+      summary: Search for tracks
+      description: Search for backing tracks by title or other criteria with text search and regex fallback
+      parameters:
+        - in: query
+          name: query
+          required: true
+          schema:
+            type: string
+          description: Search term for tracks
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+          description: Page number for pagination
+      responses:
+        '200':
+          description: List of matching tracks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TrackSummary'
+        '400':
+          description: Invalid search query or missing query parameter
+        '500':
+          description: Server error
+  /public/tracks/query:
+    get:
+      summary: Query tracks with filters
+      description: Query tracks with filters for popularity, upload date, rating, and more
+      parameters:
+        - in: query
+          name: orderBy
+          schema:
+            type: string
+            enum: [popularity, date-uploaded, date-uploaded/ascending, rating]
+          description: Sort order for results
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+          description: Page number for pagination
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 10
+            maximum: 50
+          description: Results per page limit
+        - in: query
+          name: keySig
+          schema:
+            type: string
+          description: Key signature filter
+        - in: query
+          name: vocal-range
+          schema:
+            type: string
+          description: Vocal range filter
+        - in: query
+          name: artistId
+          schema:
+            type: string
+          description: Artist ID filter
+      responses:
+        '200':
+          description: List of filtered tracks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TrackSummary'
+        '400':
+          description: Invalid parameters
+        '404':
+          description: No tracks found
+        '500':
+          description: Failed to query tracks
+  /public/tracks/featured:
     get:
       summary: Get featured tracks
-      description: Returns a list of featured backing tracks for the homepage or discovery section.
+      description: Get featured tracks for the public homepage, including popular, recent, and random tracks
       responses:
         '200':
           description: List of featured tracks
-  /public/featured-artists:
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TrackSummary'
+        '500':
+          description: Internal server error
+  /public/tracks/{id}:
+    get:
+      summary: Get track by ID
+      description: Find and get a track by ID, including viewer-specific data like purchase status
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Track ID
+      responses:
+        '200':
+          description: Track details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrackDetails'
+        '400':
+          description: Invalid or missing track ID
+        '404':
+          description: Track not found
+        '500':
+          description: Internal server error
+  /public/artists/featured:
     get:
       summary: Get featured artists
-      description: Returns a list of featured artists for the homepage or discovery section.
+      description: Get a list of featured artists for the public homepage, including those with uploaded tracks or commission requests
       responses:
         '200':
           description: List of featured artists
-  /tracks/{id}:
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserSummary'
+        '500':
+          description: Internal server error
+  /public/users/search:
     get:
-      summary: Get a backing track by ID
+      summary: Search users by name
+      description: Search for users by name with text search and regex fallback
+      parameters:
+        - in: query
+          name: query
+          required: true
+          schema:
+            type: string
+          description: Search term for usernames
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+          description: Page number for pagination
+      responses:
+        '200':
+          description: List of matching users
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  users:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/UserSummary'
+        '400':
+          description: Invalid or inappropriate search query
+        '500':
+          description: Internal server error
+  /public/users/{id}:
+    get:
+      summary: Get user details by ID
+      description: Get detailed information about a specific user
       parameters:
         - in: path
           name: id
           required: true
           schema:
             type: string
+          description: User ID
       responses:
         '200':
-          description: Backing track details
-  /users/artist/{id}/examples:
-    get:
-      summary: Get artist examples by artist ID
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: List of artist examples
-  /public/tracks:
-    get:
-      summary: Get all public tracks
-      description: Returns a list of all public backing tracks.
-      responses:
-        '200':
-          description: List of public tracks
-  /public/artists:
-    get:
-      summary: Get all public artists
-      description: Returns a list of all public artists.
-      responses:
-        '200':
-          description: List of public artists
-  /public/artist/{id}:
-    get:
-      summary: Get public artist profile by ID
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Public artist profile
-  /public/track/{id}:
-    get:
-      summary: Get public track by ID
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Public track details
+          description: User details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserDetails'
+        '400':
+          description: Invalid user ID
+        '404':
+          description: User not found
+        '500':
+          description: Internal server error
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
+  schemas:
+    UserSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          description: User ID
+        username:
+          type: string
+          description: Username
+        avatar:
+          type: string
+          description: Avatar URL
+          nullable: true
+      required:
+        - id
+        - username
+    TrackSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Track ID
+        title:
+          type: string
+          description: Track title
+        user:
+          oneOf:
+            - $ref: '#/components/schemas/UserSummary'
+            - type: string
+          description: User who uploaded (summary object if populated, ObjectId string if not)
+        originalArtist:
+          type: string
+          description: Original artist name
+        trackPrice:
+          type: number
+          description: Track price
+      required:
+        - id
+        - title
+        - user
+        - originalArtist
+        - trackPrice
+    TrackDetails:
+      type: object
+      description: Full track details returned by getTrack endpoint
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        originalArtist:
+          type: string
+        price:
+          type: number
+        previewUrl:
+          type: string
+        fileUrl:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        averageRating:
+          type: number
+        purchaseCount:
+          type: integer
+        isPrivate:
+          type: boolean
+        user:
+          $ref: '#/components/schemas/UserSummary'
+    UserDetails:
+      type: object
+      description: Full user details returned by getUserDetails endpoint
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        email:
+          type: string
+          nullable: true
+        avatar:
+          type: string
+          nullable: true
+        role:
+          type: string
+          enum: [customer, artist, admin]
+        profileStatus:
+          type: string
+        uploadedTracks:
+          type: array
+          items:
+            type: object
+            properties:
+              title:
+                type: string
+              previewUrl:
+                type: string
+              fileUrl:
+                type: string
+              createdAt:
+                type: string
+                format: date-time
+              averageRating:
+                type: number
+              purchaseCount:
+                type: integer

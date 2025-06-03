@@ -27,6 +27,22 @@ export const uploadTrackSchema = Joi.object({
   // key: Joi.string().valid('A', 'B', 'C', 'D', 'E', 'F', 'G').optional(),
 });
 
+export const editTrackSchema = Joi.object({
+  title: Joi.string().min(1).max(100).optional(),
+  description: Joi.string().max(500).optional(),
+  price: Joi.number().min(0).optional(),
+  originalArtist: Joi.string().min(1).max(100).optional(),
+  backingTrackType: Joi.string().valid('Acoustic Guitar', 'Piano', 'Full Arrangement Track', 'Other').optional(),
+  genre: Joi.string().valid('Pop', 'Rock', 'Folk', 'Jazz', 'Classical', 'Musical Theatre', 'Country', 'Other').optional(),
+  vocalRange: Joi.string().valid('Soprano', 'Mezzo-Soprano', 'Contralto', 'Countertenor', 'Tenor', 'Baritone', 'Bass').optional(),
+  instructions: Joi.string().max(1000).allow('').optional(),
+  youtubeGuideUrl: Joi.string().uri().allow('').optional(),
+  guideTrackUrl: Joi.string().uri().allow('').optional(),
+  licenseStatus: Joi.string().valid('unlicensed', 'licensed', 'not_required').optional(),
+  licensedFrom: Joi.string().allow('').optional(), // Simplified for edit: controller will handle logic if licenseStatus changes to 'licensed'
+  // key: Joi.string().valid('A', 'B', 'C', 'D', 'E', 'F', 'G').optional(), // Assuming key is not editable or handled elsewhere
+});
+
 export const registerSchema = Joi.object({
   username: Joi.string().alphanum().min(3).max(30).required(),
   email: Joi.string().email().required(),

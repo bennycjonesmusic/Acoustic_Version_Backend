@@ -17,11 +17,66 @@ import mongoose from 'mongoose';
 import NodeCache from 'node-cache';
 const cache = new NodeCache({ stdTTL: 60 * 60 }); //cache for 1 hour
 
+/**
+ * @typedef {Object} TrackSummary
+ * @property {string} id - Track ID
+ * @property {string} title - Track title
+ * @property {UserSummary|string} user - User who uploaded (summary object if populated, ObjectId string if not)
+ * @property {string} originalArtist - Original artist name
+ * @property {number} trackPrice - Track price
+ */
+
+/**
+ * @typedef {Object} UserSummary
+ * @property {string} id - User ID
+ * @property {string} username - Username
+ * @property {string} [avatar] - Avatar URL
+ */
+
+/**
+ * @typedef {Object} PublicAPIResponse
+ * @property {string} [message] - Response message
+ * @property {TrackSummary[]} [tracks] - Array of track summaries
+ * @property {UserSummary[]} [users] - Array of user summaries
+ * @property {TrackSummary} [track] - Single track summary
+ * @property {UserSummary} [user] - Single user summary
+ * @property {string} [error] - Error message
+ */
+
+/**
+ * @typedef {Object} SearchQuery
+ * @property {string} query - Search term
+ * @property {string|number} [page] - Page number for pagination
+ * @property {string|number} [limit] - Results per page limit
+ */
+
+/**
+ * @typedef {Object} TrackQueryParams
+ * @property {'popularity'|'date-uploaded'|'date-uploaded/ascending'|'rating'} [orderBy] - Sort order
+ * @property {string|number} [page] - Page number for pagination
+ * @property {string|number} [limit] - Results per page limit
+ * @property {string} [keySig] - Key signature filter
+ * @property {string} [vocal-range] - Vocal range filter
+ * @property {string} [artistId] - Artist ID filter
+ */
+
+/**
+ * @typedef {Object} PublicRequest
+ * @property {string} [userId] - Authenticated user ID (optional for public routes)
+ * @property {Object} [user] - Authenticated user object (optional)
+ * @property {Object} params - URL parameters
+ * @property {Object} query - Query parameters
+ */
+
 // Profanity filter instance (bad-words)
 const profanityFilter = new Filter.Filter();
 
-
-
+/**
+ * Search for users by name with text search and regex fallback
+ * @param {Express.Request & PublicRequest & {query: SearchQuery}} req - Express request with search parameters
+ * @param {Express.Response} res - Express response
+ * @returns {Promise<PublicAPIResponse>} Promise resolving to API response with user summaries
+ */
 export const searchUserByName = async (req, res) => {
     try {
         let searcher = null;
@@ -68,6 +123,12 @@ export const searchUserByName = async (req, res) => {
     }
 }
 
+/**
+ * Get detailed information about a specific user
+ * @param {Express.Request & PublicRequest & {params: {id: string}}} req - Express request with user ID parameter
+ * @param {Express.Response} res - Express response
+ * @returns {Promise<PublicAPIResponse>} Promise resolving to API response with user details
+ */
 export const getUserDetails = async (req, res) => {
     try {
         // Populate uploadedTracks if artist/admin
@@ -105,6 +166,18 @@ export const getUserDetails = async (req, res) => {
 
 // --- PUBLIC TRACK ENDPOINTS MOVED FROM tracksController.js ---
 
+/**
+ * Get featured tracks for the public homepage, including popular, recent, and random tracks
+ * @param {Express.Request} req - Express request
+ * @param {Express.Response} res - Express response
+ * @returns {Promise<PublicAPIResponse>} Promise resolving to API response with featured tracks
+ */
+/**
+ * Get featured tracks for the public homepage, including popular, recent, and random tracks
+ * @param {Express.Request} req - Express request
+ * @param {Express.Response} res - Express response
+ * @returns {Promise<PublicAPIResponse>} Promise resolving to API response with featured tracks
+ */
 export const getFeaturedTracks = async (req, res) => {
     //check the ole cachearoo, make sure we don't hit the database TOO much
     const cached = cache.get('featuredTracks');
@@ -178,6 +251,18 @@ export const getFeaturedTracks = async (req, res) => {
     return res.status(200).json(summary);
 }
 
+/**
+ * Get a list of featured artists for the public homepage, including those with uploaded tracks or commission requests
+ * @param {Express.Request} req - Express request
+ * @param {Express.Response} res - Express response
+ * @returns {Promise<PublicAPIResponse>} Promise resolving to API response with featured artists
+ */
+/**
+ * Get a list of featured artists for the public homepage, including those with uploaded tracks or commission requests
+ * @param {Express.Request} req - Express request
+ * @param {Express.Response} res - Express response
+ * @returns {Promise<PublicAPIResponse>} Promise resolving to API response with featured artists
+ */
 export const getFeaturedArtists = async (req, res) => {
     try {
         // Check cache first
@@ -222,6 +307,18 @@ export const getFeaturedArtists = async (req, res) => {
     }
 }
 
+/**
+ * Query tracks with filters for popularity, upload date, rating, and more
+ * @param {Express.Request & PublicRequest & {query: TrackQueryParams}} req - Express request with query parameters
+ * @param {Express.Response} res - Express response
+ * @returns {Promise<PublicAPIResponse>} Promise resolving to API response with track summaries
+ */
+/**
+ * Query tracks with filters for popularity, upload date, rating, and more
+ * @param {Express.Request & PublicRequest & {query: TrackQueryParams}} req - Express request with query parameters
+ * @param {Express.Response} res - Express response
+ * @returns {Promise<PublicAPIResponse>} Promise resolving to API response with track summaries
+ */
 export const queryTracks = async (req, res) => {
     try {
         const { orderBy, page = 1, limit = 10, keySig, "vocal-range": vocalRange, artistId } = req.query;
@@ -273,6 +370,18 @@ export const queryTracks = async (req, res) => {
     }
 };
 
+/**
+ * Search for tracks by title or other criteria with text search and regex fallback
+ * @param {Express.Request & PublicRequest & {query: SearchQuery}} req - Express request with search parameters
+ * @param {Express.Response} res - Express response
+ * @returns {Promise<PublicAPIResponse>} Promise resolving to API response with track summaries
+ */
+/**
+ * Search for tracks by title or other criteria with text search and regex fallback
+ * @param {Express.Request & PublicRequest & {query: SearchQuery}} req - Express request with search parameters
+ * @param {Express.Response} res - Express response
+ * @returns {Promise<PublicAPIResponse>} Promise resolving to API response with track summaries
+ */
 export const searchTracks = async (req, res) => {
     try {
         const { query, page = 1 } = req.query;
@@ -316,6 +425,18 @@ export const searchTracks = async (req, res) => {
     }
 };
 
+/**
+ * Find and get a track by ID, including viewer-specific data like purchase status
+ * @param {Express.Request & PublicRequest} req - Express request with track ID in params
+ * @param {Express.Response} res - Express response
+ * @returns {Promise<PublicAPIResponse>} Promise resolving to API response with track details
+ */
+/**
+ * Find and get a track by ID, including viewer-specific data like purchase status
+ * @param {Express.Request & PublicRequest & {params: {id: string}}} req - Express request with track ID in params
+ * @param {Express.Response} res - Express response
+ * @returns {Promise<PublicAPIResponse>} Promise resolving to API response with track details
+ */
 //find and get a track by id
 export const getTrack = async (req, res) => {
     try {

@@ -15,7 +15,7 @@ import publicRoutes from './routes/public.js';
 import commissionRoutes from './routes/commission.js';
 import rateLimit from 'express-rate-limit';
 import cron from 'node-cron';
-import { processExpiredCommissions } from './controllers/commissionControl.js';
+import { processExpiredCommissionsStandalone } from './controllers/commissionControl.js';
 import User from './models/User.js';
 import adminEmails from './utils/admins.js'; // Import adminEmails
 import { deleteUnusedAvatars } from './utils/deleteUnusedAvatars.js'; // Import the function to delete unused avatars
@@ -36,34 +36,14 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 cron.schedule('0 * * * *', async () => {
-try {
+  try {
     console.log("Running cron job to process expired commissions");
-    await processExpiredCommissions({
-
-    body: {},
-    user: {role: "admin"} 
-    }, {
-        status: () => ({ json: (data) => console.log(data) })
-
-    });
-
-
-
-
-
-
-
-
-}
-catch (error) {
-
-    console.error('Error running cron job:', error);
-
-}
-
-
-
-})
+    const results = await processExpiredCommissionsStandalone();
+    console.log(`Cron job completed. Processed ${results.length} expired commissions.`);
+  } catch (error) {
+    console.error('Error running expired commissions cron job:', error);
+  }
+});
 
 //cron job for regular admin adding
 

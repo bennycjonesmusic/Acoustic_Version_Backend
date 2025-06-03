@@ -230,6 +230,17 @@ export const approveCommissionAndPayout = async (req, res) => {
 // Check for expired commissions and refund customer if deadline missed
 export const processExpiredCommissions = async (req, res) => {
     try {
+        const results = await processExpiredCommissionsStandalone();
+        return res.status(200).json({ processed: results });
+    } catch (error) {
+        console.error('Error processing expired commissions:', error);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// Standalone version for cron job usage (no req/res dependencies)
+export const processExpiredCommissionsStandalone = async () => {
+    try {
         const now = new Date();
         // Set expiry threshold to 2 weeks (14 days) from commission creation
         const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
@@ -238,6 +249,9 @@ export const processExpiredCommissions = async (req, res) => {
             createdAt: { $lt: twoWeeksAgo },
             status: { $in: ['requested', 'accepted', 'in_progress'] }
         });
+        
+        console.log(`[CRON] Found ${expired.length} expired commissions to process`);
+        
         let results = [];
         for (const commission of expired) {
             // Refund via Stripe if payment was made
@@ -251,19 +265,24 @@ export const processExpiredCommissions = async (req, res) => {
                     commission.status = 'refunded';
                     await commission.save();
                     results.push({ commissionId: commission._id, refunded: true });
+                    console.log(`[CRON] Refunded commission ${commission._id}`);
                 } catch (err) {
                     results.push({ commissionId: commission._id, refunded: false, error: err.message });
+                    console.error(`[CRON] Failed to refund commission ${commission._id}:`, err.message);
                 }
             } else {
                 commission.status = 'cancelled';
                 await commission.save();
                 results.push({ commissionId: commission._id, refunded: false, error: 'No payment intent' });
+                console.log(`[CRON] Cancelled commission ${commission._id} (no payment intent)`);
             }
         }
-        return res.status(200).json({ processed: results });
+        
+        console.log(`[CRON] Processed ${results.length} expired commissions`);
+        return results;
     } catch (error) {
-        console.error('Error processing expired commissions:', error);
-        return res.status(500).json({ error: 'Internal server error' });
+        console.error('[CRON] Error processing expired commissions:', error);
+        throw error;
     }
 };
 
