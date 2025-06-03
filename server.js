@@ -154,13 +154,15 @@ app.use(express.urlencoded({ extended: true }));
 app.use(helmet()); // Use helmet middleware to set secure HTTP headers
 app.use(compression()); // Enable gzip compression for all responses
 
-// Global rate limiter: 100 requests per 15 minutes per IP
-const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { message: 'Too many requests, please try again later.' }
+// Global rate limiter: 100 requests per 15 minutes per IP (disabled in test mode)
+const globalLimiter = process.env.NODE_ENV === 'test'
+  ? (req, res, next) => next() // No-op in test mode
+  : rateLimit({
+      windowMs: 15 * 60 * 1000, // 15 minutes
+      max: 100, // limit each IP to 100 requests per windowMs
+      standardHeaders: true,
+      legacyHeaders: false,
+      message: { message: 'Too many requests, please try again later.' }
 });
 
 app.use(globalLimiter);

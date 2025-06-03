@@ -13,6 +13,16 @@ export const uploadTrackSchema = Joi.object({
   instructions: Joi.string().max(1000).allow('').optional(),
   youtubeGuideUrl: Joi.string().uri().allow('').optional(),
   guideTrackUrl: Joi.string().uri().allow('').optional(),
+  licenseStatus: Joi.string().valid('unlicensed', 'licensed', 'not_required').default('not_required').optional(),
+  licensedFrom: Joi.when('licenseStatus', {
+    is: 'licensed',
+    then: Joi.string().trim().min(1).required().messages({
+      'string.empty': 'Licensed from must be a non-empty string when licenseStatus is "licensed".',
+      'any.required': 'Licensed from must be a non-empty string when licenseStatus is "licensed".'
+    }),
+    otherwise: Joi.string().allow('').optional()
+  }),
+  
 
   // key: Joi.string().valid('A', 'B', 'C', 'D', 'E', 'F', 'G').optional(),
 });

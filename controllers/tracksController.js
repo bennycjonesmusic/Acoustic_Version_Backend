@@ -491,3 +491,99 @@ export const getUploadedTracksByUserId = async (req, res) => {
         return res.status(500).json({ message: 'Internal server error' });
     }
 };
+
+export const editTrack = async (req, res) => {
+    try {
+        // Validate input first
+        const { error } = uploadTrackSchema.validate(req.body);
+        if (error) {
+            return res.status(400).json({ message: error.details[0].message });
+        }
+
+        const profanity = new Filter.Filter();
+        
+        // Find the user
+        const user = await User.findById(req.userId);
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+          // Find the track
+        const track = await BackingTrack.findById(req.params.id);
+        if (!track) {
+            return res.status(404).json({ message: 'Track not found' });
+        }
+        
+        // Check ownership (fixed: track.user not track.User)
+        if (track.user.toString() !== user._id.toString()) {
+            return res.status(403).json({ message: "You are not authorized to edit this track" });
+        }
+        
+        // Extract fields from request body
+        const { description, title, originalArtist, instructions, youtubeGuideUrl, guideTrackUrl, licenseStatus, licensedFrom, price, backingTrackType, genre, vocalRange } = req.body;
+        
+        // Validate and parse price
+        let parsedPrice = undefined;
+        if (price !== undefined && price !== null && price !== '') {
+            parsedPrice = parseFloat(price);
+            if (isNaN(parsedPrice) || parsedPrice < 0) {
+                return res.status(400).json({ message: 'Price must be a valid positive number' });
+            }
+        }        
+        // Create object with field names and values for easier iteration
+        const fieldsToUpdate = {
+            description,
+            title, 
+            originalArtist,
+            instructions,
+            youtubeGuideUrl,
+            guideTrackUrl,
+            licenseStatus,
+            licensedFrom,
+            price: parsedPrice,
+            backingTrackType,
+            genre,
+            vocalRange
+        };
+        
+        // Check profanity and update fields
+        for (const [fieldName, fieldValue] of Object.entries(fieldsToUpdate)) {
+            if (fieldValue !== undefined && fieldValue !== null && fieldValue !== '') {
+                // Check for profanity (fixed: isProfane not IsProfane)
+                if (typeof fieldValue === 'string' && profanity.isProfane(fieldValue)) {
+                    return res.status(400).json({ message: `Please avoid inappropriate language in the ${fieldName} field` });
+                }
+                
+                // Basic XSS prevention - strip HTML tags
+                let sanitizedValue = fieldValue;
+                if (typeof fieldValue === 'string') {
+                    sanitizedValue = fieldValue.replace(/<[^>]*>/g, '').trim();
+                }
+                
+                // Update the track field (fixed: use fieldName as key, fieldValue as value)
+                track[fieldName] = sanitizedValue;
+            }
+        }
+          // Save the updated track
+        await track.save();
+        
+        // Return limited track info (don't expose sensitive data)
+        return res.status(200).json({ 
+            message: 'Track updated successfully',
+            track: {
+                _id: track._id,
+                title: track.title,
+                description: track.description,
+                price: track.price,
+                originalArtist: track.originalArtist,
+                backingTrackType: track.backingTrackType,
+                genre: track.genre,
+                vocalRange: track.vocalRange,
+                updatedAt: track.updatedAt
+            }
+        });
+        
+    } catch (error) {
+        console.error('Error editing track:', error);
+        return res.status(500).json({ message: 'Internal server error' });
+    }
+}

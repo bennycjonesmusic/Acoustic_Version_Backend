@@ -131,11 +131,18 @@ export const getFeaturedTracks = async (req, res) => {
 
     // If all tracks are excluded, skip aggregation
     const totalTracks = await BackingTrack.countDocuments({ isPrivate: false });
-    console.log('[getFeaturedTracks] totalTracks:', totalTracks);
-    if (excludeIds.length >= totalTracks) {
+    console.log('[getFeaturedTracks] totalTracks:', totalTracks);    if (excludeIds.length >= totalTracks) {
         const featured = [...popularTracks, ...recentTracks];
         const filtered = featured.filter(Boolean);
+        
+        // Debug: Check if user data is populated in early return
+        console.log('[getFeaturedTracks] Early return - Sample track user data:', filtered[0]?.user);
+        
         const summary = toTrackSummary(filtered);
+        
+        // Debug: Check summary output in early return
+        console.log('[getFeaturedTracks] Early return - Sample summary user data:', summary[0]?.user);
+        
         cache.set('featuredTracks', summary);
         console.log('[getFeaturedTracks] returning early, filtered.length:', filtered.length);
         return res.status(200).json(summary);
@@ -154,11 +161,18 @@ export const getFeaturedTracks = async (req, res) => {
     if (randomTrackIds.length > 0) {
         randomTracksPopulated = await BackingTrack.find({ _id: { $in: randomTrackIds } }).populate('user', 'avatar username');
         console.log('[getFeaturedTracks] randomTracksPopulated:', randomTracksPopulated.length);
-    }
-    // Merge all tracks
+    }    // Merge all tracks
     const featured = [...popularTracks, ...randomTracksPopulated, ...recentTracks];
     const filtered = featured.filter(Boolean);
+    
+    // Debug: Check if user data is populated
+    console.log('[getFeaturedTracks] Sample track user data:', filtered[0]?.user);
+    
     const summary = toTrackSummary(filtered);
+    
+    // Debug: Check summary output
+    console.log('[getFeaturedTracks] Sample summary user data:', summary[0]?.user);
+    
     cache.set('featuredTracks', summary);
     console.log('[getFeaturedTracks] final filtered.length:', filtered.length);
     return res.status(200).json(summary);

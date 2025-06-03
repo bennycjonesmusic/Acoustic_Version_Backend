@@ -15,6 +15,7 @@ import {
   rateTrack,
   commentTrack,
   deleteComment, // import deleteComment
+  editTrack, // import editTrack
   
 } from '../controllers/tracksController.js';
 
@@ -25,6 +26,8 @@ router.get('/tracks/list-s3', listS3);
 //now we handle the upload of backing tracks. Create, Read, Update and Delete Operations. For now though, create and delete will suffice.
 
 router.post('/tracks/upload', uploadLimiter, authMiddleware, upload.single('file'), uploadTrack);
+
+router.put('/tracks/edit/:id', uploadLimiter, authMiddleware, editTrack); // edit a track by id (with rate limiting)
 
 router.delete('/tracks/:id', authMiddleware, deleteTrack); //delete a track by id
 
