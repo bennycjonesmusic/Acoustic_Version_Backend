@@ -13,6 +13,7 @@ import tracksRoutes from './routes/tracks.js';
 import userRoutes from './routes/users.js';
 import publicRoutes from './routes/public.js';
 import commissionRoutes from './routes/commission.js';
+import guideRoutes from './routes/guide.js';
 import rateLimit from 'express-rate-limit';
 import cron from 'node-cron';
 import { processExpiredCommissionsStandalone } from './controllers/commissionControl.js';
@@ -153,6 +154,7 @@ app.use("/admin", adminRoutes);
 app.use('/users', userRoutes);
 app.use('/public', publicRoutes);
 app.use('/commission', commissionRoutes);
+app.use('/', guideRoutes);
 app.use('/', tracksRoutes);
 app.get('/', (req, res) =>{
 

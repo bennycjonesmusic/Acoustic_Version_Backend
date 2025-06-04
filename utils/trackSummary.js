@@ -10,7 +10,8 @@ export function toTrackSummary(tracks) {
       user: track.user && track.user.username ? {
         id: track.user._id,
         username: track.user.username,
-        avatar: track.user.avatar
+        avatar: track.user.avatar,
+        preview: track.user.preview
       } : track.user, // fallback to ObjectId if not populated
       originalArtist: track.originalArtist,
       trackPrice: track.price

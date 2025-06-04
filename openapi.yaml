@@ -96,10 +96,10 @@ paths:
               type: object
               properties:
                 status:
-                  type: string
-      responses:
+                  type: string      responses:
         '200':
-          description: Report updated or closed  /public/tracks/search:
+          description: Report updated or closed
+  /public/tracks/search:
     get:
       summary: Search for tracks
       description: Search for backing tracks by title or other criteria with text search and regex fallback
@@ -291,7 +291,115 @@ paths:
         '400':
           description: Invalid user ID
         '404':
-          description: User not found
+          description: User not found        '500':
+          description: Internal server error
+  /guide/{id}/upload:
+    post:
+      summary: Upload a guide track file for a backing track
+      description: Upload an MP3 guide track file for an existing backing track. Only track owners can upload guide tracks.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Backing track ID
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: MP3 guide track file (max 50MB)
+              required:
+                - file
+      responses:
+        '200':
+          description: Guide track uploaded successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Guide track uploaded successfully!"
+                  guideTrackUrl:
+                    type: string
+                    description: S3 URL of the uploaded guide track
+        '400':
+          description: Invalid file type, size, or track ID
+        '403':
+          description: Not authorized to upload guide tracks for this track
+        '404':
+          description: Track not found
+        '500':
+          description: Internal server error
+  /guide/{id}/download:
+    get:
+      summary: Download a guide track file
+      description: Download the guide track file for a backing track. Only purchasers and track owners can download.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Backing track ID
+      responses:
+        '200':
+          description: Guide track file stream
+          content:
+            audio/mpeg:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Invalid track ID
+        '403':
+          description: Must purchase track to access guide track
+        '404':
+          description: Track not found or no guide track available
+        '500':
+          description: Internal server error
+  /guide/{id}:
+    delete:
+      summary: Delete a guide track file
+      description: Delete the guide track file from a backing track. Only track owners can delete guide tracks.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Backing track ID
+      responses:
+        '200':
+          description: Guide track deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Guide track deleted successfully!"
+        '400':
+          description: Invalid track ID
+        '403':
+          description: Not authorized to delete guide tracks for this track
+        '404':
+          description: Track not found or no guide track to delete
         '500':
           description: Internal server error
 components:

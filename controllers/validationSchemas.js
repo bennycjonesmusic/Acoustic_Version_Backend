@@ -82,3 +82,9 @@ export const contactForumSchema = Joi.object({
 
 
 });
+
+// Guide track upload validation schema
+export const guideTrackUploadSchema = Joi.object({
+  // No additional fields needed - file validation is handled in controller
+  // This schema is for future extensibility if we need to add metadata
+});
