@@ -112,6 +112,8 @@ try{
 }
 
 export const uploadTrack = async (req, res) => {
+    console.log('=== UPLOAD TRACK FUNCTION CALLED ===');
+    console.log('Original filename:', req.file?.originalname);
     const { error } = uploadTrackSchema.validate(req.body);
     const Artist = await User.findById(req.userId);
     const profanity = new Filter.Filter();
@@ -150,44 +152,65 @@ export const uploadTrack = async (req, res) => {
             if (req.body[field] && profanity.isProfane(req.body[field])) {
                 return res.status(400).json({ message: `Please avoid using inappropriate language in the ${field} field.` });
             }
-        }
-        // Write buffer to temp file
+        }        // Write buffer to temp file
         const tmp = await import('os');
         const tmpDir = tmp.tmpdir();
         const tempFilePath = path.join(tmpDir, `uploadtrack_${Date.now()}_${sanitizedFileName}`);
+        const trimmedFilePath = path.join(tmpDir, `trimmed_${Date.now()}_${sanitizedFileName}`);
         fs.writeFileSync(tempFilePath, req.file.buffer);
+        
+        // Trim silence from the beginning of the main track
+        console.log('Trimming silence from main track...');
+        const { trimSilence } = await import('../utils/silenceTrimming.js');
+        try {
+            await trimSilence(tempFilePath, trimmedFilePath, { 
+                trimStart: true, 
+                trimEnd: false, // Don't trim end for main tracks to preserve natural endings
+                format: null // Preserve original format
+            });
+            console.log('Main track silence trimming completed');
+        } catch (trimError) {
+            console.warn('Silence trimming failed, using original file:', trimError.message);
+            // If trimming fails, use the original file
+            fs.copyFileSync(tempFilePath, trimmedFilePath);
+        }
         const s3Client = new S3Client({
             region: process.env.AWS_REGION,
             credentials: {
                 accessKeyId: process.env.AWS_ACCESS_KEY_ID,
                 secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
             },
-        });
-        const uploadParams = {
+        });        const uploadParams = {
             Bucket: process.env.AWS_BUCKET_NAME,
             Key: `songs/${Date.now()}-${sanitizedFileName}`,
-            Body: fs.createReadStream(tempFilePath),
+            Body: fs.createReadStream(trimmedFilePath), // Use trimmed file instead of original
             StorageClass: 'STANDARD',
-            ContentType: req.file.mimetype, // Ensure correct audio content type
+            ContentType: req.file.mimetype, // Use original file's MIME type (e.g., audio/wav, audio/mpeg, etc.)
             ACL: 'private' // Ensure full song is private
         };
         const data = await new Upload({ client: s3Client, params: uploadParams }).done();
         fs.unlinkSync(tempFilePath);
-
-        // --- 30-second preview logic ---
+        fs.unlinkSync(trimmedFilePath);        // --- 30-second preview logic ---
         let previewUrl = null;
         const previewPath = tempFilePath + '-preview.mp3'; // Define previewPath
-        const { getAudioPreview } = await import('../utils/audioPreview.js');
+        const { getAudioPreviewWithTrimming } = await import('../utils/silenceTrimming.js');
         try {
             // Write buffer to temp file for ffmpeg
             fs.writeFileSync(tempFilePath + '-full', req.file.buffer);
-            await getAudioPreview(tempFilePath + '-full', previewPath, 30);
-            // Upload preview to S3
+            // Use the new trimming function for previews
+            await getAudioPreviewWithTrimming(tempFilePath + '-full', previewPath, 30, true);// Upload preview to S3
+            // Remove file extension from sanitized filename, but be careful about file extensions that might be part of the title
+            let cleanFileName = sanitizedFileName.replace(/\.[^/.]+$/, ''); // Remove actual file extension first
+            // Only remove common audio format suffixes if they appear to be file extensions (after underscore or at end)
+            cleanFileName = cleanFileName.replace(/_(?:wav|mp3|flac|aac|ogg|m4a)$/i, '');
+            console.log('DEBUG: sanitizedFileName:', sanitizedFileName);
+            console.log('DEBUG: cleanFileName:', cleanFileName);
             const previewUploadParams = {
                 Bucket: process.env.AWS_BUCKET_NAME,
-                Key: `previews/${Date.now()}-${sanitizedFileName}`,
+                Key: `previews/${Date.now()}-${cleanFileName}.mp3`, // Ensure .mp3 extension and clean filename
                 Body: fs.createReadStream(previewPath),
                 StorageClass: 'STANDARD',
+                ContentType: 'audio/mpeg', // Force audio/mpeg content type for previews
                 ACL: 'public-read' // Ensure preview is public
             };
             const previewData = await new Upload({ client: s3Client, params: previewUploadParams }).done();

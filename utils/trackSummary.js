@@ -11,11 +11,14 @@ export function toTrackSummary(tracks) {
         id: track.user._id,
         username: track.user.username,
         avatar: track.user.avatar,
-        preview: track.user.preview
+        
+       
       } : track.user, // fallback to ObjectId if not populated
       originalArtist: track.originalArtist,
-      trackPrice: track.price
+      trackPrice: track.price,
+      previewUrl: track.previewUrl
     }));
+    
   } catch (error) {
     console.error('Error mapping tracks to summary:', error, '\nInput:', JSON.stringify(tracks, null, 2));
     throw error;

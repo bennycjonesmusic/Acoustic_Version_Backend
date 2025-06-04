@@ -5,7 +5,7 @@ import ffmpeg from 'fluent-ffmpeg';
 import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
-import { getAudioPreview } from '../utils/audioPreview.js';
+import { getAudioPreviewWithTrimming } from '../utils/silenceTrimming.js';
 dotenv.config();
 
 if (process.env.FFMPEG_PATH) {
@@ -40,18 +40,17 @@ export const uploadArtistExample = async (req, res) => {
         const tmpInputPath = path.join(tmpDir, `${user._id}_example_input${Date.now()}${ext}`);
         // Always use .mp3 for preview output to avoid ffmpeg ambiguity
         const tmpPreviewPath = path.join(tmpDir, `${user._id}_example_preview${Date.now()}.mp3`);
-        fs.writeFileSync(tmpInputPath, req.file.buffer);
-        // Always generate a 30s preview (even if file is longer)
-        await getAudioPreview(tmpInputPath, tmpPreviewPath, 30);
+        fs.writeFileSync(tmpInputPath, req.file.buffer);        // Always generate a 30s preview with silence trimming (even if file is longer)
+        await getAudioPreviewWithTrimming(tmpInputPath, tmpPreviewPath, 30, true);
         // Upload preview to S3
-        const key = `examples/${user._id}_${Date.now()}.mp3`;
-        await new Upload({
+        const key = `examples/${user._id}_${Date.now()}.mp3`;        await new Upload({
             client: s3Client,
             params: {
                 Bucket: process.env.AWS_BUCKET_NAME,
                 Key: key,
                 Body: fs.createReadStream(tmpPreviewPath),
                 StorageClass: 'STANDARD',
+                ContentType: 'audio/mpeg', // Ensure correct content type for MP3 previews
                 ACL: 'public-read' // Ensure the file is public
             },
         }).done();

@@ -125,8 +125,20 @@ app.use((req, res, next) => {
   next();
 });
 
+
+//const cors = require('cors');
+//app.use(cors({
+  //origin: ['http://localhost:3002', 'https://acoustic-version.com'],
+  //credentials: true
+//}));
+
 //define the middleware. This will be used to parse the incoming requests. It allows frontend to communicate with the backend.
-app.use(cors());
+app.use(cors({
+  origin: ['http://localhost:3002', 'https://acoustic-version.com', 'https://www.acoustic-version.com'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+  credentials: true // Allow cookies to be sent with requests
+}));
 console.log('[SERVER DEBUG] Importing and registering /webhook route');
 // Register the webhook route BEFORE any body parsers!
 app.use('/webhook/stripe', webhookRoutes); // <-- Change to match Stripe CLI forwarding

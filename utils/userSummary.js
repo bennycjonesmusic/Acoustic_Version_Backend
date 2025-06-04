@@ -5,6 +5,8 @@ export function toUserSummary(users) {
   return users.map(user => ({
     id: user._id,
     username: user.username,
-    avatar: user.avatar // add more fields if needed
+    avatar: user.avatar,
+    commissionPrice: user.customerCommissionPrice,
+    rating: user.averageTrackRating// add more fields if needed
   }));
 }

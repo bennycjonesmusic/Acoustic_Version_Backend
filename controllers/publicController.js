@@ -100,21 +100,35 @@ export const searchUserByName = async (req, res) => {
         let pageNum = parseInt(page, 10);
         if (isNaN(pageNum) || pageNum < 1) pageNum = 1;
         const limit = 10;
-        const skip = (pageNum - 1) * limit;
-        // 4. Use raw query for $text search
+        const skip = (pageNum - 1) * limit;        // 4. Use raw query for $text search
         let users = await User.find({ $text: { $search: query }, role: { $in: ['artist', 'admin'] }, profileStatus: 'approved' })
             .sort({ score: { $meta: 'textScore' } })
-            .skip(skip).limit(limit).select({ score: { $meta: 'textScore' } });
+            .skip(skip).limit(limit).select({ 
+                score: { $meta: 'textScore' },
+                username: 1,
+                avatar: 1,
+                about: 1,
+                averageTrackRating: 1,
+                amountOfFollowers: 1,
+                role: 1
+            });
         if (!users.length) {
             // 5. Use escaped query for $regex fallback
-            const safeQuery = escapeRegex(query);
-            users = await User.find({
+            const safeQuery = escapeRegex(query);            users = await User.find({
                 username: { $regex: safeQuery, $options: 'i' },
                 role: { $in: ['artist', 'admin'] },
                 profileStatus: 'approved'
             })
                 .skip(skip)
-                .limit(limit);
+                .limit(limit)
+                .select({
+                    username: 1,
+                    avatar: 1,
+                    about: 1,
+                    averageTrackRating: 1,
+                    amountOfFollowers: 1,
+                    role: 1
+                });
         }
         return res.status(200).json({ users: toUserSummary(users) });
     } catch (error) {
@@ -270,8 +284,7 @@ export const getFeaturedArtists = async (req, res) => {
         if (cached) {
             console.log('[getFeaturedArtists] Returning cached data');
             return res.status(200).json(cached);
-        }
-        // Find artists or admins with at least one uploaded track OR at least one commission as artist, and approved profile
+        }        // Find artists or admins with at least one uploaded track OR at least one commission as artist, and approved profile
         const featuredArtists = await User.find({
             role: { $in: ['artist', 'admin'] },
             profileStatus: 'approved',
@@ -280,10 +293,14 @@ export const getFeaturedArtists = async (req, res) => {
                 // Artists/admins with at least one commission as artist
                 { _id: { $in: await CommissionRequest.distinct('artist') } }
             ]
-        }).limit(10);
+        }).limit(10).select({
+            username: 1,
+            avatar: 1,
+            customerCommissionPrice: 1,
+            averageTrackRating: 1
+        });
         // Exclude those already found from random selection
-        const excludeIds = featuredArtists.map(a => a._id);
-        // Find random additional artists/admins with same criteria
+        const excludeIds = featuredArtists.map(a => a._id);        // Find random additional artists/admins with same criteria
         const commissionArtistIds = await CommissionRequest.distinct('artist');
         const featureRandom = await User.aggregate([
             { $match: {
@@ -295,7 +312,13 @@ export const getFeaturedArtists = async (req, res) => {
                     { _id: { $in: commissionArtistIds } }
                 ]
             } },
-            { $sample: { size: 5 } }
+            { $sample: { size: 5 } },
+            { $project: {
+                username: 1,
+                avatar: 1,
+                customerCommissionPrice: 1,
+                averageTrackRating: 1
+            } }
         ]);
         const featured = [...featuredArtists, ...featureRandom]; //Merge the arrays in a super array.
         const summary = toUserSummary(featured);
