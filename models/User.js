@@ -111,6 +111,13 @@ const userSchema = new mongoose.Schema({
     type: Date,
     default: null,
     description: 'Timestamp of the user\'s last activity.'
+  },
+  numOfUploadedTracks: {
+
+    type: Number,
+    default: 0,
+
+
   }
 }, {
   timestamps: true, // 

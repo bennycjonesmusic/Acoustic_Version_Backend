@@ -103,15 +103,7 @@ export const searchUserByName = async (req, res) => {
         const skip = (pageNum - 1) * limit;        // 4. Use raw query for $text search
         let users = await User.find({ $text: { $search: query }, role: { $in: ['artist', 'admin'] }, profileStatus: 'approved' })
             .sort({ score: { $meta: 'textScore' } })
-            .skip(skip).limit(limit).select({ 
-                score: { $meta: 'textScore' },
-                username: 1,
-                avatar: 1,
-                about: 1,
-                averageTrackRating: 1,
-                amountOfFollowers: 1,
-                role: 1
-            });
+            .skip(skip).limit(limit);
         if (!users.length) {
             // 5. Use escaped query for $regex fallback
             const safeQuery = escapeRegex(query);            users = await User.find({
@@ -120,15 +112,7 @@ export const searchUserByName = async (req, res) => {
                 profileStatus: 'approved'
             })
                 .skip(skip)
-                .limit(limit)
-                .select({
-                    username: 1,
-                    avatar: 1,
-                    about: 1,
-                    averageTrackRating: 1,
-                    amountOfFollowers: 1,
-                    role: 1
-                });
+                .limit(limit);
         }
         return res.status(200).json({ users: toUserSummary(users) });
     } catch (error) {
@@ -155,7 +139,7 @@ export const getUserDetails = async (req, res) => {
             return res.status(404).json({ message: "User not found" });
         }
 
-        // Parse pagination parameters for uploaded tracks
+        // Parse pagination parameters for uploaded tracks.. important incase user has MANY tracks
         const { page = 1, limit = 10 } = req.query;
         let pageNum = parseInt(page, 10);
         if (isNaN(pageNum) || pageNum < 1) pageNum = 1;
@@ -164,6 +148,8 @@ export const getUserDetails = async (req, res) => {
         if (limitNum > 50) limitNum = 50; // Cap at 50 tracks per page
 
         const skip = (pageNum - 1) * limitNum;
+
+
      
         // Only populate uploadedTracks for artists/admins... probably redundant since viewerRole edits this out in the toJSON method, but just to be sure.
         if (user.role === 'artist' || user.role === 'admin') {
@@ -386,9 +372,71 @@ export const getFeaturedArtists = async (req, res) => {
  * @param {Express.Response} res - Express response
  * @returns {Promise<PublicAPIResponse>} Promise resolving to API response with track summaries
  */
+
+export const queryUsers = async (req, res) => {
+    try {
+        const { orderBy, page = 1, limit = 10, lastOnlineWithin, minCommissions, availableForCommission } = req.query;
+        let sort = {};
+        let filter = {};
+        // Validate and sanitize pagination
+        let pageNum = parseInt(page, 10);
+        if (isNaN(pageNum) || pageNum < 1) pageNum = 1;
+        let limitNum = parseInt(limit, 10);
+        if (isNaN(limitNum) || limitNum < 1) limitNum = 10;
+        if (limitNum > 50) limitNum = 50;
+        if (orderBy == "rating") sort = { averageTrackRating: -1 };
+        if (orderBy == "date-joined") sort = { createdAt: -1 };
+        if (orderBy == "date-joined/ascending") sort = { createdAt: 1 };
+        if (orderBy == "commission-price") sort = { customerCommissionPrice: 1 };
+        if (orderBy == "num-of-commissions") sort = { numOfCommissions: -1 };
+        if (orderBy == "num-of-commissions/ascending") sort = { numOfCommissions: 1 };
+        if (orderBy == "popularity") sort = { amountOfTracksSold: -1 };
+        if (orderBy == "num-of-uploaded-tracks") sort = { numOfUploadedTracks: -1 };
+        
+        // Filter for users who were online within X days
+        if (lastOnlineWithin) {
+            const daysNum = parseInt(lastOnlineWithin, 10);
+            if (!isNaN(daysNum) && daysNum > 0) {
+                const cutoffDate = new Date();
+                cutoffDate.setDate(cutoffDate.getDate() - daysNum);
+                filter.lastOnline = { $gte: cutoffDate };
+            }
+        }
+        
+        // Filter for users who have completed at least X commissions
+        if (minCommissions) {
+            const commissionsNum = parseInt(minCommissions, 10);
+            if (!isNaN(commissionsNum) && commissionsNum >= 0) {
+                filter.numOfCommissions = { $gte: commissionsNum };
+            }
+        }
+        
+        // Filter for users who are available for commissions
+        if (availableForCommission) {
+            if (availableForCommission === 'true') {
+                filter.availableForCommission = true;
+            } else if (availableForCommission === 'false') {
+                filter.availableForCommission = false;
+            }
+        }
+        
+        filter.role = { $in: ['artist', 'admin'] }; // Show only artists and admins
+        filter.profileStatus = 'approved'; // Show only approved users
+        const users = await User.find(filter).sort(sort).skip((pageNum - 1) * limitNum).limit(limitNum);
+        if (!users || users.length === 0) {
+            return res.status(404).json({ message: "No users found." });
+        }
+        const summaryUsers = toUserSummary(users);
+        return res.status(200).json(summaryUsers);
+    } catch (error) {
+        return res.status(500).json({ error: "Failed to query users" });
+    }
+};
+
+
 export const queryTracks = async (req, res) => {
     try {
-        const { orderBy, page = 1, limit = 10, keySig, "vocal-range": vocalRange, artistId } = req.query;
+        const { orderBy, page = 1, limit = 10, keySig, "vocal-range": vocalRange, artistId, qualityValidated } = req.query;
         let sort = {};
         let filter = {};
         // Validate and sanitize pagination
@@ -401,9 +449,10 @@ export const queryTracks = async (req, res) => {
         if (orderBy == "date-uploaded") sort = { createdAt: -1 };
         if (orderBy == "date-uploaded/ascending") sort = { createdAt: 1 };
         if (orderBy == "rating") sort = { averageRating: -1 };
+        if (orderBy == "price") sort = { trackPrice: 1 };
         if (keySig) {
             try {
-                const { key, isFlat, isSharp } = parseKeySignature(keySig);
+                const { key, isFlat, isSharp } = parseKeySignature(keySig); //function to parse key signature BB = Bflat e.t.c
                 filter.key = key;
                 if (isFlat) filter.isFlat = true;
                 if (isSharp) filter.isSharp = true;
@@ -417,6 +466,11 @@ export const queryTracks = async (req, res) => {
             } catch (error) {
                 return res.status(400).json({ error: "Something went wrong. Make sure you enter a valid vocal range" });
             }
+        }        if (qualityValidated) {
+            if (qualityValidated !== 'true' && qualityValidated !== 'false') {
+                return res.status(400).json({ error: "Invalid quality validation filter" });
+            }
+            filter.qualityValidated = qualityValidated === 'true' ? 'yes' : 'no';
         }
         // Validate artistId if present
         if (artistId) {

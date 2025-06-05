@@ -240,6 +240,9 @@ export const uploadTrack = async (req, res) => {
         });
         await newTrack.save();
         // Update user's storageUsed
+
+         Artist.numOfUploadedTracks += 1;
+        await Artist.save(); //not Sure why I wrote the code below seeing as it is basically redundant with Artist. could just use Artist instead
         await User.findByIdAndUpdate(req.userId, { $inc: { storageUsed: req.file.size }, $push: { uploadedTracks: newTrack._id } });
         // Notify followers by email
         if (Artist.followers && Artist.followers.length > 0) {
@@ -342,12 +345,13 @@ export const deleteTrack = async (req, res) => {
         await User.updateMany(
           { 'purchasedTracks.track': Track._id },
           { $pull: { purchasedTracks: { track: Track._id } } }
-        );
-        // Remove track from all users' uploadedTracks arrays (should only be uploader, but for safety)
+        );        // Remove track from all users' uploadedTracks arrays (should only be uploader, but for safety)
         await User.updateMany(
           { uploadedTracks: Track._id },
           { $pull: { uploadedTracks: Track._id } }
         );
+
+        await User.findByIdAndUpdate(req.userId, {$inc: {numOfUploadedTracks: -1}}, {new: true});
         await s3Client.send(new DeleteObjectCommand(deleteParameters));
         // Delete preview from S3 if it exists
         if (Track.previewUrl) {
@@ -395,8 +399,47 @@ export const getUploadedTracks = async (req, res) => {
         if (!req.userId) {
             return res.status(401).json({ message: 'User not authenticated' });
         }
-        const tracks = await BackingTrack.find({ user: req.userId }).sort({ createdAt: -1 });
-        return res.status(200).json({ tracks: Array.isArray(tracks) ? tracks : [] });
+
+        // Parse pagination parameters
+        const { page = 1, limit = 10, orderBy = 'date-uploaded' } = req.query;
+        let pageNum = parseInt(page, 10);
+        if (isNaN(pageNum) || pageNum < 1) pageNum = 1;
+        let limitNum = parseInt(limit, 10);
+        if (isNaN(limitNum) || limitNum < 1) limitNum = 10;
+        if (limitNum > 50) limitNum = 50; // Cap at 50 tracks per page
+
+        const skip = (pageNum - 1) * limitNum;        // Set up sorting
+        let sort = {};
+        if (orderBy === "popularity") sort = { purchaseCount: -1 };
+        if (orderBy === "date-uploaded") sort = { createdAt: -1 };
+        if (orderBy === "date-uploaded/ascending") sort = { createdAt: 1 };
+        if (orderBy === "rating") sort = { averageRating: -1 };
+        if (orderBy === "price") sort = { price: 1 };
+        if (orderBy === "alphabetical") sort = { title: 1 };
+
+        // Get total count for pagination metadata
+        const totalTracks = await BackingTrack.countDocuments({ user: req.userId });
+        
+        // Get paginated tracks
+        const tracks = await BackingTrack.find({ user: req.userId })
+            .sort(sort)
+            .skip(skip)
+            .limit(limitNum);
+
+        // Calculate pagination metadata
+        const totalPages = Math.ceil(totalTracks / limitNum);
+
+        return res.status(200).json({ 
+            tracks: Array.isArray(tracks) ? tracks : [],
+            pagination: {
+                currentPage: pageNum,
+                totalPages: totalPages,
+                totalTracks: totalTracks,
+                hasNextPage: pageNum < totalPages,
+                hasPrevPage: pageNum > 1,
+                limit: limitNum
+            }
+        });
     } catch (error) {
         console.error('Error fetching tracks:', error);
         return res.status(500).json({ message: 'Internal server error' });
@@ -408,12 +451,72 @@ export const getPurchasedTracks = async (req, res) => {
         if (!req.userId) {
             return res.status(401).json({ message: 'User not authenticated' });
         }
-        const user = await User.findById(req.userId).populate('purchasedTracks.track');
+
+        // Parse pagination parameters
+        const { page = 1, limit = 10, orderBy = 'purchase-date' } = req.query;
+        let pageNum = parseInt(page, 10);
+        if (isNaN(pageNum) || pageNum < 1) pageNum = 1;
+        let limitNum = parseInt(limit, 10);
+        if (isNaN(limitNum) || limitNum < 1) limitNum = 10;
+        if (limitNum > 50) limitNum = 50; // Cap at 50 tracks per page
+
+        const skip = (pageNum - 1) * limitNum;        const user = await User.findById(req.userId).populate({
+            path: 'purchasedTracks.track',
+            options: { 
+                sort: orderBy === 'purchase-date' ? { 'purchasedTracks.purchasedAt': -1 } : 
+                      orderBy === 'purchase-date/ascending' ? { 'purchasedTracks.purchasedAt': 1 } :
+                      orderBy === 'alphabetical' ? { title: 1 } :
+                      orderBy === 'price' ? { price: 1 } :
+                      orderBy === 'rating' ? { averageRating: -1 } :
+                      { 'purchasedTracks.purchasedAt': -1 } // default
+            }
+        });
+
         if (!user) {
             return res.status(401).json({ message: "User not found" });
         }
+
         const purchasedTracks = Array.isArray(user.purchasedTracks) ? user.purchasedTracks : [];
-        return res.status(200).json({ tracks: purchasedTracks });
+        
+        // Apply sorting based on orderBy parameter (since populate sorting might not work as expected)
+        if (orderBy === 'purchase-date') {
+            purchasedTracks.sort((a, b) => new Date(b.purchasedAt) - new Date(a.purchasedAt));
+        } else if (orderBy === 'purchase-date/ascending') {
+            purchasedTracks.sort((a, b) => new Date(a.purchasedAt) - new Date(b.purchasedAt));
+        } else if (orderBy === 'alphabetical' && purchasedTracks.length > 0) {
+            purchasedTracks.sort((a, b) => {
+                if (!a.track || !b.track) return 0;
+                return a.track.title.localeCompare(b.track.title);
+            });        } else if (orderBy === 'price' && purchasedTracks.length > 0) {
+            purchasedTracks.sort((a, b) => {
+                if (!a.track || !b.track) return 0;
+                return (a.track.price || 0) - (b.track.price || 0);
+            });
+        } else if (orderBy === 'rating' && purchasedTracks.length > 0) {
+            purchasedTracks.sort((a, b) => {
+                if (!a.track || !b.track) return 0;
+                return (b.track.averageRating || 0) - (a.track.averageRating || 0);
+            });
+        }
+
+        // Apply pagination
+        const totalTracks = purchasedTracks.length;
+        const paginatedTracks = purchasedTracks.slice(skip, skip + limitNum);
+
+        // Calculate pagination metadata
+        const totalPages = Math.ceil(totalTracks / limitNum);
+
+        return res.status(200).json({ 
+            tracks: paginatedTracks,
+            pagination: {
+                currentPage: pageNum,
+                totalPages: totalPages,
+                totalTracks: totalTracks,
+                hasNextPage: pageNum < totalPages,
+                hasPrevPage: pageNum > 1,
+                limit: limitNum
+            }
+        });
     } catch (error) {
         console.error('Error fetching purchased tracks:', error);
         return res.status(500).json({ message: "Failed to fetch purchased tracks", error: error.message });
@@ -456,6 +559,7 @@ export const downloadTrack = async (req, res) => {
     const data = await s3Client.send(command);
     track.downloadCount += 1;
     await track.save();
+
     res.setHeader('Content-Type', data.ContentType);
     res.setHeader('Content-Disposition', `attachment; filename="${track.title}"`);
     data.Body.pipe(res);
@@ -545,10 +649,51 @@ export const getUploadedTracksByUserId = async (req, res) => {
     try {
         const userId = req.params.id;
         console.log('[DEBUG] getUploadedTracksByUserId userId param:', userId);
-        const tracks = await BackingTrack.find({ user: userId }).sort({ createdAt: -1 });
+
+        // Parse pagination parameters
+        const { page = 1, limit = 10, orderBy = 'date-uploaded' } = req.query;
+        let pageNum = parseInt(page, 10);
+        if (isNaN(pageNum) || pageNum < 1) pageNum = 1;
+        let limitNum = parseInt(limit, 10);
+        if (isNaN(limitNum) || limitNum < 1) limitNum = 10;
+        if (limitNum > 50) limitNum = 50; // Cap at 50 tracks per page
+
+        const skip = (pageNum - 1) * limitNum;
+
+        // Set up sorting
+        let sort = {};
+        if (orderBy === "popularity") sort = { purchaseCount: -1 };
+        if (orderBy === "date-uploaded") sort = { createdAt: -1 };
+        if (orderBy === "date-uploaded/ascending") sort = { createdAt: 1 };
+        if (orderBy === "rating") sort = { averageRating: -1 };
+        if (orderBy === "price") sort = { price: 1 };
+        if (orderBy === "alphabetical") sort = { title: 1 };
+
+        // Get total count for pagination metadata
+        const totalTracks = await BackingTrack.countDocuments({ user: userId });
+        
+        // Get paginated tracks
+        const tracks = await BackingTrack.find({ user: userId })
+            .sort(sort)
+            .skip(skip)
+            .limit(limitNum);
+
         console.log('[DEBUG] getUploadedTracksByUserId found tracks:', tracks.map(t => ({id: t._id, user: t.user, title: t.title})));
-        // Remove Array.isArray check, always return the tracks array
-        return res.status(200).json({ tracks });
+
+        // Calculate pagination metadata
+        const totalPages = Math.ceil(totalTracks / limitNum);
+
+        return res.status(200).json({ 
+            tracks: Array.isArray(tracks) ? tracks : [],
+            pagination: {
+                currentPage: pageNum,
+                totalPages: totalPages,
+                totalTracks: totalTracks,
+                hasNextPage: pageNum < totalPages,
+                hasPrevPage: pageNum > 1,
+                limit: limitNum
+            }
+        });
     } catch (error) {
         console.error('Error fetching uploaded tracks by userId:', error);
         return res.status(500).json({ message: 'Internal server error' });
