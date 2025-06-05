@@ -139,23 +139,31 @@ export const searchUserByName = async (req, res) => {
 
 /**
  * Get detailed information about a specific user
- * @param {Express.Request & PublicRequest & {params: {id: string}}} req - Express request with user ID parameter
+ * @param {Express.Request & PublicRequest & {params: {id: string}, query: {page?: string, limit?: string}}} req - Express request with user ID parameter and pagination
  * @param {Express.Response} res - Express response
  * @returns {Promise<PublicAPIResponse>} Promise resolving to API response with user details
  */
 export const getUserDetails = async (req, res) => {
     try {
-        // Populate uploadedTracks if artist/admin
-
-           if (!mongoose.Types.ObjectId.isValid(req.params.id)){
-
+        // Validate user ID
+        if (!mongoose.Types.ObjectId.isValid(req.params.id)){
             return res.status(400).json({ message: "Invalid user ID" }); //sanitize inputs to prevent injection attacks.
         }
+        
         let user = await User.findById(req.params.id);
         if (!user) {
             return res.status(404).json({ message: "User not found" });
         }
 
+        // Parse pagination parameters for uploaded tracks
+        const { page = 1, limit = 10 } = req.query;
+        let pageNum = parseInt(page, 10);
+        if (isNaN(pageNum) || pageNum < 1) pageNum = 1;
+        let limitNum = parseInt(limit, 10);
+        if (isNaN(limitNum) || limitNum < 1) limitNum = 10;
+        if (limitNum > 50) limitNum = 50; // Cap at 50 tracks per page
+
+        const skip = (pageNum - 1) * limitNum;
      
         // Only populate uploadedTracks for artists/admins... probably redundant since viewerRole edits this out in the toJSON method, but just to be sure.
         if (user.role === 'artist' || user.role === 'admin') {
@@ -165,13 +173,44 @@ export const getUserDetails = async (req, res) => {
                 path: 'uploadedTracks',
                 match: isSelfOrAdmin ? {} : { isPrivate: false },
                 select: 'title previewUrl fileUrl createdAt averageRating purchaseCount',
-                options: { sort: { createdAt: -1 } }
+                options: { 
+                    sort: { createdAt: -1 },
+                    skip: skip,
+                    limit: limitNum
+                }
             });
         }
-        return res.status(200).json(user.toJSON({
+        
+        // Get total count of tracks for pagination metadata (only if user is artist/admin)
+        let totalTracks = 0;
+        if (user.role === 'artist' || user.role === 'admin') {
+            const isSelfOrAdmin = req.userId && (req.userId === user._id.toString() || req.user?.role === 'admin');
+            const matchCondition = isSelfOrAdmin ? {} : { isPrivate: false };
+            totalTracks = await BackingTrack.countDocuments({
+                user: user._id,
+                ...matchCondition
+            });
+        }
+
+        const userJson = user.toJSON({
             viewerRole: req.user?.role || 'public',
             viewerId: req.userId || null
-        }));
+        });
+
+        // Add pagination metadata for uploaded tracks
+        if (user.role === 'artist' || user.role === 'admin') {
+            const totalPages = Math.ceil(totalTracks / limitNum);
+            userJson.uploadedTracksPagination = {
+                currentPage: pageNum,
+                totalPages: totalPages,
+                totalTracks: totalTracks,
+                hasNextPage: pageNum < totalPages,
+                hasPrevPage: pageNum > 1,
+                limit: limitNum
+            };
+        }
+
+        return res.status(200).json(userJson);
     } catch (error) {
         console.error('Error getting user details:', error);
         return res.status(500).json({ message: "Internal server error" });

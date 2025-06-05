@@ -259,10 +259,9 @@ export const processExpiredCommissionsStandalone = async () => {
                 try {
                     await stripeClient.refunds.create({
                         payment_intent: commission.stripePaymentIntentId,
-                        reason: 'requested_by_customer',
-                        metadata: { commissionId: commission._id.toString() }
+                        reason: 'requested_by_customer',                        metadata: { commissionId: commission._id.toString() }
                     });
-                    commission.status = 'refunded';
+                    commission.status = 'cancelled';
                     await commission.save();
                     results.push({ commissionId: commission._id, refunded: true });
                     console.log(`[CRON] Refunded commission ${commission._id}`);
@@ -436,9 +435,8 @@ export const refundCommission = async (req, res) => {
         const commission = await CommissionRequest.findById(commissionId);
         if (!commission) {
             return res.status(404).json({ error: 'Commission not found' });
-        }
-        // Only refund if not already refunded or paid
-        if (commission.status === 'refunded' || commission.status === 'paid') {
+        }        // Only refund if not already refunded or paid
+        if (commission.status === 'cancelled' || commission.status === 'paid') {
             return res.status(400).json({ error: 'Cannot refund this commission' });
         }
         // Refund via Stripe
@@ -446,10 +444,9 @@ export const refundCommission = async (req, res) => {
             try {
                 await stripeClient.refunds.create({
                     payment_intent: commission.stripePaymentIntentId,
-                    reason: 'requested_by_customer',
-                    metadata: { commissionId: commission._id.toString() }
+                    reason: 'requested_by_customer',                    metadata: { commissionId: commission._id.toString() }
                 });
-                commission.status = 'refunded';
+                commission.status = 'cancelled';
                 await commission.save();
                 return res.status(200).json({ success: true });
             } catch (err) {
