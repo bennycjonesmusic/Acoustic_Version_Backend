@@ -405,17 +405,14 @@ export const updateProfile = async (req, res) => {
       if (profanity.isProfane(updates.about)) {
         return res.status(400).json({ message: 'Please avoid using inappropriate language in your about section.' });
       }
-    }
-    // Validate commissionPrice if present
+    }    // Validate commissionPrice if present
     if (updates.commissionPrice !== undefined) {
       const price = Number(updates.commissionPrice);
       if (isNaN(price) || price < 0) {
         return res.status(400).json({ message: 'Commission price must be a non-negative number.' });
       }
       updates.commissionPrice = price;
-      // Also update customerCommissionPrice to keep in sync (matches User.js logic)
-      const platformCommissionRate = 0.15;
-      updates.customerCommissionPrice = Math.round((price + (price * platformCommissionRate)) * 100) / 100;
+      // Note: customerCommissionPrice will be auto-calculated by User model pre-save middleware
     }
   
     // No need to validate avatar here, multer-s3 already does it

@@ -6,7 +6,9 @@ export function toUserSummary(users) {
     id: user._id,
     username: user.username,
     avatar: user.avatar,
-    commissionPrice: user.customerCommissionPrice,
-    rating: user.averageTrackRating// add more fields if needed
+    customerCommissionPrice: user.customerCommissionPrice,  // Fixed spelling to match frontend interface
+    averageTrackRating: user.averageTrackRating,
+    artistExample: user.artistExamples && user.artistExamples.length > 0 ? user.artistExamples[0].url : null
+ 
   }));
 }

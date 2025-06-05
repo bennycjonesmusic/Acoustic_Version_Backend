@@ -7,6 +7,7 @@ import { parseKeySignature } from '../utils/parseKeySignature.js';
 import { uploadTrackSchema, editTrackSchema, reviewSchema, commentSchema } from './validationSchemas.js';
 import * as Filter from 'bad-words';
 import { sendFollowersNewTrack } from '../utils/updateFollowers.js';
+import { getAudioPreview } from '../utils/audioPreview.js';
 import path from 'path';
 import { sanitizeFileName } from '../utils/regexSanitizer.js';
 
@@ -156,24 +157,12 @@ export const uploadTrack = async (req, res) => {
         const tmp = await import('os');
         const tmpDir = tmp.tmpdir();
         const tempFilePath = path.join(tmpDir, `uploadtrack_${Date.now()}_${sanitizedFileName}`);
-        const trimmedFilePath = path.join(tmpDir, `trimmed_${Date.now()}_${sanitizedFileName}`);
-        fs.writeFileSync(tempFilePath, req.file.buffer);
+        const trimmedFilePath = path.join(tmpDir, `trimmed_${Date.now()}_${sanitizedFileName}`);        fs.writeFileSync(tempFilePath, req.file.buffer);
         
-        // Trim silence from the beginning of the main track
-        console.log('Trimming silence from main track...');
-        const { trimSilence } = await import('../utils/silenceTrimming.js');
-        try {
-            await trimSilence(tempFilePath, trimmedFilePath, { 
-                trimStart: true, 
-                trimEnd: false, // Don't trim end for main tracks to preserve natural endings
-                format: null // Preserve original format
-            });
-            console.log('Main track silence trimming completed');
-        } catch (trimError) {
-            console.warn('Silence trimming failed, using original file:', trimError.message);
-            // If trimming fails, use the original file
-            fs.copyFileSync(tempFilePath, trimmedFilePath);
-        }
+        // Use original file directly instead of problematic silence trimming
+        console.log('Using original file without silence trimming...');
+        fs.copyFileSync(tempFilePath, trimmedFilePath);
+        console.log('File prepared for upload');
         const s3Client = new S3Client({
             region: process.env.AWS_REGION,
             credentials: {
@@ -193,12 +182,11 @@ export const uploadTrack = async (req, res) => {
         fs.unlinkSync(trimmedFilePath);        // --- 30-second preview logic ---
         let previewUrl = null;
         const previewPath = tempFilePath + '-preview.mp3'; // Define previewPath
-        const { getAudioPreviewWithTrimming } = await import('../utils/silenceTrimming.js');
         try {
             // Write buffer to temp file for ffmpeg
             fs.writeFileSync(tempFilePath + '-full', req.file.buffer);
-            // Use the new trimming function for previews
-            await getAudioPreviewWithTrimming(tempFilePath + '-full', previewPath, 30, true);// Upload preview to S3
+            // Use the working getAudioPreview utility instead of problematic trimming
+            await getAudioPreview(tempFilePath + '-full', previewPath, 30);
             // Remove file extension from sanitized filename, but be careful about file extensions that might be part of the title
             let cleanFileName = sanitizedFileName.replace(/\.[^/.]+$/, ''); // Remove actual file extension first
             // Only remove common audio format suffixes if they appear to be file extensions (after underscore or at end)

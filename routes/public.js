@@ -22,7 +22,7 @@ router.get('/tracks/featured', publicMiddleware, asyncHandler(getFeaturedTracks)
 router.get('/tracks/:id', publicMiddleware, getTrack);
 
 // Public get featured artists
-router.get('/artists/featured', publicMiddleware, getFeaturedArtists);
+router.get('/artists/featured', publicMiddleware, asyncHandler(getFeaturedArtists));
 
 // Public search user by name
 router.get('/users/search', publicMiddleware, searchUserByName);

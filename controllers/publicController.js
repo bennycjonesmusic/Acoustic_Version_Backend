@@ -278,13 +278,16 @@ export const getFeaturedTracks = async (req, res) => {
  * @returns {Promise<PublicAPIResponse>} Promise resolving to API response with featured artists
  */
 export const getFeaturedArtists = async (req, res) => {
-    try {
-        // Check cache first
+    console.log('=== FEATURED ARTISTS ENDPOINT HIT ===');
+    console.log('Request URL:', req.url);
+    console.log('Request method:', req.method);
+    try {        // Check cache first
         const cached = cache.get('featuredArtists');
         if (cached) {
-            console.log('[getFeaturedArtists] Returning cached data');
+            console.log('[getFeaturedArtists] Returning cached data', cached[0]);
             return res.status(200).json(cached);
-        }        // Find artists or admins with at least one uploaded track OR at least one commission as artist, and approved profile
+        }
+        console.log('[getFeaturedArtists] No cache found, fetching fresh data');        // Find artists or admins with at least one uploaded track OR at least one commission as artist, and approved profile
         const featuredArtists = await User.find({
             role: { $in: ['artist', 'admin'] },
             profileStatus: 'approved',
@@ -293,16 +296,10 @@ export const getFeaturedArtists = async (req, res) => {
                 // Artists/admins with at least one commission as artist
                 { _id: { $in: await CommissionRequest.distinct('artist') } }
             ]
-        }).limit(10).select({
-            username: 1,
-            avatar: 1,
-            customerCommissionPrice: 1,
-            averageTrackRating: 1
-        });
+        }).limit(10);
         // Exclude those already found from random selection
         const excludeIds = featuredArtists.map(a => a._id);        // Find random additional artists/admins with same criteria
-        const commissionArtistIds = await CommissionRequest.distinct('artist');
-        const featureRandom = await User.aggregate([
+        const commissionArtistIds = await CommissionRequest.distinct('artist');        const featureRandom = await User.aggregate([
             { $match: {
                 _id: { $nin: excludeIds },
                 role: { $in: ['artist', 'admin'] },
@@ -312,17 +309,25 @@ export const getFeaturedArtists = async (req, res) => {
                     { _id: { $in: commissionArtistIds } }
                 ]
             } },
-            { $sample: { size: 5 } },
-            { $project: {
-                username: 1,
-                avatar: 1,
-                customerCommissionPrice: 1,
-                averageTrackRating: 1
-            } }
-        ]);
-        const featured = [...featuredArtists, ...featureRandom]; //Merge the arrays in a super array.
+            { $sample: { size: 5 } }
+        ]);const featured = [...featuredArtists, ...featureRandom]; //Merge the arrays in a super array.
+        console.log('[getFeaturedArtists] Raw featured artists data:', featured[0]);
+        
+        // Calculate average track rating for all featured artists
+        console.log('[getFeaturedArtists] Calculating average track ratings for featured artists...');
+        for (const artist of featured) {
+            try {
+                await artist.calculateAverageTrackRating(); 
+            
+                await artist.save(); //ensures customercommission gets updated
+                console.log(`[getFeaturedArtists] Updated rating for ${artist.username}: ${artist.averageTrackRating}`);
+            } catch (error) {
+                console.error(`[getFeaturedArtists] Error calculating rating for ${artist.username}:`, error);
+            }
+        }
+        
         const summary = toUserSummary(featured);
-        cache.set('featuredArtists', summary);
+        console.log('[getFeaturedArtists] After toUserSummary:', summary[0]);        cache.set('featuredArtists', summary);
         return res.status(200).json(summary);
     } catch (error) {
         console.error('Error getting featured artists:', error);
