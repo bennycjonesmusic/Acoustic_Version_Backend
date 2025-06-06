@@ -491,24 +491,56 @@ export const artistRespondToCommission = async (req, res) => {
 export const getArtistCommissions = async (req, res) => {
     try {
         const artistId = req.userId;
-        // Pagination
+        
+        // Pagination parameters with validation
         const page = Math.max(1, parseInt(req.query.page) || 1);
-        const limit = Math.max(1, Math.min(100, parseInt(req.query.limit) || 20));
+        const limit = Math.max(1, Math.min(50, parseInt(req.query.limit) || 20));
+        const orderBy = req.query.orderBy || 'date-requested';
+        
+        // Build sort criteria based on orderBy parameter
+        let sortCriteria;
+        switch (orderBy) {
+            case 'date-requested':
+                sortCriteria = { createdAt: -1 };
+                break;
+            case 'date-updated':
+                sortCriteria = { updatedAt: -1 };
+                break;
+            case 'price':
+                sortCriteria = { price: -1 };
+                break;
+            case 'status':
+                sortCriteria = { status: 1 };
+                break;
+            default:
+                sortCriteria = { createdAt: -1 };
+        }
+        
         const skip = (page - 1) * limit;
         const [commissions, total] = await Promise.all([
             CommissionRequest.find({ artist: artistId })
                 .populate('customer')
-                .sort({ createdAt: -1 })
+                .sort(sortCriteria)
                 .skip(skip)
                 .limit(limit),
             CommissionRequest.countDocuments({ artist: artistId })
         ]);
+        
+        // Calculate pagination metadata
+        const totalPages = Math.ceil(total / limit);
+        const hasNextPage = page < totalPages;
+        const hasPrevPage = page > 1;
+        
         return res.status(200).json({
             commissions,
-            page,
-            limit,
-            total,
-            totalPages: Math.ceil(total / limit)
+            pagination: {
+                currentPage: page,
+                totalPages,
+                totalCommissions: total,
+                hasNextPage,
+                hasPrevPage,
+                limit
+            }
         });
     } catch (error) {
         console.error('Error fetching artist commissions:', error);
@@ -524,24 +556,56 @@ export const getCustomerCommissions = async (req, res) => {
         if (!req.user || (req.user.id.toString() !== customerId && req.user.role !== 'admin')) {
             return res.status(403).json({ error: 'Not authorized' });
         }
-        // Pagination
+        
+        // Pagination parameters with validation
         const page = Math.max(1, parseInt(req.query.page) || 1);
-        const limit = Math.max(1, Math.min(100, parseInt(req.query.limit) || 20));
+        const limit = Math.max(1, Math.min(50, parseInt(req.query.limit) || 20));
+        const orderBy = req.query.orderBy || 'date-requested';
+        
+        // Build sort criteria based on orderBy parameter
+        let sortCriteria;
+        switch (orderBy) {
+            case 'date-requested':
+                sortCriteria = { createdAt: -1 };
+                break;
+            case 'date-updated':
+                sortCriteria = { updatedAt: -1 };
+                break;
+            case 'price':
+                sortCriteria = { price: -1 };
+                break;
+            case 'status':
+                sortCriteria = { status: 1 };
+                break;
+            default:
+                sortCriteria = { createdAt: -1 };
+        }
+        
         const skip = (page - 1) * limit;
         const [commissions, total] = await Promise.all([
             CommissionRequest.find({ customer: customerId })
                 .populate('artist')
-                .sort({ createdAt: -1 })
+                .sort(sortCriteria)
                 .skip(skip)
                 .limit(limit),
             CommissionRequest.countDocuments({ customer: customerId })
         ]);
+        
+        // Calculate pagination metadata
+        const totalPages = Math.ceil(total / limit);
+        const hasNextPage = page < totalPages;
+        const hasPrevPage = page > 1;
+        
         return res.status(200).json({
             commissions,
-            page,
-            limit,
-            total,
-            totalPages: Math.ceil(total / limit)
+            pagination: {
+                currentPage: page,
+                totalPages,
+                totalCommissions: total,
+                hasNextPage,
+                hasPrevPage,
+                limit
+            }
         });
     } catch (error) {
         console.error('Error fetching customer commissions:', error);

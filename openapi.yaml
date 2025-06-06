@@ -402,6 +402,350 @@ paths:
           description: Track not found or no guide track to delete
         '500':
           description: Internal server error
+  /commission/request:
+    post:
+      summary: Create a new commission request
+      description: Customer creates a commission request for an artist
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                artist:
+                  type: string
+                  description: Artist ID
+                title:
+                  type: string
+                  description: Commission title
+                description:
+                  type: string
+                  description: Commission description
+                requirements:
+                  type: string
+                  description: Specific requirements for the track
+                key:
+                  type: string
+                  description: Key signature for the track
+                tempo:
+                  type: integer
+                  description: Tempo for the track
+              required:
+                - artist
+                - title
+                - requirements
+      responses:
+        '200':
+          description: Commission request created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sessionId:
+                    type: string
+                  sessionUrl:
+                    type: string
+                  commissionId:
+                    type: string
+                  artistPrice:
+                    type: number
+                  platformCommission:
+                    type: number
+                  finalPrice:
+                    type: number
+        '400':
+          description: Invalid request data
+        '404':
+          description: Artist not found
+        '500':
+          description: Internal server error
+
+  /commission/artist/commissions:
+    get:
+      summary: Get artist commissions (paginated)
+      description: Get all commissions for the logged-in artist with pagination and sorting
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+          description: Page number for pagination
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+            maximum: 50
+          description: Results per page limit
+        - in: query
+          name: orderBy
+          schema:
+            type: string
+            enum: [date-requested, date-updated, price, status]
+            default: date-requested
+          description: Sort order for results
+      responses:
+        '200':
+          description: Artist commissions with pagination
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  commissions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Commission'
+                  pagination:
+                    type: object
+                    properties:
+                      currentPage:
+                        type: integer
+                      totalPages:
+                        type: integer
+                      totalCommissions:
+                        type: integer
+                      hasNextPage:
+                        type: boolean
+                      hasPrevPage:
+                        type: boolean
+                      limit:
+                        type: integer
+        '403':
+          description: Not authorized
+        '500':
+          description: Internal server error
+
+  /commission/customer/commissions:
+    get:
+      summary: Get customer commissions (paginated)
+      description: Get all commissions for the logged-in customer with pagination and sorting
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+          description: Page number for pagination
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+            maximum: 50
+          description: Results per page limit
+        - in: query
+          name: orderBy
+          schema:
+            type: string
+            enum: [date-requested, date-updated, price, status]
+            default: date-requested
+          description: Sort order for results
+      responses:
+        '200':
+          description: Customer commissions with pagination
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  commissions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Commission'
+                  pagination:
+                    type: object
+                    properties:
+                      currentPage:
+                        type: integer
+                      totalPages:
+                        type: integer
+                      totalCommissions:
+                        type: integer
+                      hasNextPage:
+                        type: boolean
+                      hasPrevPage:
+                        type: boolean
+                      limit:
+                        type: integer
+        '403':
+          description: Not authorized
+        '500':
+          description: Internal server error
+
+  /commission/pay:
+    post:
+      summary: Pay for commission
+      description: Customer pays for an accepted commission via Stripe
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                commissionId:
+                  type: string
+                  description: Commission ID to pay for
+              required:
+                - commissionId
+      responses:
+        '200':
+          description: Stripe checkout session created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sessionId:
+                    type: string
+                  sessionUrl:
+                    type: string
+        '400':
+          description: Commission not ready for payment
+        '404':
+          description: Commission not found
+        '500':
+          description: Failed to create Stripe session
+
+  /commission/artist/respond:
+    post:
+      summary: Artist responds to commission
+      description: Artist accepts or rejects a commission request
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                commissionId:
+                  type: string
+                action:
+                  type: string
+                  enum: [accept, reject]
+              required:
+                - commissionId
+                - action
+      responses:
+        '200':
+          description: Commission response recorded
+        '400':
+          description: Invalid action or commission not pending
+        '403':
+          description: Not authorized
+        '404':
+          description: Commission not found
+        '500':
+          description: Internal server error
+
+  /commission/upload-finished:
+    post:
+      summary: Upload finished commission track
+      description: Artist uploads the finished track for a commission
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Audio file for the finished track
+                commissionId:
+                  type: string
+                  description: Commission ID
+              required:
+                - file
+                - commissionId
+      responses:
+        '200':
+          description: Finished track uploaded successfully
+        '400':
+          description: Invalid file or commission not ready
+        '403':
+          description: Not authorized
+        '404':
+          description: Commission not found
+        '500':
+          description: Upload failed
+
+  /commission/confirm:
+    post:
+      summary: Customer confirms or denies commission
+      description: Customer approves or requests changes to the finished commission
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                commissionId:
+                  type: string
+                action:
+                  type: string
+                  enum: [approve, deny]
+              required:
+                - commissionId
+                - action
+      responses:
+        '200':
+          description: Commission confirmation recorded
+        '400':
+          description: Invalid action
+        '403':
+          description: Not authorized
+        '404':
+          description: Commission not found
+        '500':
+          description: Internal server error
+
+  /commission/{id}:
+    get:
+      summary: Get commission by ID
+      description: Get detailed information about a specific commission
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Commission ID
+      responses:
+        '200':
+          description: Commission details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Commission'
+        '403':
+          description: Not authorized
+        '404':
+          description: Commission not found
+        '500':
+          description: Internal server error
 components:
   securitySchemes:
     bearerAuth:
@@ -516,3 +860,43 @@ components:
                 type: number
               purchaseCount:
                 type: integer
+    Commission:
+      type: object
+      description: Commission request object
+      properties:
+        _id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        requirements:
+          type: string
+        key:
+          type: string
+        tempo:
+          type: integer
+        price:
+          type: number
+        status:
+          type: string
+          enum: [pending_artist, requested, accepted, in_progress, delivered, approved, paid, cancelled, rejected_by_artist]
+        artist:
+          $ref: '#/components/schemas/UserSummary'
+        customer:
+          $ref: '#/components/schemas/UserSummary'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        stripePaymentIntentId:
+          type: string
+          nullable: true
+        previewTrackUrl:
+          type: string
+          nullable: true
+        finishedTrackUrl:
+          type: string
+          nullable: true
