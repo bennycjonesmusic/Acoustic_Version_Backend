@@ -537,14 +537,13 @@ export const queryTracks = async (req, res) => {
             if (!tracks.length) {
                 // Fallback to regex search
                 const safeQuery = escapeRegex(query);
-                tracks = await BackingTrack.find({
-                    title: { $regex: safeQuery, $options: 'i' },
-                    ...filter
-                })
+                const regexFilter = { title: { $regex: safeQuery, $options: 'i' }, ...filter };
+                tracks = await BackingTrack.find(regexFilter)
                     .sort(sort)
                     .skip((pageNum - 1) * limitNum)
                     .limit(limitNum)
                     .populate('user', 'avatar username');
+                totalTracks = await BackingTrack.countDocuments(regexFilter);
             }
         } else {
             // No search query, use normal query logic
@@ -553,12 +552,14 @@ export const queryTracks = async (req, res) => {
                 .skip((pageNum - 1) * limitNum)
                 .limit(limitNum)
                 .populate('user', 'avatar username');
+            totalTracks = await BackingTrack.countDocuments(filter);
         }
         if (!tracks || tracks.length === 0) {
             return res.status(404).json({ message: "No tracks found." });
         }
         const totalPages = Math.ceil(totalTracks / limitNum);
         const summaryTracks = toTrackSummary(tracks);
+        console.log('[queryTracks] totalTracks:', totalTracks, 'totalPages:', totalPages, 'tracks.length:', tracks.length);
         return res.status(200).json({
             tracks: summaryTracks,
             totalPages,
