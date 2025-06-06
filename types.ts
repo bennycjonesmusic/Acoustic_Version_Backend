@@ -11,7 +11,11 @@ export interface TrackSummary {
   title: string;
   user: UserSummary | string; // Can be populated UserSummary object or unpopulated ObjectId string
   originalArtist: string;
-  trackPrice: number;
+  customerPrice: number;
+  averageRating?: number; // Optional rating field
+  numOfRatings?: number; // Optional rating count field
+  guideTrackUrl?: string; // Optional guide track URL
+  youtubeGuideUrl?: string; // Optional YouTube guide URL
 }
 
 export interface PublicAPIResponse {

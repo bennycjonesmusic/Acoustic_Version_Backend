@@ -782,11 +782,10 @@ components:
           oneOf:
             - $ref: '#/components/schemas/UserSummary'
             - type: string
-          description: User who uploaded (summary object if populated, ObjectId string if not)
-        originalArtist:
+          description: User who uploaded (summary object if populated, ObjectId string if not)        originalArtist:
           type: string
           description: Original artist name
-        trackPrice:
+        customerPrice:
           type: number
           description: Track price
       required:
@@ -794,7 +793,7 @@ components:
         - title
         - user
         - originalArtist
-        - trackPrice
+        - customerPrice
     TrackDetails:
       type: object
       description: Full track details returned by getTrack endpoint

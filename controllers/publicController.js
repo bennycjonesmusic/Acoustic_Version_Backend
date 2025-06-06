@@ -17,13 +17,12 @@ import mongoose from 'mongoose';
 import NodeCache from 'node-cache';
 const cache = new NodeCache({ stdTTL: 60 * 60 }); //cache for 1 hour
 
-/**
- * @typedef {Object} TrackSummary
+/** * @typedef {Object} TrackSummary
  * @property {string} id - Track ID
  * @property {string} title - Track title
  * @property {UserSummary|string} user - User who uploaded (summary object if populated, ObjectId string if not)
  * @property {string} originalArtist - Original artist name
- * @property {number} trackPrice - Track price
+ * @property {number} customerPrice - Track price
  */
 
 /**
@@ -452,13 +451,11 @@ export const queryUsers = async (req, res) => {
                 .limit(limitNum);
             totalUsers = await User.countDocuments(filter);
         }
-        if (!users || users.length === 0) {
-            return res.status(404).json({ message: "No users found." });
-        }
+     
         const totalPages = Math.ceil(totalUsers / limitNum);
         const summaryUsers = toUserSummary(users);
         return res.status(200).json({
-            users: summaryUsers,
+            users: summaryUsers.length > 0? summaryUsers : [],
             totalPages,
             totalUsers,
             currentPage: pageNum,
@@ -480,12 +477,11 @@ export const queryTracks = async (req, res) => {
         if (isNaN(pageNum) || pageNum < 1) pageNum = 1;
         let limitNum = parseInt(limit, 10);
         if (isNaN(limitNum) || limitNum < 1) limitNum = 10;
-        if (limitNum > 50) limitNum = 50;
-        if (orderBy == "popularity") sort = { purchaseCount: -1 };
+        if (limitNum > 50) limitNum = 50;        if (orderBy == "popularity") sort = { purchaseCount: -1 };
         if (orderBy == "date-uploaded") sort = { createdAt: -1 };
         if (orderBy == "date-uploaded/ascending") sort = { createdAt: 1 };
         if (orderBy == "rating") sort = { averageRating: -1 };
-        if (orderBy == "price") sort = { trackPrice: 1 };
+        if (orderBy == "price") sort = { customerPrice: 1 };
         if (keySig) {
             try {
                 const { key, isFlat, isSharp } = parseKeySignature(keySig); //function to parse key signature BB = Bflat e.t.c
@@ -534,6 +530,8 @@ export const queryTracks = async (req, res) => {
                 .select({ score: { $meta: 'textScore' } })
                 .populate('user', 'avatar username');
             totalTracks = await BackingTrack.countDocuments(textFilter);
+
+           
             if (!tracks.length) {
                 // Fallback to regex search
                 const safeQuery = escapeRegex(query);
@@ -554,14 +552,15 @@ export const queryTracks = async (req, res) => {
                 .populate('user', 'avatar username');
             totalTracks = await BackingTrack.countDocuments(filter);
         }
-        if (!tracks || tracks.length === 0) {
-            return res.status(404).json({ message: "No tracks found." });
-        }
-        const totalPages = Math.ceil(totalTracks / limitNum);
+         if (! totalTracks){
+
+                totalTracks = 0;
+            }
+               const totalPages = Math.ceil(totalTracks / limitNum);
         const summaryTracks = toTrackSummary(tracks);
         console.log('[queryTracks] totalTracks:', totalTracks, 'totalPages:', totalPages, 'tracks.length:', tracks.length);
         return res.status(200).json({
-            tracks: summaryTracks,
+            tracks: summaryTracks.length > 0 ? summaryTracks : [],
             totalPages,
             totalTracks,
             currentPage: pageNum,

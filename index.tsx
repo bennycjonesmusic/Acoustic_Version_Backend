@@ -41,11 +41,10 @@ const App: React.FC = () => {
     <div className="app">
       <h1>Featured Tracks</h1>
       <div className="tracks-grid">
-        {tracks.map((track) => (
-          <div key={track.id} className="track-card">
+        {tracks.map((track) => (          <div key={track.id} className="track-card">
             <h3>{track.title}</h3>
             <p>Original Artist: {track.originalArtist}</p>
-            <p>Price: ${track.trackPrice}</p>
+            <p>Price: ${track.customerPrice}</p>
             {renderTrackUser(track.user)}
           </div>
         ))}
