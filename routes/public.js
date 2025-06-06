@@ -1,5 +1,5 @@
 import express from 'express';
-import { searchTracks, queryTracks, getTrack, getFeaturedTracks, getFeaturedArtists, searchUserByName, getUserDetails } from '../controllers/publicController.js';
+import { searchTracks, queryTracks, queryUsers, getTrack, getFeaturedTracks, getFeaturedArtists, searchUserByName, getUserDetails } from '../controllers/publicController.js';
 import publicMiddleware from '../middleware/public_auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 
@@ -10,6 +10,8 @@ router.get('/tracks/search', publicMiddleware, searchTracks);
 
 // Public track query (with filters, pagination, etc)
 router.get('/tracks/query', publicMiddleware, queryTracks);
+
+router.get('/users/query', publicMiddleware, queryUsers);
 
 // Log asyncHandler type and route registration for diagnostics
 console.log('[ROUTE] asyncHandler type:', typeof asyncHandler);

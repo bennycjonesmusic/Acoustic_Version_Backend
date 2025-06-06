@@ -59,7 +59,7 @@ router.get('/me', authMiddleware, async (req, res) => {
 
 // Get all tracks uploaded by a specific user (artist)
 router.get('/users/:id/tracks', authMiddleware, getUploadedTracksByUser);
-router.get('/:id/tracks', getUploadedTracksByUserId);
+router.get('/artist/:id/tracks', getUploadedTracksByUserId);
 
 // Remove the registration route from users.js (handled in auth.js)
 

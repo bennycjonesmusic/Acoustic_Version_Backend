@@ -375,7 +375,7 @@ export const getFeaturedArtists = async (req, res) => {
 
 export const queryUsers = async (req, res) => {
     try {
-        const { orderBy, page = 1, limit = 10, lastOnlineWithin, minCommissions, availableForCommission } = req.query;
+        const { orderBy, page = 1, limit = 10, lastOnlineWithin, minCommissions, availableForCommission, query } = req.query;
         let sort = {};
         let filter = {};
         // Validate and sanitize pagination
@@ -392,7 +392,6 @@ export const queryUsers = async (req, res) => {
         if (orderBy == "num-of-commissions/ascending") sort = { numOfCommissions: 1 };
         if (orderBy == "popularity") sort = { amountOfTracksSold: -1 };
         if (orderBy == "num-of-uploaded-tracks") sort = { numOfUploadedTracks: -1 };
-        
         // Filter for users who were online within X days
         if (lastOnlineWithin) {
             const daysNum = parseInt(lastOnlineWithin, 10);
@@ -402,7 +401,6 @@ export const queryUsers = async (req, res) => {
                 filter.lastOnline = { $gte: cutoffDate };
             }
         }
-        
         // Filter for users who have completed at least X commissions
         if (minCommissions) {
             const commissionsNum = parseInt(minCommissions, 10);
@@ -410,7 +408,6 @@ export const queryUsers = async (req, res) => {
                 filter.numOfCommissions = { $gte: commissionsNum };
             }
         }
-        
         // Filter for users who are available for commissions
         if (availableForCommission) {
             if (availableForCommission === 'true') {
@@ -419,15 +416,54 @@ export const queryUsers = async (req, res) => {
                 filter.availableForCommission = false;
             }
         }
-        
         filter.role = { $in: ['artist', 'admin'] }; // Show only artists and admins
         filter.profileStatus = 'approved'; // Show only approved users
-        const users = await User.find(filter).sort(sort).skip((pageNum - 1) * limitNum).limit(limitNum);
+
+        let users;
+        let totalUsers;
+        // If a search query is present, do a text/regex search, then filter/sort
+        if (query) {
+            if (!isSafeRegexInput(query)) {
+                return res.status(400).json({ message: "Invalid search query" });
+            }
+            // Try $text search first
+            const textFilter = { $text: { $search: query }, ...filter };
+            users = await User.find(textFilter)
+                .sort(Object.keys(sort).length ? { ...sort, score: { $meta: 'textScore' } } : { score: { $meta: 'textScore' } })
+                .skip((pageNum - 1) * limitNum)
+                .limit(limitNum)
+                .select({ score: { $meta: 'textScore' } });
+            totalUsers = await User.countDocuments(textFilter);
+            if (!users.length) {
+                // Fallback to regex search
+                const safeQuery = escapeRegex(query);
+                const regexFilter = { username: { $regex: safeQuery, $options: 'i' }, ...filter };
+                users = await User.find(regexFilter)
+                    .sort(sort)
+                    .skip((pageNum - 1) * limitNum)
+                    .limit(limitNum);
+                totalUsers = await User.countDocuments(regexFilter);
+            }
+        } else {
+            // No search query, use normal query logic
+            users = await User.find(filter)
+                .sort(sort)
+                .skip((pageNum - 1) * limitNum)
+                .limit(limitNum);
+            totalUsers = await User.countDocuments(filter);
+        }
         if (!users || users.length === 0) {
             return res.status(404).json({ message: "No users found." });
         }
+        const totalPages = Math.ceil(totalUsers / limitNum);
         const summaryUsers = toUserSummary(users);
-        return res.status(200).json(summaryUsers);
+        return res.status(200).json({
+            users: summaryUsers,
+            totalPages,
+            totalUsers,
+            currentPage: pageNum,
+            limit: limitNum
+        });
     } catch (error) {
         return res.status(500).json({ error: "Failed to query users" });
     }
@@ -436,7 +472,7 @@ export const queryUsers = async (req, res) => {
 
 export const queryTracks = async (req, res) => {
     try {
-        const { orderBy, page = 1, limit = 10, keySig, "vocal-range": vocalRange, artistId, qualityValidated } = req.query;
+        const { orderBy, page = 1, limit = 10, keySig, "vocal-range": vocalRange, artistId, qualityValidated, query } = req.query;
         let sort = {};
         let filter = {};
         // Validate and sanitize pagination
@@ -466,7 +502,8 @@ export const queryTracks = async (req, res) => {
             } catch (error) {
                 return res.status(400).json({ error: "Something went wrong. Make sure you enter a valid vocal range" });
             }
-        }        if (qualityValidated) {
+        }
+        if (qualityValidated) {
             if (qualityValidated !== 'true' && qualityValidated !== 'false') {
                 return res.status(400).json({ error: "Invalid quality validation filter" });
             }
@@ -480,12 +517,55 @@ export const queryTracks = async (req, res) => {
             filter.user = artistId;
         }
         filter.isPrivate = false; //show public tracks only
-        const tracks = await BackingTrack.find(filter).sort(sort).skip((pageNum - 1) * limitNum).limit(limitNum).populate('user', 'avatar username');
+
+        let tracks;
+        let totalTracks;
+        // If a search query is present, do a text/regex search, then filter/sort
+        if (query) {
+            if (!isSafeRegexInput(query)) {
+                return res.status(400).json({ message: "Invalid search query" });
+            }
+            // Try $text search first
+            const textFilter = { $text: { $search: query }, ...filter };
+            tracks = await BackingTrack.find(textFilter)
+                .sort(Object.keys(sort).length ? { ...sort, score: { $meta: 'textScore' } } : { score: { $meta: 'textScore' } })
+                .skip((pageNum - 1) * limitNum)
+                .limit(limitNum)
+                .select({ score: { $meta: 'textScore' } })
+                .populate('user', 'avatar username');
+            totalTracks = await BackingTrack.countDocuments(textFilter);
+            if (!tracks.length) {
+                // Fallback to regex search
+                const safeQuery = escapeRegex(query);
+                tracks = await BackingTrack.find({
+                    title: { $regex: safeQuery, $options: 'i' },
+                    ...filter
+                })
+                    .sort(sort)
+                    .skip((pageNum - 1) * limitNum)
+                    .limit(limitNum)
+                    .populate('user', 'avatar username');
+            }
+        } else {
+            // No search query, use normal query logic
+            tracks = await BackingTrack.find(filter)
+                .sort(sort)
+                .skip((pageNum - 1) * limitNum)
+                .limit(limitNum)
+                .populate('user', 'avatar username');
+        }
         if (!tracks || tracks.length === 0) {
             return res.status(404).json({ message: "No tracks found." });
         }
+        const totalPages = Math.ceil(totalTracks / limitNum);
         const summaryTracks = toTrackSummary(tracks);
-        return res.status(200).json(summaryTracks);
+        return res.status(200).json({
+            tracks: summaryTracks,
+            totalPages,
+            totalTracks,
+            currentPage: pageNum,
+            limit: limitNum
+        });
     } catch (error) {
         return res.status(500).json({ error: "Failed to query tracks" });
     }

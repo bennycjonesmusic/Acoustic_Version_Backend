@@ -163,8 +163,8 @@ app.use('/stripe-subscriptions', stripeSubscriptionsRouter); // Register the new
 app.use('/stripe', stripeRoutes);
 app.use("/auth", authRoutes);
 app.use("/admin", adminRoutes);
-app.use('/users', userRoutes);
 app.use('/public', publicRoutes);
+app.use('/users', userRoutes);
 app.use('/commission', commissionRoutes);
 app.use('/', guideRoutes);
 app.use('/', tracksRoutes);
