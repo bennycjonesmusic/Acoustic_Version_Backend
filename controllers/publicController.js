@@ -122,7 +122,7 @@ export const searchUserByName = async (req, res) => {
 
 /**
  * Get detailed information about a specific user
- * @param {Express.Request & PublicRequest & {params: {id: string}, query: {page?: string, limit?: string}}} req - Express request with user ID parameter and pagination
+ * @param {Express.Request & PublicRequest & {params: {id: string}, query: {page?: string, limit?: string, sort?: string, search?: string}}} req - Express request with user ID parameter, pagination, and filtering
  * @param {Express.Response} res - Express response
  * @returns {Promise<PublicAPIResponse>} Promise resolving to API response with user details
  */
@@ -138,52 +138,63 @@ export const getUserDetails = async (req, res) => {
             return res.status(404).json({ message: "User not found" });
         }
 
-        // Parse pagination parameters for uploaded tracks.. important incase user has MANY tracks
-        const { page = 1, limit = 10 } = req.query;
+        // Parse pagination and filtering parameters for uploaded tracks
+        const { page = 1, limit = 10, sort = 'recent', search = '' } = req.query;
         let pageNum = parseInt(page, 10);
         if (isNaN(pageNum) || pageNum < 1) pageNum = 1;
         let limitNum = parseInt(limit, 10);
         if (isNaN(limitNum) || limitNum < 1) limitNum = 10;
         if (limitNum > 50) limitNum = 50; // Cap at 50 tracks per page
-
-        const skip = (pageNum - 1) * limitNum;
-
-
-     
-        // Only populate uploadedTracks for artists/admins... probably redundant since viewerRole edits this out in the toJSON method, but just to be sure.
-        if (user.role === 'artist' || user.role === 'admin') {
-            // Only show public tracks to public viewers
-            const isSelfOrAdmin = req.userId && (req.userId === user._id.toString() || req.user?.role === 'admin');
-            await user.populate({
-                path: 'uploadedTracks',
-                match: isSelfOrAdmin ? {} : { isPrivate: false },
-                select: 'title previewUrl fileUrl createdAt averageRating purchaseCount',
-                options: { 
-                    sort: { createdAt: -1 },
-                    skip: skip,
-                    limit: limitNum
-                }
-            });
+        const skip = (pageNum - 1) * limitNum;     
+        
+        // Always populate uploadedTracks, but filter based on privacy and viewer permissions
+        const isSelfOrAdmin = req.userId && (req.userId === user._id.toString() || req.user?.role === 'admin');
+          // Build match conditions for tracks - show public tracks to everyone, private tracks only to owner/admin
+        let matchConditions = isSelfOrAdmin ? {} : { isPrivate: false };        // Add search filter if provided
+        if (search && search.trim()) {
+            const searchTerm = search.trim();
+            // Use regex search for title matching - more reliable than text search
+            const safeQuery = escapeRegex(searchTerm);
+            matchConditions.title = { $regex: safeQuery, $options: 'i' };
+        }
+          // Determine sort order
+        let sortOption = { createdAt: -1 }; // Default: recently uploaded
+        if (sort === 'popularity') {
+            sortOption = { averageRating: -1, createdAt: -1 }; // Sort by rating, then by recency
         }
         
-        // Get total count of tracks for pagination metadata (only if user is artist/admin)
+        await user.populate({
+            path: 'uploadedTracks',
+            match: matchConditions,
+            select: 'title previewUrl fileUrl createdAt averageRating purchaseCount',
+            options: { 
+                sort: sortOption,
+                skip: skip,
+                limit: limitNum
+            }
+        });
+        
+        // Get total count of tracks for pagination metadata
         let totalTracks = 0;
-        if (user.role === 'artist' || user.role === 'admin') {
-            const isSelfOrAdmin = req.userId && (req.userId === user._id.toString() || req.user?.role === 'admin');
-            const matchCondition = isSelfOrAdmin ? {} : { isPrivate: false };
-            totalTracks = await BackingTrack.countDocuments({
-                user: user._id,
-                ...matchCondition
-            });
+        let countMatchCondition = isSelfOrAdmin ? {} : { isPrivate: false };
+          // Add search filter to count query if provided
+        if (search && search.trim()) {
+            const searchTerm = search.trim();
+            // Use regex search for title matching - more reliable than text search
+            const safeQuery = escapeRegex(searchTerm);
+            countMatchCondition.title = { $regex: safeQuery, $options: 'i' };
         }
+        
+        totalTracks = await BackingTrack.countDocuments({
+            user: user._id,
+            ...countMatchCondition
+        });
 
         const userJson = user.toJSON({
             viewerRole: req.user?.role || 'public',
             viewerId: req.userId || null
-        });
-
-        // Add pagination metadata for uploaded tracks
-        if (user.role === 'artist' || user.role === 'admin') {
+        });        // Add pagination metadata for uploaded tracks (if there are any tracks to show)
+        if (totalTracks > 0) {
             const totalPages = Math.ceil(totalTracks / limitNum);
             userJson.uploadedTracksPagination = {
                 currentPage: pageNum,
