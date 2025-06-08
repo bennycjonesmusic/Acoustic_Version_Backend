@@ -73,11 +73,24 @@ export const createCommissionRequest = async (req, res) => {
     try {
         const { artist: artistId, requirements, ...rest } = req.body;
         const customerId = req.userId;
-        console.log('[createCommissionRequest] artistId:', artistId, 'customerId:', customerId, 'requirements:', requirements, 'rest:', rest);
-        // Fetch artist to get their commissionPrice
+        console.log('[createCommissionRequest] artistId:', artistId, 'customerId:', customerId, 'requirements:', requirements, 'rest:', rest);        // Fetch artist to get their commissionPrice
         const artist = await User.findById(artistId);
         console.log('[createCommissionRequest] artist lookup result:', artist);
         if (!artist) return res.status(404).json({ error: 'Artist not found' });
+        
+        // Validate artist's Stripe account before allowing commission creation
+        if (!artist.stripeAccountId) {
+            return res.status(400).json({ error: 'Artist has no Stripe account set up. Commission cannot be created.' });
+        }
+        
+        if (!artist.stripePayoutsEnabled) {
+            return res.status(400).json({ error: 'Artist Stripe account is not enabled for payouts. Commission cannot be created at this time.' });
+        }
+        
+        if (artist.stripeAccountStatus !== 'active') {
+            return res.status(400).json({ error: `Artist Stripe account status is ${artist.stripeAccountStatus}. Commission cannot be created at this time.` });
+        }
+        
         const artistPrice = Number(artist.commissionPrice) || 0;
         const platformCommissionRate = 0.15; // 15% platform fee
         const platformCommission = Math.round(artistPrice * platformCommissionRate * 100) / 100; // round to 2 decimals
@@ -180,13 +193,21 @@ export const approveCommissionAndPayout = async (req, res) => {
             commission.status = 'cron_pending';
             await commission.save();
             return res.status(200).json({ success: true, message: 'Commission approved. Payout will be processed once payment is received.' });
-        }
-
-        // Payment received, proceed with payout logic
+        }        // Payment received, proceed with payout logic
         const artist = commission.artist;
         if (!artist.stripeAccountId) {
             return res.status(400).json({ error: 'Artist has no Stripe account' });
         }
+        
+        // Check if artist's Stripe account is ready for payouts
+        if (!artist.stripePayoutsEnabled) {
+            return res.status(400).json({ error: 'Artist Stripe account is not enabled for payouts. Please complete onboarding.' });
+        }
+        
+        if (artist.stripeAccountStatus !== 'active') {
+            return res.status(400).json({ error: `Artist Stripe account status is ${artist.stripeAccountStatus}. Payouts require active status.` });
+        }
+        
         if (artist.role !== 'artist' && artist.role !== 'admin') {
             return res.status(403).json({ error: 'Payouts are only allowed to users with role artist or admin.' });
         }

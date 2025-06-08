@@ -13,6 +13,23 @@ const userSchema = new mongoose.Schema({
 }, //verify email
   role: { type: String, default: 'user', enum: ["user", "artist", "admin"]}, // 
   stripeAccountId: { type: String, required: false }, // 
+
+  stripeAccountStatus: {
+  type: String,
+  enum: ['pending', 'active', 'restricted', 'rejected'],
+  default: 'pending',
+  description: 'Stripe Connect account onboarding status'
+},
+stripePayoutsEnabled: {
+  type: Boolean,
+  default: false,
+  description: 'Whether the artist can receive payouts'
+},
+stripeOnboardingComplete: {
+  type: Boolean,
+  default: false,
+  description: 'Whether Stripe onboarding is complete'
+},
   uploadedTracks: [{
     type: mongoose.Schema.Types.ObjectId, 
     ref: 'BackingTrack'
@@ -170,6 +187,7 @@ userSchema.set('toJSON', {
     delete ret._id;
     delete ret.__v;
     delete ret.password;
+    delete ret.stripeAccountId; // Always hide Stripe account ID from all users
 
     const viewerRole = options?.viewerRole || 'user';
     const viewerId = options?.viewerId || null;
@@ -189,12 +207,9 @@ userSchema.set('toJSON', {
       if (Array.isArray(ret.uploadedTracks)) {
         ret.uploadedTracks = ret.uploadedTracks.filter(track => !track.isPrivate);
       }
-    }
-
-    // Ensure self can always see their own email and stripeAccountId
+    }    // Ensure self can always see their own email
     if (isSelf) {
       if (doc.email) ret.email = doc.email;
-      if (doc.stripeAccountId) ret.stripeAccountId = doc.stripeAccountId;
     }
 
     return ret;

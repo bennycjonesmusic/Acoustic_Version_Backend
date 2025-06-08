@@ -81,11 +81,25 @@ router.post('/pay', authMiddleware, async (req, res) => {
     const CommissionRequest = (await import('../models/CommissionRequest.js')).default;
     const commission = await CommissionRequest.findById(commissionId).populate('artist customer');
     console.log('[COMMISSION PAY] Loaded commission:', commission);
-    if (!commission) return res.status(404).json({ error: 'Commission not found' });
-    if (commission.status !== 'requested') {
+    if (!commission) return res.status(404).json({ error: 'Commission not found' });    if (commission.status !== 'requested') {
       console.log('[COMMISSION PAY] Commission not ready for payment. Status:', commission.status);
       return res.status(400).json({ error: 'Commission is not ready for payment.' });
     }
+    
+    // Validate artist's Stripe account status before allowing payment
+    const artist = commission.artist;
+    if (!artist.stripeAccountId) {
+      return res.status(400).json({ error: 'Artist has no Stripe account set up.' });
+    }
+    
+    if (!artist.stripePayoutsEnabled) {
+      return res.status(400).json({ error: 'Artist Stripe account is not enabled for payouts. Commission cannot be paid at this time.' });
+    }
+    
+    if (artist.stripeAccountStatus !== 'active') {
+      return res.status(400).json({ error: `Artist Stripe account status is ${artist.stripeAccountStatus}. Commission cannot be paid at this time.` });
+    }
+    
     const stripeModule = await import('stripe');
     const stripeClient = stripeModule.default(process.env.STRIPE_SECRET_KEY);
     const session = await stripeClient.checkout.sessions.create({

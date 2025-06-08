@@ -6,11 +6,14 @@ export async function setArtistStripeAccount() {
   // Find the artist by email instead of hardcoded _id
   const artistEmail = 'sarahandbenduo@gmail.com';
   const stripeAccountId = 'acct_1RTB1bCRMWHPkR1y';
-  const user = await User.findOne({ email: { $regex: new RegExp('^' + artistEmail + '$', 'i') } });
-  if (user) {
+  const user = await User.findOne({ email: { $regex: new RegExp('^' + artistEmail + '$', 'i') } });  if (user) {
     user.stripeAccountId = stripeAccountId;
+    user.stripeAccountStatus = 'active';
+    user.stripePayoutsEnabled = true;
+    user.stripeOnboardingComplete = true;
     await user.save();
     console.log(`Set stripeAccountId for user ${user._id} (${user.email}) to ${stripeAccountId}`);
+    console.log(`Set Stripe status fields: status=active, payouts=true, onboarding=true`);
   } else {
     console.log(`User with email ${artistEmail} not found.`);
   }

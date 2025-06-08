@@ -23,8 +23,7 @@ router.post('/create-account-link', authMiddleware, async (req, res) => {
         if (!user) {
             return res.status(404).json({ error: 'User not found' });
         }
-        console.log('[Stripe Onboarding] User before:', user);
-        if (!user.stripeAccountId) {
+        console.log('[Stripe Onboarding] User before:', user);        if (!user.stripeAccountId) {
             const account = await stripeClient.accounts.create({
                 type: 'standard',
                 country: 'GB',
@@ -32,6 +31,9 @@ router.post('/create-account-link', authMiddleware, async (req, res) => {
                 // Do NOT request capabilities for standard accounts
             });
             user.stripeAccountId = account.id;
+            user.stripeAccountStatus = 'pending';
+            user.stripePayoutsEnabled = false;
+            user.stripeOnboardingComplete = false;
             await user.save();
             console.log('[Stripe Onboarding] Created new Stripe account:', account.id);
         } else {
@@ -91,12 +93,23 @@ router.post('/create-checkout-session', authMiddleware, async (req, res) => {
                 await user.save();
             }
             return res.status(200).json({ message: 'Track granted for free', free: true });
-        }
-        const artist = await User.findById(track.user);
+        }        const artist = await User.findById(track.user);
         if (!artist || !artist.stripeAccountId) {
             console.log('[stripe_payment] Artist not found or missing Stripe account. artist:', artist, 'track.user:', track.user);
             return res.status(404).json({ error: 'Artist either not found or does not have a stripe account' });
         }
+        
+        // Check if artist's Stripe account is ready for payouts
+        if (!artist.stripePayoutsEnabled) {
+            console.log('[stripe_payment] Artist Stripe account payouts not enabled:', artist.stripeAccountId);
+            return res.status(400).json({ error: 'Artist Stripe account is not enabled for payouts. Track cannot be purchased at this time.' });
+        }
+        
+        if (artist.stripeAccountStatus !== 'active') {
+            console.log('[stripe_payment] Artist Stripe account status not active:', artist.stripeAccountStatus);
+            return res.status(400).json({ error: `Artist Stripe account status is ${artist.stripeAccountStatus}. Track cannot be purchased at this time.` });
+        }
+        
         // Only allow payout if artist is 'artist' or 'admin'
         if (artist.role !== 'artist' && artist.role !== 'admin') {
             return res.status(403).json({ error: 'Payouts are only allowed to users with role artist or admin.' });

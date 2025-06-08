@@ -160,8 +160,7 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
           console.error('[WEBHOOK] Error upgrading user subscription tier:', err);
         }
       }
-    }
-  }
+    }  }
   // Handle subscription cancellation (downgrade user)
   else if (event.type === 'customer.subscription.deleted') {
     const subscription = event.data.object;
@@ -176,6 +175,33 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
       }
     } catch (err) {
       console.error('[WEBHOOK] Error downgrading user after subscription cancellation:', err);
+    }
+  }
+  // Handle Stripe Connect account updates
+  else if (event.type === 'account.updated') {
+    const account = event.data.object;
+    try {
+      const user = await User.findOne({ stripeAccountId: account.id });
+      if (user) {
+        // Update account status based on Stripe account data
+        if (account.charges_enabled && account.payouts_enabled) {
+          user.stripeAccountStatus = 'active';
+          user.stripePayoutsEnabled = true;
+          user.stripeOnboardingComplete = true;
+        } else if (account.requirements && account.requirements.disabled_reason) {
+          user.stripeAccountStatus = account.requirements.disabled_reason === 'rejected.other' ? 'rejected' : 'restricted';
+          user.stripePayoutsEnabled = account.payouts_enabled || false;
+          user.stripeOnboardingComplete = false;
+        } else {
+          user.stripeAccountStatus = 'pending';
+          user.stripePayoutsEnabled = account.payouts_enabled || false;
+          user.stripeOnboardingComplete = false;
+        }
+        await user.save();
+        console.log(`[WEBHOOK] Updated Stripe account status for user ${user.email}: status=${user.stripeAccountStatus}, payouts=${user.stripePayoutsEnabled}, complete=${user.stripeOnboardingComplete}`);
+      }
+    } catch (err) {
+      console.error('[WEBHOOK] Error updating user Stripe account status:', err);
     }
   }
 

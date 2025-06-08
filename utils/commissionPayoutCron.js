@@ -6,6 +6,7 @@ import CommissionRequest from '../models/CommissionRequest.js';
 import User from '../models/User.js';
 import stripe from 'stripe';
 import dotenv from 'dotenv';
+import { validateUserForPayouts } from './stripeAccountStatus.js';
 dotenv.config();
 const stripeClient = stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -39,13 +40,15 @@ export async function processCommissionPayouts() {
       if (!available || available.amount < artistAmount) {
         console.log(`[PAYOUT CRON] Insufficient balance for commission ${commission._id}`);
         continue;
-      }
-      if (!artist.stripeAccountId) {
+      }      if (!artist.stripeAccountId) {
         console.log(`[PAYOUT CRON] Artist has no Stripe account for commission ${commission._id}`);
         continue;
       }
-      if (artist.role !== 'artist' && artist.role !== 'admin') {
-        console.log(`[PAYOUT CRON] Artist role not eligible for payout for commission ${commission._id}`);
+      
+      // Use centralized validation function
+      const payoutValidation = validateUserForPayouts(artist);
+      if (!payoutValidation.valid) {
+        console.log(`[PAYOUT CRON] Artist not eligible for payout for commission ${commission._id}: ${payoutValidation.reason}`);
         continue;
       }
       // Transfer to artist
