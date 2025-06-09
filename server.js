@@ -135,7 +135,7 @@ app.use((req, res, next) => {
 //define the middleware. This will be used to parse the incoming requests. It allows frontend to communicate with the backend.
 app.use(cors({
   origin: ['http://localhost:3002', 'http://localhost:3003', 'https://acoustic-version.com', 'https://www.acoustic-version.com'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
   credentials: true // Allow cookies to be sent with requests
 }));

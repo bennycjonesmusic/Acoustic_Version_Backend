@@ -450,9 +450,7 @@ export const getPurchasedTracks = async (req, res) => {
     try {
         if (!req.userId) {
             return res.status(401).json({ message: 'User not authenticated' });
-        }
-
-        // Parse pagination parameters
+        }        // Parse pagination parameters
         const { page = 1, limit = 10, orderBy = 'purchase-date' } = req.query;
         let pageNum = parseInt(page, 10);
         if (isNaN(pageNum) || pageNum < 1) pageNum = 1;
@@ -461,15 +459,7 @@ export const getPurchasedTracks = async (req, res) => {
         if (limitNum > 50) limitNum = 50; // Cap at 50 tracks per page
 
         const skip = (pageNum - 1) * limitNum;        const user = await User.findById(req.userId).populate({
-            path: 'purchasedTracks.track',
-            options: { 
-                sort: orderBy === 'purchase-date' ? { 'purchasedTracks.purchasedAt': -1 } : 
-                      orderBy === 'purchase-date/ascending' ? { 'purchasedTracks.purchasedAt': 1 } :
-                      orderBy === 'alphabetical' ? { title: 1 } :
-                      orderBy === 'price' ? { price: 1 } :
-                      orderBy === 'rating' ? { averageRating: -1 } :
-                      { 'purchasedTracks.purchasedAt': -1 } // default
-            }
+            path: 'purchasedTracks.track'
         });
 
         if (!user) {
@@ -477,6 +467,21 @@ export const getPurchasedTracks = async (req, res) => {
         }
 
         const purchasedTracks = Array.isArray(user.purchasedTracks) ? user.purchasedTracks : [];
+
+         if (purchasedTracks.length === 0) {
+            return res.status(200).json({ 
+                tracks: [],
+                pagination: {
+                    currentPage: 1,
+                    totalPages: 0,
+                    totalTracks: 0,
+                    hasNextPage: false,
+                    hasPrevPage: false,
+                    limit: limitNum
+                }
+            });
+        } //handle case when tracks are empty. makes it so error is not returned on front end
+        
         
         // Apply sorting based on orderBy parameter (since populate sorting might not work as expected)
         if (orderBy === 'purchase-date') {
