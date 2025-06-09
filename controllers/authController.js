@@ -48,8 +48,7 @@ export const register = async (req, res) => {
             }
             if (typeof about !== 'string' || about.length > 1000) {
                 return res.status(400).json({message: "About section must be a string and less than 1000 characters."});
-            }
-            // Validate avatar (must be a valid image URL) if not uploaded and only if present
+            }            // Validate avatar (must be a valid image URL) if not uploaded and only if present
             if (avatar !== undefined && !(req.file && req.file.buffer)) {
                 const urlPattern = /^(https?:\/\/)[^\s]+\.(jpg|jpeg|png|gif|webp)$/i;
                 if (typeof avatar !== 'string' || !urlPattern.test(avatar)) {
@@ -428,3 +427,117 @@ export const updateProfile = async (req, res) => {
     return res.status(500).json({ message: 'Failed to update profile.' });
   }
 };
+
+//simple function to get user role. 
+export const getUserRole = async(req, res)  =>{
+
+try {
+
+  const user = await User.findById(req.userId);
+
+  if (!user) {
+    return res.status(404).json({ message: "User not found" });
+  }
+
+
+    return res.status(200).json({ user: user.role, message: "User details as follows" });
+
+
+} catch (error) {
+  console.error('Error in getUserRole:', error);
+  return res.status(500).json({ message: 'Failed to get user role.' });
+}
+
+}
+
+
+export const upgradeToArtist = async (req, res) => {
+
+  try {
+    const { about, commissionPrice } = req.body;
+
+    // Validate required about section for artists
+    if (about === undefined || about === null || about === '') {
+      return res.status(400).json({ message: "About section is required for artists." });
+    }
+
+    // Validate about section using Joi schema
+    const { error } = artistAboutSchema.validate({ about });
+    if (error) {
+      return res.status(400).json({ message: error.details[0].message });
+    }
+
+    // Profanity filtering for about section
+    const profanity = new Filter.Filter();
+    if (profanity.isProfane(about)) {
+      return res.status(400).json({ message: "Vulgar language detected. Please use nice words." });
+    }
+
+    // Validate about section length and type
+    if (typeof about !== 'string' || about.length > 1000) {
+      return res.status(400).json({ message: "About section must be a string and less than 1000 characters." });
+    }
+
+    // Validate commission price if provided
+    if (commissionPrice !== undefined) {
+      const price = Number(commissionPrice);
+      if (isNaN(price) || price < 0) {
+        return res.status(400).json({ message: 'Commission price must be a non-negative number.' });
+      }
+    }
+
+    let avatar = req.body.avatar;
+    // Use avatarUpload middleware: req.file.location will be set if avatar uploaded
+    if (req.file && req.file.location) {
+      avatar = req.file.location;
+    }    // Validate avatar (must be a valid image URL) if provided and not uploaded
+    if (avatar !== undefined && !req.file) {
+      const urlPattern = /^(https?:\/\/)[^\s]+\.(jpg|jpeg|png|gif|webp)$/i;
+      if (typeof avatar !== 'string' || !urlPattern.test(avatar)) {
+        return res.status(400).json({ message: 'Avatar must be a valid image URL (jpg, jpeg, png, gif, webp).' });
+      }
+    }
+
+    const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    if (user.role !== 'user') {
+      return res.status(400).json({ message: 'User is not a regular user.' });
+    }
+
+    // Update user to artist role with pending approval status
+    user.role = 'artist';
+    user.about = about;
+    user.commissionPrice = commissionPrice || 0;
+    user.profileStatus = 'pending'; // Set to pending for admin approval
+    
+    // Set avatar if provided
+    if (avatar !== undefined) {
+      user.avatar = avatar;
+    }
+
+    await user.save();
+
+    return res.status(200).json({ 
+      message: 'User upgraded to artist role. Your profile is pending admin approval.', 
+      user: {
+        id: user._id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        about: user.about,
+        commissionPrice: user.commissionPrice,
+        profileStatus: user.profileStatus,
+        avatar: user.avatar
+      }
+    });
+
+  } catch (error) {
+    console.error('Error in upgradeToArtist:', error);
+    return res.status(500).json({ message: 'Failed to upgrade user role.' });
+  }
+
+}
+

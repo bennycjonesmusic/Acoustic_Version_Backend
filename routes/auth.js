@@ -1,6 +1,7 @@
 import express from 'express';
 import { verifyEmail, resendEmail } from '../controllers/emailAuthController.js';
 import upload from '../middleware/song_upload.js';
+import avatarUpload from '../middleware/avatar_upload.js';
 import authMiddleware from '../middleware/customer_auth.js';
 import artistAuthMiddleware from '../middleware/artist_auth.js';
 import {uploadLimiter, registerLimiter} from '../middleware/rate_limiter.js' //limit amount of times someone can upload
@@ -13,7 +14,9 @@ import {
     getUserProfile,
     requestPasswordReset,
     resetPassword,
-    updateProfile
+    updateProfile,
+    getUserRole,
+    upgradeToArtist
 } from '../controllers/authController.js';
 
 //i know there are routes in here that should be in other route.js files. However, I am learning as i go and this project has quickly developed in size.
@@ -45,6 +48,12 @@ router.post('/resend-email', authMiddleware, resendEmail);
 //update S3 File for ID's that were not initially added.
 router.put('/updateS3/:id', authMiddleware, updateS3Key);
 // Update user profile (avatar, about, etc.)
+
+// Get user role
+router.get('/user-role', authMiddleware, getUserRole);
+
+// Upgrade user to artist
+router.post('/upgrade-to-artist', authMiddleware, avatarUpload.single('avatar'), upgradeToArtist);
 
 export default router;
 
