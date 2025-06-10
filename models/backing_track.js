@@ -43,8 +43,7 @@ const backingTrackSchema = new mongoose.Schema({
   fileUrl: {
     type: String,
     required: true
-  },
-  user: {
+  },  user: {
     type: mongoose.Schema.Types.ObjectId,  // ObjectId type for linking to another model
     ref: 'User', // This references the 'User' model
     required: true // Ensure that the track is always linked to a user
@@ -52,6 +51,7 @@ const backingTrackSchema = new mongoose.Schema({
   
   // Define key signature
   key: {
+    type: String,
     enum: ["A", "B", "C", "D", "E", "F", "G"],
   },
   isFlat: {
@@ -60,6 +60,16 @@ const backingTrackSchema = new mongoose.Schema({
   },
 
   isSharp: {
+    type: Boolean,
+    default: false,
+  },
+
+  isMajor: {
+    type: Boolean,
+    default: false,
+  },
+
+  isMinor: {
     type: Boolean,
     default: false,
   },

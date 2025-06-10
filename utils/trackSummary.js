@@ -3,7 +3,8 @@
 
 export function toTrackSummary(tracks) {
   try {
-    console.log('[toTrackSummary] Input:', JSON.stringify(tracks, null, 2));    return tracks.map(track => ({
+    console.log('[toTrackSummary] Processing', tracks.length, 'tracks');
+    return tracks.map(track => ({
       id: track._id,
       title: track.title,
       averageRating: track.averageRating,
@@ -18,11 +19,15 @@ export function toTrackSummary(tracks) {
       customerPrice: track.customerPrice || track.price, // Use customerPrice if available, fallback to price
       previewUrl: track.previewUrl,
       guideTrackUrl: track.guideTrackUrl,
-      youtubeGuideUrl: track.youtubeGuideUrl
+      youtubeGuideUrl: track.youtubeGuideUrl,      // Key signature fields for SEO enhancement
+      key: track.key,
+      isFlat: track.isFlat,
+      isSharp: track.isSharp,
+      isMajor: track.isMajor,
+      isMinor: track.isMinor
     }));
-    
-  } catch (error) {
-    console.error('Error mapping tracks to summary:', error, '\nInput:', JSON.stringify(tracks, null, 2));
+      } catch (error) {
+    console.error('Error mapping tracks to summary:', error);
     throw error;
   }
 }
