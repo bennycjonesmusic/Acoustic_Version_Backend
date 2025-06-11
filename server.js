@@ -136,7 +136,7 @@ app.use((req, res, next) => {
 app.use(cors({
   origin: ['http://localhost:3002', 'http://localhost:3003', 'https://acoustic-version.com', 'https://www.acoustic-version.com'],
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Cache-Control'],
   credentials: true // Allow cookies to be sent with requests
 }));
 console.log('[SERVER DEBUG] Importing and registering /webhook route');

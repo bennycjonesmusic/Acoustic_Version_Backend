@@ -16,6 +16,7 @@ export interface TrackSummary {
   numOfRatings?: number; // Optional rating count field
   guideTrackUrl?: string; // Optional guide track URL
   youtubeGuideUrl?: string; // Optional YouTube guide URL
+  backingTrackType?: string; // Type of backing track (e.g., "Acoustic Guitar", "Piano", etc.)
 }
 
 export interface PublicAPIResponse {

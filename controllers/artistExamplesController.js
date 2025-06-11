@@ -76,8 +76,7 @@ export const uploadArtistExample = async (req, res) => {
         
         // Upload preview to S3
         const key = `examples/${user._id}_${Date.now()}.mp3`;
-        
-        await new Upload({
+          await new Upload({
             client: s3Client,
             params: {
                 Bucket: process.env.AWS_BUCKET_NAME,
@@ -85,7 +84,14 @@ export const uploadArtistExample = async (req, res) => {
                 Body: fs.createReadStream(tmpPreviewPath),
                 StorageClass: 'STANDARD',
                 ContentType: 'audio/mpeg', // Ensure correct content type for MP3 previews
-                ACL: 'public-read' // Ensure the file is public
+                ACL: 'public-read', // Ensure the file is public
+                CacheControl: 'public, max-age=3600, must-revalidate', // Cache for 1 hour with revalidation
+                Metadata: {
+                    'Content-Type': 'audio/mpeg',
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Methods': 'GET, HEAD',
+                    'Access-Control-Allow-Headers': 'Range, Content-Range'
+                }
             },
         }).done();
         fs.unlinkSync(tmpInputPath);

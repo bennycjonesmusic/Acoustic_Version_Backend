@@ -192,14 +192,20 @@ export const uploadTrack = async (req, res) => {
             // Only remove common audio format suffixes if they appear to be file extensions (after underscore or at end)
             cleanFileName = cleanFileName.replace(/_(?:wav|mp3|flac|aac|ogg|m4a)$/i, '');
             console.log('DEBUG: sanitizedFileName:', sanitizedFileName);
-            console.log('DEBUG: cleanFileName:', cleanFileName);
-            const previewUploadParams = {
+            console.log('DEBUG: cleanFileName:', cleanFileName);            const previewUploadParams = {
                 Bucket: process.env.AWS_BUCKET_NAME,
                 Key: `previews/${Date.now()}-${cleanFileName}.mp3`, // Ensure .mp3 extension and clean filename
                 Body: fs.createReadStream(previewPath),
                 StorageClass: 'STANDARD',
                 ContentType: 'audio/mpeg', // Force audio/mpeg content type for previews
-                ACL: 'public-read' // Ensure preview is public
+                ACL: 'public-read', // Ensure preview is public
+                CacheControl: 'public, max-age=3600, must-revalidate', // Cache for 1 hour with revalidation
+                Metadata: {
+                    'Content-Type': 'audio/mpeg',
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Methods': 'GET, HEAD',
+                    'Access-Control-Allow-Headers': 'Range, Content-Range'
+                }
             };
             const previewData = await new Upload({ client: s3Client, params: previewUploadParams }).done();
             console.log('S3 preview upload result:', previewData);
