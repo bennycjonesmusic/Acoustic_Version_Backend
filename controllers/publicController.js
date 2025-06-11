@@ -13,6 +13,7 @@ import { sendVerificationEmail } from '../utils/emailAuthentication.js';
 import { toTrackSummary } from '../utils/trackSummary.js';
 import { toUserSummary } from '../utils/userSummary.js';
 import {escapeRegex, isSafeRegexInput, sanitizeFileName} from '../utils/regexSanitizer.js';
+import { parseKeySignature } from '../utils/parseKeySignature.js';
 import mongoose from 'mongoose';
 import NodeCache from 'node-cache';
 const cache = new NodeCache({ stdTTL: 60 * 60 }); //cache for 1 hour
@@ -492,14 +493,16 @@ export const queryTracks = async (req, res) => {
         if (orderBy == "date-uploaded") sort = { createdAt: -1 };
         if (orderBy == "date-uploaded/ascending") sort = { createdAt: 1 };
         if (orderBy == "rating") sort = { averageRating: -1 };
-        if (orderBy == "price") sort = { customerPrice: 1 };
-        if (keySig) {
+        if (orderBy == "price") sort = { customerPrice: 1 };        if (keySig) {
             try {
+                console.log('[DEBUG] Parsing keySig:', keySig); // Debug log
                 const { key, isFlat, isSharp } = parseKeySignature(keySig); //function to parse key signature BB = Bflat e.t.c
+                console.log('[DEBUG] Parsed key signature:', { key, isFlat, isSharp }); // Debug log
                 filter.key = key;
                 if (isFlat) filter.isFlat = true;
                 if (isSharp) filter.isSharp = true;
             } catch (error) {
+                console.error('[ERROR] parseKeySignature failed for keySig:', keySig, 'Error:', error.message); // Debug log
                 return res.status(400).json({ error: error.message });
             }
         }

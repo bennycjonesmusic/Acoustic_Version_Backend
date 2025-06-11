@@ -5,7 +5,7 @@ function parseKeySignature(keySig){
 keySig = keySig.toUpperCase();
 //keep key signature uniform by pushing to argument to uppercase
 
-const invalid = ["E#", "B#", "Fb", "Cb"]; //flag invalid signatures
+const invalid = ["E#", "B#", "FB", "CB"]; //flag invalid signatures (updated to uppercase)
 
 if (invalid.includes(keySig)){
 
@@ -20,10 +20,10 @@ let key = keySig;
 
 
 
-if (keySig.endsWith('b')){
+if (keySig.endsWith('B')){
 
-    isFlat = true; //if keysig has b at the end, it is flat
-    key = key.slice(0, - 1); //eliminate b from keySig arg.
+    isFlat = true; //if keysig has B at the end, it is flat (after uppercase conversion)
+    key = key.slice(0, - 1); //eliminate B from keySig arg.
 
 }
 

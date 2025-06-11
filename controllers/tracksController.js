@@ -682,20 +682,24 @@ export const getUploadedTracksByUserId = async (req, res) => {
 
         // Get total count for pagination metadata
         const totalTracks = await BackingTrack.countDocuments({ user: userId });
-        
-        // Get paginated tracks
+          // Get paginated tracks with user populated
         const tracks = await BackingTrack.find({ user: userId })
             .sort(sort)
             .skip(skip)
-            .limit(limitNum);
+            .limit(limitNum)
+            .populate('user', 'avatar username');
 
         console.log('[DEBUG] getUploadedTracksByUserId found tracks:', tracks.map(t => ({id: t._id, user: t.user, title: t.title})));
 
         // Calculate pagination metadata
         const totalPages = Math.ceil(totalTracks / limitNum);
 
+        // Convert to track summary format with proper ID mapping
+        const { toTrackSummary } = await import('../utils/trackSummary.js');
+        const summaryTracks = toTrackSummary(tracks);
+
         return res.status(200).json({ 
-            tracks: Array.isArray(tracks) ? tracks : [],
+            tracks: Array.isArray(summaryTracks) ? summaryTracks : [],
             pagination: {
                 currentPage: pageNum,
                 totalPages: totalPages,
