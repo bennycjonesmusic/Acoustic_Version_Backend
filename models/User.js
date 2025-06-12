@@ -78,11 +78,17 @@ stripeOnboardingComplete: {
     description: { type: String, default: '' },
     uploadedAt: { type: Date, default: Date.now }
   }],
+  artistYoutubeLink: { type: String, default: '' }, //for Iframe embed
+  
   banned: { type: Boolean, default: false },
   totalIncome: { type: Number, default: 0 },
   averageTrackRating: {
     type: Number,
     default: 0
+  },
+  maxTimeTakenForCommission: {
+    type: String,
+    default: '2 weeks',
   },
   commissionPrice: {
     type: Number,
