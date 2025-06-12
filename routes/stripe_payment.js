@@ -51,7 +51,7 @@ router.post('/create-account-link', authMiddleware, async (req, res) => {
         const accountLink = await stripeClient.accountLinks.create({
             account: user.stripeAccountId,
             refresh_url: `${process.env.CLIENT_URL}/reauth`,
-            return_url: `${process.env.CLIENT_URL}/dashboard`,
+            return_url: `${process.env.CLIENT_URL}/artist-dashboard`,
             type: 'account_onboarding',
         });
         res.status(200).json({ url: accountLink.url });
@@ -163,14 +163,14 @@ router.post('/create-checkout-session', authMiddleware, async (req, res) => {
     }
 });
 
-export default router;
+
 
 
 router.get('/dashboard-data', authMiddleware, async (req, res) => {
 
     try {
 
-        const user = await User.findById(req.userId).select('stripeAccountStatus stripePayoutsEnabled stripeOnboardingComplete totalIncome amountOfTracksSold numOfCommissions');
+        const user = await User.findById(req.userId).select('stripeAccountId stripeAccountStatus stripePayoutsEnabled stripeOnboardingComplete totalIncome amountOfTracksSold numOfCommissions');
 
         if (!user) {
             return res.status(404).json({ error: "The user has not been found or does not exist."});
@@ -180,6 +180,7 @@ router.get('/dashboard-data', authMiddleware, async (req, res) => {
             stripeAccountStatus: user.stripeAccountStatus,
             stripePayoutsEnabled: user.stripePayoutsEnabled,
             stripeOnboardingComplete: user.stripeOnboardingComplete,
+            stripeAccountId: user.stripeAccountId,
             totalIncome: user.totalIncome || 0,
             amountOfTracksSold: user.amountOfTracksSold || 0,
             numOfCommissions: user.numOfCommissions || 0,
@@ -204,3 +205,45 @@ router.get('/dashboard-data', authMiddleware, async (req, res) => {
 
 
 })
+
+router.post('/refresh-account-status', authMiddleware, async (req, res) => {
+
+    try {
+        const user = await User.findById(req.userId);
+        if (!user){
+            return res.status(404).json({ error: 'User not found' });
+        }
+        if (!user.stripeAccountId) {
+            return res.status(400).json({ error: 'User does not have a Stripe account' })
+        }
+    
+    
+            console.log('[Stripe Refresh] Refreshing account status for:', user.stripeAccountId);
+            const account = await stripeClient.accounts.retrieve(user.stripeAccountId);
+         user.stripeAccountStatus = account.charges_enabled ? 'active' : 'pending';
+        user.stripePayoutsEnabled = account.payouts_enabled;
+        user.stripeOnboardingComplete = account.details_submitted;
+        
+        await user.save();
+        console.log('[Stripe Refresh] Account status updated:', {
+            stripeAccountStatus: user.stripeAccountStatus,
+            stripePayoutsEnabled: user.stripePayoutsEnabled,
+            stripeOnboardingComplete: user.stripeOnboardingComplete
+        });
+
+        return res.status(200).json({ 
+            success: true,
+            accountStatus: user.stripeAccountStatus,
+            payoutsEnabled: user.stripePayoutsEnabled,
+            onboardingComplete: user.stripeOnboardingComplete
+        });
+
+    
+} catch (error) {
+    console.error('Error refreshing account status:', error);
+    return res.status(500).json({ error: 'Failed to refresh account status' });
+}
+
+    
+})
+export default router;

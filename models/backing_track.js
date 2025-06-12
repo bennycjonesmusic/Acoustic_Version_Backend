@@ -27,6 +27,12 @@ const backingTrackSchema = new mongoose.Schema({
     min: [0, "Customer price must be positive"]
   },
 
+  type: {
+    type: String,
+    enum: ["Backing Track", "Jam Track", "Acoustic Instrumental Version"],
+    required: true
+  },
+
   //enable users to set their tracks as private
   isPrivate: {
 

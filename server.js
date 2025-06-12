@@ -26,6 +26,7 @@ import stripeSubscriptionsRouter from './routes/stripe_subscriptions.js'; // Imp
 import { recalculateAllUserStorage } from './utils/recalculateUserStorage.js'; // Import the storage recalculation utility
 import reportRoutes from './routes/report.js'; // Import reportRoutes
 import ordersRoutes from './routes/orders.js'; // Import orders routes
+import artistsRoutes from './routes/artists.js'; // Import artists routes
 import swaggerUi from 'swagger-ui-express';
 import YAML from 'yamljs';
 
@@ -166,6 +167,7 @@ app.use("/auth", authRoutes);
 app.use("/admin", adminRoutes);
 app.use('/public', publicRoutes);
 app.use('/users', userRoutes);
+app.use('/artists', artistsRoutes); // Add artists routes
 app.use('/orders', ordersRoutes); // Add orders routes
 app.use('/commission', commissionRoutes);
 app.use('/', guideRoutes);
