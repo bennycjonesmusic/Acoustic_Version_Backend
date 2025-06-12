@@ -164,3 +164,43 @@ router.post('/create-checkout-session', authMiddleware, async (req, res) => {
 });
 
 export default router;
+
+
+router.get('/dashboard-data', authMiddleware, async (req, res) => {
+
+    try {
+
+        const user = await User.findById(req.userId).select('stripeAccountStatus stripePayoutsEnabled stripeOnboardingComplete totalIncome amountOfTracksSold numOfCommissions');
+
+        if (!user) {
+            return res.status(404).json({ error: "The user has not been found or does not exist."});
+        }
+
+        return res.status(200).json({
+            stripeAccountStatus: user.stripeAccountStatus,
+            stripePayoutsEnabled: user.stripePayoutsEnabled,
+            stripeOnboardingComplete: user.stripeOnboardingComplete,
+            totalIncome: user.totalIncome || 0,
+            amountOfTracksSold: user.amountOfTracksSold || 0,
+            numOfCommissions: user.numOfCommissions || 0,
+            hasStripeAccount: !!user.stripeAccountId
+
+        })
+
+
+
+    } catch (error) {
+
+        console.error('Error fetching stripe dashboard data:', error);
+        return res.status(500).json({ error: 'Failed to fetch Stripe dashboard' });
+    }
+
+
+
+
+
+
+
+
+
+})
