@@ -44,7 +44,7 @@ const App: React.FC = () => {
         {tracks.map((track) => (          <div key={track.id} className="track-card">
             <h3>{track.title}</h3>
             <p>Original Artist: {track.originalArtist}</p>
-            <p>Price: ${track.customerPrice}</p>
+            <p>Price: £{track.customerPrice}</p>
             {renderTrackUser(track.user)}
           </div>
         ))}

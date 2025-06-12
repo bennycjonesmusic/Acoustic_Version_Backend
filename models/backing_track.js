@@ -48,7 +48,6 @@ const backingTrackSchema = new mongoose.Schema({
     ref: 'User', // This references the 'User' model
     required: true // Ensure that the track is always linked to a user
   }, 
-  
   // Define key signature
   key: {
     type: String,

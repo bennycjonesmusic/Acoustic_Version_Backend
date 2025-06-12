@@ -236,10 +236,9 @@ export const uploadTrack = async (req, res) => {
             originalArtist: req.body.originalArtist,
             backingTrackType: req.body.backingTrackType,
             genre: req.body.genre,
-            vocalRange: req.body.vocalRange,
-            instructions: req.body.instructions || '',
+            vocalRange: req.body.vocalRange,            instructions: req.body.instructions || '',
             youtubeGuideUrl: req.body.youtubeGuideUrl || '',
-            guideTrackUrl: req.body.guideTrackUrl || '',
+            guideTrackUrl: req.body.guideTrackUrl || '', // Note: Guide tracks should be uploaded separately via /guide/:id/upload endpoint
             licenseStatus: req.body.licenseStatus,
             licensedFrom: req.body.licensedFrom,
             fileSize: req.file.size // Store file size for storage tracking
@@ -536,10 +535,18 @@ export const getPurchasedTracks = async (req, res) => {
 
 export const downloadTrack = async (req, res) => {
   try {
-    console.log('[downloadTrack] Requested by user:', req.userId, 'for track:', req.params.id);
-    const track = await BackingTrack.findById(req.params.id);
+    const trackId = req.params.id;
+    console.log('[downloadTrack] Requested by user:', req.userId, 'for track:', trackId);
+    
+    // Validate track ID
+    if (!trackId || trackId === 'undefined' || !/^[a-fA-F0-9]{24}$/.test(trackId)) {
+      console.warn('[downloadTrack] Invalid track ID:', trackId);
+      return res.status(400).json({ message: "A valid Track ID is required." });
+    }
+    
+    const track = await BackingTrack.findById(trackId);
     if (!track) {
-      console.warn('[downloadTrack] Track not found:', req.params.id);
+      console.warn('[downloadTrack] Track not found:', trackId);
       return res.status(404).json({ message: "Track not found." });
     }
     const userId = req.userId;
@@ -547,13 +554,22 @@ export const downloadTrack = async (req, res) => {
     if (!user) {
       console.warn('[downloadTrack] User not found:', userId);
       return res.status(404).json({ message: "User not found." });
-    }
-    const hasBought = user.purchasedTracks.some(pt => (pt.track?.toString?.() || pt.track) === track._id.toString());
+    }    const hasBought = user.purchasedTracks.some(pt => (pt.track?.toString?.() || pt.track) === track._id.toString());
     const hasUploaded = user.uploadedTracks.some(id => id.equals(track._id));
     console.log('[downloadTrack] hasBought:', hasBought, 'hasUploaded:', hasUploaded);
     if (!hasBought && !hasUploaded) {
       console.warn('[downloadTrack] Forbidden: user', userId, 'has not bought or uploaded track', track._id.toString());
       return res.status(403).json({ message: "You are not allowed to download this track. Please purchase" });
+    }
+
+    // Update user's download tracking for purchased tracks
+    if (hasBought) {
+      const purchaseRecord = user.purchasedTracks.find(pt => (pt.track?.toString?.() || pt.track) === track._id.toString());
+      if (purchaseRecord) {
+        purchaseRecord.downloadCount = (purchaseRecord.downloadCount || 0) + 1;
+        purchaseRecord.lastDownloadedAt = new Date();
+        await user.save();
+      }
     }
     const s3Client = new S3Client({
       region: process.env.AWS_REGION,

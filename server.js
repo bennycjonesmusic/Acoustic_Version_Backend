@@ -25,6 +25,7 @@ import compression from 'compression'; // Import compression middleware
 import stripeSubscriptionsRouter from './routes/stripe_subscriptions.js'; // Import the new Stripe subscriptions router
 import { recalculateAllUserStorage } from './utils/recalculateUserStorage.js'; // Import the storage recalculation utility
 import reportRoutes from './routes/report.js'; // Import reportRoutes
+import ordersRoutes from './routes/orders.js'; // Import orders routes
 import swaggerUi from 'swagger-ui-express';
 import YAML from 'yamljs';
 
@@ -165,6 +166,7 @@ app.use("/auth", authRoutes);
 app.use("/admin", adminRoutes);
 app.use('/public', publicRoutes);
 app.use('/users', userRoutes);
+app.use('/orders', ordersRoutes); // Add orders routes
 app.use('/commission', commissionRoutes);
 app.use('/', guideRoutes);
 app.use('/', tracksRoutes);

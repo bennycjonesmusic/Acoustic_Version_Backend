@@ -33,13 +33,15 @@ stripeOnboardingComplete: {
   uploadedTracks: [{
     type: mongoose.Schema.Types.ObjectId, 
     ref: 'BackingTrack'
-  }],
-  purchasedTracks: [{
+  }],  purchasedTracks: [{
     track: { type: mongoose.Schema.Types.ObjectId, ref: 'BackingTrack', required: true },
     paymentIntentId: { type: String, required: true },
     purchasedAt: { type: Date, default: Date.now },
     price: { type: Number }, // store price at time of purchase
-    refunded: { type: Boolean, default: false }
+    refunded: { type: Boolean, default: false },
+    refundedAt: { type: Date }, // when the refund was processed
+    downloadCount: { type: Number, default: 0 }, // track how many times downloaded
+    lastDownloadedAt: { type: Date } // last download timestamp
   }],
   amountOfTracksSold: {
     type: Number,
