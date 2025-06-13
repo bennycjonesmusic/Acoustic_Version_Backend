@@ -122,6 +122,10 @@ stripeOnboardingComplete: {
     default: 0, // in bytes
     description: 'Total storage used by the user in bytes.'
   },
+  cart: [{
+    track: { type: mongoose.Schema.Types.ObjectId, ref: 'BackingTrack'},
+    addedAt: { type: Date, default: Date.now }
+  }],
   availableForCommission: {
 
     type: Boolean,

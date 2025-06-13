@@ -18,6 +18,7 @@ import {
     getUserRole,
     upgradeToArtist
 } from '../controllers/authController.js';
+import { addToCart, removeFromCart, getCart } from '../controllers/cart.js';
 
 //i know there are routes in here that should be in other route.js files. However, I am learning as i go and this project has quickly developed in size.
 
@@ -54,6 +55,28 @@ router.get('/user-role', authMiddleware, getUserRole);
 
 // Upgrade user to artist
 router.post('/upgrade-to-artist', authMiddleware, avatarUpload.single('avatar'), upgradeToArtist);
+
+// Cart routes
+router.get('/cart', authMiddleware, getCart);
+router.post('/cart/add', authMiddleware, addToCart);
+router.delete('/cart/remove/:trackId', authMiddleware, removeFromCart);
+router.post('/cart/clear', authMiddleware, async (req, res) => {
+    try {
+        const User = (await import('../models/User.js')).default;
+        const user = await User.findById(req.userId);
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+        
+        user.cart = [];
+        await user.save();
+        return res.status(200).json({ message: "Cart cleared successfully" });
+        
+    } catch (error) {
+        console.error("Error clearing cart:", error);
+        return res.status(500).json({ message: "Internal server error" });
+    }
+});
 
 export default router;
 
