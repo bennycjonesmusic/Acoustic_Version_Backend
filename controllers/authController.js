@@ -263,7 +263,8 @@ export const getUserProfile = async(req, res) =>
 
     try{
 
-        const user = await User.findById(req.userId).select('-password').populate('purchasedTracks.track').populate('uploadedTracks'); //exclude password for security reasons
+        // Only select essential user profile fields - no track population for profile overview
+        const user = await User.findById(req.userId).select('-password -purchasedTracks -uploadedTracks'); //exclude password and track arrays for security and performance
 
         if (! user){
 
@@ -271,13 +272,29 @@ export const getUserProfile = async(req, res) =>
             return res.status(404).json({message: "User not found"});
         }
 
+        // Add minimal track counts only (no full track data)
+        const [purchasedCount, uploadedCount] = await Promise.all([
+            User.aggregate([
+                { $match: { _id: user._id } },
+                { $project: { purchasedCount: { $size: { $ifNull: ["$purchasedTracks", []] } } } }
+            ]),
+            User.aggregate([
+                { $match: { _id: user._id } },
+                { $project: { uploadedCount: { $size: { $ifNull: ["$uploadedTracks", []] } } } }
+            ])
+        ]);
 
+        const userWithCounts = {
+            ...user.toJSON({
+                viewerRole: user.role,
+                viewerId: req.userId
+            }),
+            purchasedTracksCount: purchasedCount[0]?.purchasedCount || 0,
+            uploadedTracksCount: uploadedCount[0]?.uploadedCount || 0
+        };
 
       return res.status(200).json({
-  user: user.toJSON({
-    viewerRole: user.role,
-    viewerId: req.userId
-  })
+  user: userWithCounts
 });
 
 
@@ -540,4 +557,7 @@ export const upgradeToArtist = async (req, res) => {
   }
 
 }
+
+
+
 

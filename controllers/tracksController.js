@@ -111,7 +111,7 @@ try{
 
 
 }
-
+//need to make it so user has valid stripe act before able to sell or upload tracks
 export const uploadTrack = async (req, res) => {
     console.log('=== UPLOAD TRACK FUNCTION CALLED ===');
     console.log('Original filename:', req.file?.originalname);
@@ -132,9 +132,11 @@ export const uploadTrack = async (req, res) => {
       return res.status(403).json({ message: "Only artists or admins can upload tracks." })
     }
     if (Artist.profileStatus !== 'approved') {
+        return res.status(403).json({ message: "Your profile has not been approved yet. Please upload some examples of your playing and await admin approval." });
+    }
 
-
-        return res.status(403).json({ message: "Your profile has not been approved yet. Please await admin approval."});
+    if (Artist.stripePayoutsEnabled !== true || Artist.stripeAccountId === 'undefined' || !Artist.stripeAccountId) {
+        return res.status(403).json({ message: "You must have a valid stripe account to upload tracks."});
     }
     if (error) {
         return res.status(400).json({ message: error.details[0].message });
@@ -424,9 +426,9 @@ export const getUploadedTracks = async (req, res) => {
 
         // Get total count for pagination metadata
         const totalTracks = await BackingTrack.countDocuments({ user: req.userId });
-        
-        // Get paginated tracks
+          // Get paginated tracks with only essential fields for display
         const tracks = await BackingTrack.find({ user: req.userId })
+            .select('title price customerPrice averageRating numOfRatings previewUrl createdAt purchaseCount downloadCount originalArtist backingTrackType genre isPrivate')
             .sort(sort)
             .skip(skip)
             .limit(limitNum);
@@ -461,10 +463,16 @@ export const getPurchasedTracks = async (req, res) => {
         if (isNaN(pageNum) || pageNum < 1) pageNum = 1;
         let limitNum = parseInt(limit, 10);
         if (isNaN(limitNum) || limitNum < 1) limitNum = 10;
-        if (limitNum > 50) limitNum = 50; // Cap at 50 tracks per page
+        if (limitNum > 50) limitNum = 50; // Cap at 50 tracks per page        const skip = (pageNum - 1) * limitNum;
 
-        const skip = (pageNum - 1) * limitNum;        const user = await User.findById(req.userId).populate({
-            path: 'purchasedTracks.track'
+        // Only populate essential fields for purchased tracks display
+        const user = await User.findById(req.userId).populate({
+            path: 'purchasedTracks.track',
+            select: 'title originalArtist price customerPrice averageRating numOfRatings previewUrl createdAt user',
+            populate: {
+                path: 'user',
+                select: 'username avatar'
+            }
         });
 
         if (!user) {
@@ -697,9 +705,9 @@ export const getUploadedTracksByUserId = async (req, res) => {
         if (orderBy === "alphabetical") sort = { title: 1 };
 
         // Get total count for pagination metadata
-        const totalTracks = await BackingTrack.countDocuments({ user: userId });
-          // Get paginated tracks with user populated
+        const totalTracks = await BackingTrack.countDocuments({ user: userId });          // Get paginated tracks with user populated and essential fields only
         const tracks = await BackingTrack.find({ user: userId })
+            .select('title price customerPrice averageRating numOfRatings previewUrl createdAt purchaseCount downloadCount originalArtist backingTrackType genre user')
             .sort(sort)
             .skip(skip)
             .limit(limitNum)

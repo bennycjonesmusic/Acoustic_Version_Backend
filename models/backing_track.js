@@ -30,7 +30,7 @@ const backingTrackSchema = new mongoose.Schema({
   type: {
     type: String,
     enum: ["Backing Track", "Jam Track", "Acoustic Instrumental Version"],
-    required: true
+    
   },
 
   //enable users to set their tracks as private

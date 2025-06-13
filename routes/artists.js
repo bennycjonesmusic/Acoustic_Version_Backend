@@ -8,15 +8,14 @@ import CommissionRequest from '../models/CommissionRequest.js';
 const router = express.Router();
 
 // Get artist analytics data
-router.get('/analytics', artistAuthMiddleware, async (req, res) => {
-  try {
+router.get('/analytics', artistAuthMiddleware, async (req, res) => {  try {
     const userId = req.userId;
     
     // Get user with populated tracks and commission data
     const user = await User.findById(userId)
       .populate({
         path: 'uploadedTracks',
-        select: 'title price customerPrice purchaseCount averageRating numOfRatings createdAt downloadCount comments'
+        select: 'title price purchaseCount averageRating numOfRatings createdAt downloadCount'
       })
       .select('totalIncome amountOfTracksSold numOfCommissions createdAt');
 

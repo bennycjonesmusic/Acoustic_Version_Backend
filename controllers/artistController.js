@@ -21,9 +21,11 @@ export const addArtistReview = async (req, res) => {
     // Optionally, prevent self-review
     if (artist._id.equals(req.userId)) {
       return res.status(400).json({ message: 'You cannot review yourself.' });
-    }
-    // Only allow reviews from users who have bought a track or commissioned a track from this artist
-    const buyer = await User.findById(req.userId).populate('purchasedTracks.track');
+    }    // Only allow reviews from users who have bought a track or commissioned a track from this artist
+    const buyer = await User.findById(req.userId).populate({
+      path: 'purchasedTracks.track',
+      select: 'user artist' // Only need ownership fields for verification
+    });
     const hasPurchased = buyer.purchasedTracks.some(pt => {
       if (!pt.track || pt.refunded) return false;
       // Regular track
@@ -195,13 +197,22 @@ export const deleteArtistReview = async (req, res) => {
 }
 
 
-
  export const sortUploadedOrPurchasedTracks = async (req, res) => {
   try {
     const { uploadedOrder = 'recent', purchasedOrder = 'recent' } = req.query;
     const user = await User.findById(req.userId)
-      .populate('uploadedTracks')
-      .populate('purchasedTracks.track');
+      .populate({
+        path: 'uploadedTracks',
+        select: 'title price customerPrice averageRating numOfRatings previewUrl createdAt purchaseCount originalArtist backingTrackType genre'
+      })
+      .populate({
+        path: 'purchasedTracks.track',
+        select: 'title price customerPrice averageRating numOfRatings previewUrl createdAt originalArtist backingTrackType genre user',
+        populate: {
+          path: 'user',
+          select: 'username avatar'
+        }
+      });
     if (!user) {
       return res.status(404).json({ message: 'User not found.' });
     }
@@ -235,7 +246,11 @@ export const deleteArtistReview = async (req, res) => {
 // Get all tracks uploaded by a specific user (artist)
 export const getUploadedTracksByUser = async (req, res) => {
   try {
-    const user = await User.findById(req.params.id).populate('uploadedTracks');
+    const user = await User.findById(req.params.id)
+      .populate({
+        path: 'uploadedTracks',
+        select: 'title price customerPrice averageRating numOfRatings previewUrl createdAt purchaseCount originalArtist backingTrackType genre'
+      });
     if (!user) {
       return res.status(404).json({ message: 'User not found.' });
     }
