@@ -88,10 +88,8 @@ export const getCart = async (req, res) => {
         const user = await User.findById(req.userId).populate('cart.track');
         if (!user) {
             return res.status(404).json({ message: "User not found" });
-        }
-
-        // 🔒 Security: Filter out any invalid/deleted tracks from cart
-        const validCartItems = user.cart.filter(item => item.track && item.track._id);
+        }        // 🔒 Security: Filter out any invalid/deleted tracks from cart
+        const validCartItems = user.cart.filter(item => item.track && (item.track._id || item.track.id));
         
         // If cart was cleaned up, save the user
         if (validCartItems.length !== user.cart.length) {

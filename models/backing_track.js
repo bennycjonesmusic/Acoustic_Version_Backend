@@ -246,14 +246,38 @@ backingTrackSchema.virtual('musicalKey').get(function () {
   return keySignature;
 });
 
+// Virtual for vocal range gender
+backingTrackSchema.virtual('vocalRangeGender').get(function () {
+  if (!this.vocalRange) return null;
+  
+  const range = this.vocalRange.toLowerCase();
+  
+  // Female ranges
+  if (range.includes('soprano') || range.includes('mezzo-soprano') || range.includes('contralto')) {
+    return 'female';
+  }
+  
+  // Male ranges
+  if (range.includes('countertenor') || range.includes('tenor') || range.includes('baritone') || range.includes('bass')) {
+    return 'male';
+  }
+  
+  return null;
+});
+
 // Sanitizing the schema before returning it as JSON
 backingTrackSchema.set('toJSON', {
+  virtuals: true, // Include virtual fields in JSON output
   transform: (doc, ret, options) => {
     try {
       ret.id = ret._id?.toString?.() || ret.id;
       delete ret._id;
       delete ret.__v;
       delete ret.s3Key;
+
+      // Include virtual fields
+      ret.musicalKey = doc.musicalKey;
+      ret.vocalRangeGender = doc.vocalRangeGender;
 
       const viewerRole = options?.viewerRole || 'user';
       const viewerId = options?.viewerId || null;

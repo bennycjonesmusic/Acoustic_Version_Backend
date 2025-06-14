@@ -3,7 +3,7 @@
 
 export function toUserSummary(users) {
   return users.map(user => ({
-    id: user._id,
+    id: user.id || user._id, // Defensive handling for both id formats
     username: user.username,
     avatar: user.avatar,
     customerCommissionPrice: user.customerCommissionPrice,  // Fixed spelling to match frontend interface

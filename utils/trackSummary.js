@@ -2,14 +2,14 @@
 // Utility to map a list of BackingTrack documents to summary objects
 
 export function toTrackSummary(tracks) {
-  try {
-    console.log('[toTrackSummary] Input:', JSON.stringify(tracks, null, 2));    return tracks.map(track => ({
-      id: track._id,
+  try {    console.log('[toTrackSummary] Input:', JSON.stringify(tracks, null, 2));
+    return tracks.map(track => ({
+      id: track.id || track._id, // Defensive handling for both id formats
       title: track.title,
       averageRating: track.averageRating,
       numOfRatings: track.numOfRatings,
       user: track.user && track.user.username ? {
-        id: track.user._id,
+        id: track.user.id || track.user._id, // Defensive handling for user ID
         username: track.user.username,
         avatar: track.user.avatar,
         

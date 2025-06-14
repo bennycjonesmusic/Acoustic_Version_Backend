@@ -663,7 +663,9 @@ export const getTrack = async (req, res) => {
         // Validate ObjectId BEFORE querying
         if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
             return res.status(400).json({ message: 'Invalid track ID' });
-        }        const track = await BackingTrack.findById(req.params.id).populate('user', 'avatar username');
+        }        const track = await BackingTrack.findById(req.params.id)
+            .populate('user', 'avatar username')
+            .populate('comments.user', 'avatar username');
         if (!track) {
             return res.status(404).json({ message: 'Track not found' });
         }

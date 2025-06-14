@@ -39,14 +39,85 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
 
   // Log the event for debugging
   console.log('Event payload:', JSON.stringify(event, null, 2));
-
   // Handle successful checkout
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object;
     // Log metadata for debugging
     console.log('[WEBHOOK DEBUG] session.metadata:', session.metadata);
+    
+    // Handle cart purchase (multiple tracks)
+    if (session.metadata && session.metadata.purchaseType === 'cart') {
+      const userId = session.metadata.userId;
+      const trackIds = session.metadata.trackIds.split(',');
+      const artistPayouts = JSON.parse(session.metadata.artistPayouts);
+
+      const user = await User.findById(userId);
+      const tracks = await BackingTrack.find({ _id: { $in: trackIds } });
+
+      if (user && tracks.length > 0) {        // Add all tracks to user's purchases
+        for (const track of tracks) {
+          const trackIdString = (track._id || track.id).toString();
+          const alreadyPurchased = user.purchasedTracks.some(
+            p => p.track.toString() === trackIdString && !p.refunded
+          );
+          if (!alreadyPurchased) {
+            user.purchasedTracks.push({
+              track: track._id || track.id,
+              paymentIntentId: session.payment_intent,
+              purchasedAt: new Date(),
+              price: track.customerPrice,
+              refunded: false
+            });
+            track.purchaseCount = (track.purchaseCount || 0) + 1;
+            await track.save();
+          }
+        }
+
+        // Clear user's cart
+        user.cart = [];
+        await user.save();        // Update all artists' stats
+        for (const [artistId, payoutData] of Object.entries(artistPayouts)) {
+          const artist = await User.findById(artistId);
+          if (artist) {
+            artist.amountOfTracksSold = (artist.amountOfTracksSold || 0) + payoutData.tracks.length;
+            artist.totalIncome = (artist.totalIncome || 0) + payoutData.totalEarnings;
+            await artist.save();
+          }
+        }
+
+        // Automatic transfers to artists
+        for (const [artistId, payoutData] of Object.entries(artistPayouts)) {
+          const artist = await User.findById(artistId);
+          if (artist && artist.stripeAccountId && artist.stripePayoutsEnabled) {
+            try {
+              const transferAmount = Math.round(payoutData.totalEarnings * 100); // Convert to pence
+              
+              const transfer = await stripe.transfers.create({
+                amount: transferAmount,
+                currency: 'gbp',
+                destination: artist.stripeAccountId,
+                description: `Cart purchase: ${payoutData.tracks.length} tracks`,
+                metadata: {
+                  userId: userId,
+                  artistId: artistId,
+                  trackIds: payoutData.tracks.join(','),
+                  purchaseType: 'cart'
+                }
+              });
+              
+              console.log(`Transfer created for artist ${artistId}: £${payoutData.totalEarnings}`);
+            } catch (transferError) {
+              console.error(`Failed to transfer to artist ${artistId}:`, transferError);
+              // Transfer failed but purchase still valid - could retry later
+            }
+          }
+        }
+
+        console.log(`Cart purchase completed: ${trackIds.length} tracks for user ${userId}`);
+      }
+    }
     // Handle standard track purchase (existing logic)
-    if (session.metadata && session.metadata.userId && session.metadata.trackId) {
+    else if (session.metadata && session.metadata.userId && session.metadata.trackId) {
       const userId = session.metadata.userId;
       const trackId = session.metadata.trackId;
       const user = await User.findById(userId);

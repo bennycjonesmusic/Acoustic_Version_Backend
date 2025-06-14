@@ -61,6 +61,103 @@ router.post('/create-account-link', authMiddleware, async (req, res) => {
     }
 }); 
 
+router.post('/create-cart-checkout-session', authMiddleware, async (req, res) => {
+
+    try {
+
+        const user = await User.findById(req.userId).populate('cart.track');
+        if (!user || !user.cart || user.cart.length === 0){
+
+
+            return res.status(400).json({error: 'Cart is empty'})
+
+
+        }
+
+        // Validate tracks and collect artist payouts
+        const validTracks = [];
+        const artistPayouts = {};
+        
+        for (const cartItem of user.cart) {
+            const track = cartItem.track;
+            
+            if (!track) continue;
+              // Check if user already owns this track
+            const trackIdString = (track._id || track.id).toString();
+            const alreadyPurchased = user.purchasedTracks.some(pt => 
+                (pt.track?.toString?.() || pt.track) === trackIdString
+            );
+            if (alreadyPurchased) continue;
+
+            // Skip user's own tracks
+            const trackUserId = (track.user._id || track.user.id || track.user).toString();
+            if (req.userId === trackUserId) continue;
+
+            validTracks.push(track);
+            
+            // Track artist payouts
+            const artistId = trackUserId;
+            if (!artistPayouts[artistId]) {
+                artistPayouts[artistId] = { tracks: [], totalEarnings: 0 };
+            }
+            artistPayouts[artistId].tracks.push(trackIdString);
+            artistPayouts[artistId].totalEarnings += Number(track.price);
+        }
+
+        if (validTracks.length === 0) {
+            return res.status(400).json({ error: 'No valid tracks in cart to purchase' });
+        }
+
+        // Build line items for all tracks
+        const line_items = [];
+        let totalPlatformFee = 0;
+
+        for (const track of validTracks) {
+            const customerPrice = Math.round(Number(track.customerPrice) * 100);
+            const artistPrice = Math.round(Number(track.price) * 100);
+            const platformFee = customerPrice - artistPrice;
+            totalPlatformFee += platformFee;
+
+            line_items.push({
+                price_data: {
+                    currency: 'gbp',
+                    product_data: {
+                        name: track.title,
+                        description: track.description
+                    },
+                    unit_amount: customerPrice,
+                },
+                quantity: 1,
+            });
+        }
+
+        const session = await stripeClient.checkout.sessions.create({
+            payment_method_types: ['card'],
+            line_items: line_items,
+            mode: 'payment',
+            success_url: `${process.env.CLIENT_URL}/success?session_id={CHECKOUT_SESSION_ID}`,
+            cancel_url: `${process.env.CLIENT_URL}/cancel`,
+            payment_intent_data: {
+                application_fee_amount: totalPlatformFee,
+                // No transfer_data - platform holds all money initially
+            },            metadata: {
+                userId: req.userId.toString(),
+                purchaseType: 'cart',
+                trackIds: validTracks.map(t => (t._id || t.id).toString()).join(','),
+                artistPayouts: JSON.stringify(artistPayouts)
+            }
+        });
+
+        if (!session) {
+            return res.status(500).json({ error: 'Failed to create checkout session' });
+        }
+        return res.status(200).json({ url: session.url });
+    } catch (error) {
+        console.error('Error creating cart checkout session:', error);
+        return res.status(500).json({ error: 'Failed to create checkout session' });
+    }
+});
+
 //create checkout session for backing track purchase
 router.post('/create-checkout-session', authMiddleware, async (req, res) => {
     console.log('[stripe_payment] /create-checkout-session called, userId:', req.userId, 'body:', req.body);
