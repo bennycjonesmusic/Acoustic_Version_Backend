@@ -209,13 +209,17 @@ console.log(`Server is running on http://localhost:${port}`); //check the consol
 function gracefulShutdown() {
 
   console.log('Received shutdown signal, closing server gracefully...');
-  server.close(() => {
+  server.close(async () => {
     console.log('Server closed gracefully');
-    mongoose.connection.close(false, () => {
+    try {
+      await mongoose.connection.close();
       console.log('MongoDB connection closed');
       process.exit(0);
-    });
-  })
+    } catch (error) {
+      console.error('Error closing MongoDB connection:', error);
+      process.exit(1);
+    }
+  });
 
 }
 process.on('SIGINT', gracefulShutdown);

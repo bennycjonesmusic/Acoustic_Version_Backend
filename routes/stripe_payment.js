@@ -129,22 +129,18 @@ router.post('/create-cart-checkout-session', authMiddleware, async (req, res) =>
                 },
                 quantity: 1,
             });
-        }
-
-        const session = await stripeClient.checkout.sessions.create({
+        }        const session = await stripeClient.checkout.sessions.create({
             payment_method_types: ['card'],
             line_items: line_items,
             mode: 'payment',
             success_url: `${process.env.CLIENT_URL}/success?session_id={CHECKOUT_SESSION_ID}`,
             cancel_url: `${process.env.CLIENT_URL}/cancel`,
-            payment_intent_data: {
-                application_fee_amount: totalPlatformFee,
-                // No transfer_data - platform holds all money initially
-            },            metadata: {
+            metadata: {
                 userId: req.userId.toString(),
                 purchaseType: 'cart',
                 trackIds: validTracks.map(t => (t._id || t.id).toString()).join(','),
-                artistPayouts: JSON.stringify(artistPayouts)
+                artistPayouts: JSON.stringify(artistPayouts),
+                totalPlatformFee: totalPlatformFee.toString()
             }
         });
 

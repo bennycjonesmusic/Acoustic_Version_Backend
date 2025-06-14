@@ -119,17 +119,15 @@ export const login = async (req, res) => {
         return res.status(400).json({ message: error.details[0].message });
     }
     try {
-        const { login, password } = req.body;
-        const user = await User.findOne({$or: [{email: login}, {username: login}]});
+        const { login, password } = req.body;        const user = await User.findOne({$or: [{email: login}, {username: login}]});
         if (!user) {
-            return res.status(400).json({ message: "Invalid email or password" });
+            return res.status(400).json({ message: "Invalid username or password" });
         }
         if (user.isBanned && user.isBanned()) {
             return res.status(403).json({ message: "Your account has been banned. Please contact support." });
-        }
-        const isMatch = await bcrypt.compare(password, user.password);
+        }        const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
-            return res.status(400).json({ message: "Invalid email or password" });
+            return res.status(400).json({ message: "Invalid username or password" });
         }
         // Set req.userId for downstream middleware
         req.userId = user._id;
@@ -388,7 +386,7 @@ export const resetPassword = async (req, res) => {
 // Update user profile (avatar, about, etc.)
 export const updateProfile = async (req, res) => {
   try {
-    const allowedFields = ['about', 'commissionPrice'];
+    const allowedFields = ['about', 'commissionPrice', 'availableForCommission'];
     const updates = allowedFields.reduce((acc, key) => {
       if (req.body[key] !== undefined) acc[key] = req.body[key];
       return acc;
@@ -401,6 +399,16 @@ export const updateProfile = async (req, res) => {
     // If avatar is explicitly set to empty string, remove avatar from user
     if (req.body.avatar === '') {
       updates.avatar = undefined;
+    }
+
+    
+
+    //real defensive code here...
+    if (req.body.availableForCommission !== undefined) {
+      if (typeof req.body.availableForCommission !== 'boolean') {
+        return res.status(400).json({ message: 'Invalid value for availableForCommission.' });
+      }
+      updates.availableForCommission = req.body.availableForCommission;
     }
 
     if (Object.keys(updates).length === 0) {

@@ -9,40 +9,61 @@ function isValidObjectId(id) {
 
 export const addToCart = async (req, res) => {
     try {
+        console.log('🛒 addToCart: Request received');
+        console.log('🛒 addToCart: req.userId:', req.userId);
+        console.log('🛒 addToCart: req.body:', req.body);
+        
         const { trackId } = req.body;
         
         // 🔒 Security: Validate trackId format
         if (!trackId || !isValidObjectId(trackId)) {
+            console.log('🛒 addToCart: Invalid track ID:', trackId);
             return res.status(400).json({ message: "Invalid track ID" });
         }
+        
+        console.log('🛒 addToCart: Looking for user with ID:', req.userId);
         
         // 🔒 Security: Check if user exists
         const user = await User.findById(req.userId);
         if (!user) {
+            console.log('🛒 addToCart: User not found for ID:', req.userId);
             return res.status(404).json({ message: "User not found" });
         }
+        
+        console.log('🛒 addToCart: User found:', user.username);
+        console.log('🛒 addToCart: Looking for track with ID:', trackId);
         
         // 🔒 Security: Verify track exists and is available for purchase
         const track = await BackingTrack.findById(trackId);
         if (!track) {
+            console.log('🛒 addToCart: Track not found for ID:', trackId);
             return res.status(404).json({ message: "Track not found" });
         }
         
-        // 🔒 Security: Prevent users from adding their own tracks to cart
+        console.log('🛒 addToCart: Track found:', track.title);
+        console.log('🛒 addToCart: Track owner:', track.user.toString());
+        console.log('🛒 addToCart: Current user:', req.userId.toString());        // 🔒 Security: Prevent users from adding their own tracks to cart
         if (track.user.toString() === req.userId.toString()) {
+            console.log('🛒 addToCart: User trying to add their own track');
             return res.status(400).json({ message: "You cannot add your own track to cart" });
         }
+        
+        console.log('🛒 addToCart: Current cart items:', user.cart.length);
         
         // 🔒 Security: Check if track is already in cart (use 'track' field, not 'trackId')
         if (!user.cart.some(item => item.track.toString() === trackId)) {
             user.cart.push({ track: trackId }); // addedAt will be set automatically
             await user.save();
+            console.log('🛒 addToCart: Track added to cart successfully');
+        } else {
+            console.log('🛒 addToCart: Track already in cart');
         }
 
+        console.log('🛒 addToCart: Final cart items:', user.cart.length);
         return res.status(200).json({ message: "Track added to cart successfully" });
 
     } catch (error) {
-        console.error("Error adding track to cart:", error);
+        console.error("🛒 addToCart: Error adding track to cart:", error);
         return res.status(500).json({ message: "Internal server error" });
     }
 }
