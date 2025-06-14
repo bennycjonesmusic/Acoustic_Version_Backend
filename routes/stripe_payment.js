@@ -339,4 +339,69 @@ router.post('/refresh-account-status', authMiddleware, async (req, res) => {
 
     
 })
+
+// Link existing Stripe account by account ID
+router.post('/link-existing-account', authMiddleware, async (req, res) => {
+    try {
+        const { stripeAccountId } = req.body;
+
+        if (!stripeAccountId || typeof stripeAccountId !== 'string') {
+            return res.status(400).json({ error: 'Valid Stripe account ID is required' });
+        }
+
+        // Validate the account ID format
+        if (!stripeAccountId.startsWith('acct_')) {
+            return res.status(400).json({ error: 'Invalid Stripe account ID format. Should start with "acct_"' });
+        }
+
+        const user = await User.findById(req.userId);
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        // Check if user already has a Stripe account
+        if (user.stripeAccountId) {
+            return res.status(400).json({ error: 'User already has a linked Stripe account' });
+        }
+
+        try {
+            // Verify the account exists and get its details
+            const account = await stripeClient.accounts.retrieve(stripeAccountId);
+            
+            // Check if account is already linked to another user
+            const existingUser = await User.findOne({ stripeAccountId: stripeAccountId });
+            if (existingUser) {
+                return res.status(400).json({ error: 'This Stripe account is already linked to another user' });
+            }
+
+            // Link the account
+            user.stripeAccountId = stripeAccountId;
+            user.stripeAccountStatus = account.charges_enabled ? 'active' : 'pending';
+            user.stripePayoutsEnabled = account.payouts_enabled || false;
+            user.stripeOnboardingComplete = account.details_submitted || false;
+            
+            await user.save();
+
+            console.log(`[Stripe Link] Linked account ${stripeAccountId} to user ${user.email}`);
+
+            return res.status(200).json({ 
+                success: true,
+                message: 'Stripe account linked successfully',
+                accountStatus: user.stripeAccountStatus,
+                payoutsEnabled: user.stripePayoutsEnabled,
+                onboardingComplete: user.stripeOnboardingComplete
+            });
+
+        } catch (stripeError) {
+            console.error('[Stripe Link] Error verifying account:', stripeError);
+            return res.status(400).json({ 
+                error: 'Invalid Stripe account ID or account not accessible. Please check the account ID and try again.' 
+            });
+        }
+
+    } catch (error) {
+        console.error('Error linking Stripe account:', error);
+        return res.status(500).json({ error: 'Failed to link Stripe account' });
+    }
+});
 export default router;

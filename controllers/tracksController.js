@@ -463,7 +463,9 @@ export const getPurchasedTracks = async (req, res) => {
         if (isNaN(pageNum) || pageNum < 1) pageNum = 1;
         let limitNum = parseInt(limit, 10);
         if (isNaN(limitNum) || limitNum < 1) limitNum = 10;
-        if (limitNum > 50) limitNum = 50; // Cap at 50 tracks per page        const skip = (pageNum - 1) * limitNum;
+        if (limitNum > 50) limitNum = 50; // Cap at 50 tracks per page
+
+        const skip = (pageNum - 1) * limitNum;
 
         // Only populate essential fields for purchased tracks display
         const user = await User.findById(req.userId).populate({
