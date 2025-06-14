@@ -49,6 +49,7 @@ router.post('/resend-email', authMiddleware, resendEmail);
 //update S3 File for ID's that were not initially added.
 router.put('/updateS3/:id', authMiddleware, updateS3Key);
 // Update user profile (avatar, about, etc.)
+router.patch('/update-profile', authMiddleware, avatarUpload.single('avatar'), updateProfile);
 
 // Get user role
 router.get('/user-role', authMiddleware, getUserRole);
