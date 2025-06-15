@@ -7,7 +7,7 @@ const commissionRequestSchema = new mongoose.Schema({
   price: { type: Number, required: false }, // Now optional, will be set from artist if not provided
   status: {
     type: String,
-    enum: ['pending_artist', 'requested', 'accepted', 'in_progress', 'delivered', 'approved', 'paid', 'cancelled', 'rejected_by_artist', 'cron_pending'],
+    enum: ['pending_artist', 'requested', 'accepted', 'in_progress', 'delivered', 'approved', 'paid', 'cancelled', 'rejected_by_artist', 'cron_pending', 'completed'],
     default: 'pending_artist',
   },
   stripeSessionId: { type: String },

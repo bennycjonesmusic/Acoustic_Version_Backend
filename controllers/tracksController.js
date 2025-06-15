@@ -5,6 +5,7 @@ import BackingTrack from '../models/backing_track.js';
 import User from '../models/User.js'; // 
 import { parseKeySignature } from '../utils/parseKeySignature.js';
 import { uploadTrackSchema, editTrackSchema, reviewSchema, commentSchema } from './validationSchemas.js';
+import { validateUserForPayouts } from '../utils/stripeAccountStatus.js';
 import * as Filter from 'bad-words';
 import { sendFollowersNewTrack } from '../utils/updateFollowers.js';
 import { getAudioPreview } from '../utils/audioPreview.js';
@@ -126,17 +127,21 @@ export const uploadTrack = async (req, res) => {
     }
 
 
-    
-    // Only allow upload if user is artist or admin
+      // Only allow upload if user is artist or admin
     if (Artist.role !== 'artist' && Artist.role !== 'admin') {
       return res.status(403).json({ message: "Only artists or admins can upload tracks." })
     }
+    
     if (Artist.profileStatus !== 'approved') {
         return res.status(403).json({ message: "Your profile has not been approved yet. Please upload some examples of your playing and await admin approval." });
     }
 
-    if (Artist.stripePayoutsEnabled !== true || Artist.stripeAccountId === 'undefined' || !Artist.stripeAccountId) {
-        return res.status(403).json({ message: "You must have a valid stripe account to upload tracks."});
+    // Comprehensive payout validation
+    const payoutValidation = validateUserForPayouts(Artist);
+    if (!payoutValidation.valid) {
+        return res.status(403).json({ 
+            message: `Cannot upload tracks: ${payoutValidation.reason}. Please complete your Stripe account setup to enable payouts.` 
+        });
     }
     if (error) {
         return res.status(400).json({ message: error.details[0].message });

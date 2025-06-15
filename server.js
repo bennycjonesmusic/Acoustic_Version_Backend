@@ -100,7 +100,7 @@ console.log(`[CRON] Setting up payout cron job with schedule: ${payoutSchedule} 
 cron.schedule(payoutSchedule, async () => {
   try {
     console.log(`Running ${process.env.NODE_ENV === 'production' ? 'hourly' : 'development'} cron job to process money owed payouts`);
-    const { processPayouts } = await import('./cron_payout_money_owed.js');
+    const { processPayouts } = await import('./utils/cron_payout_money_owed.js');
     await processPayouts();
     console.log('Money owed payout cron job completed');
   } catch (error) {

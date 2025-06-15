@@ -449,7 +449,7 @@ router.post('/trigger-payouts', authMiddleware, async (req, res) => {
         console.log('[MANUAL PAYOUT] Manual payout trigger requested by user:', req.userId);
         
         // Import and run the payout process
-        const { processPayouts } = await import('../cron_payout_money_owed.js');
+        const { processPayouts } = await import('../utils/cron_payout_money_owed.js');
         await processPayouts();
         
         console.log('[MANUAL PAYOUT] Manual payout process completed');

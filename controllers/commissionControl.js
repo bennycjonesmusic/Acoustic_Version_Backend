@@ -5,6 +5,7 @@ import BackingTrack from '../models/backing_track.js';
 import User from '../models/User.js';
 import { sendCommissionPreviewEmail } from '../utils/updateFollowers.js';
 import { getAudioPreview } from '../utils/audioPreview.js';
+import { validateUserForPayouts } from '../utils/stripeAccountStatus.js';
 import { S3Client } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
 import path from 'path';
@@ -79,16 +80,11 @@ export const createCommissionRequest = async (req, res) => {
         if (!artist) return res.status(404).json({ error: 'Artist not found' });
         
         // Validate artist's Stripe account before allowing commission creation
-        if (!artist.stripeAccountId) {
-            return res.status(400).json({ error: 'Artist has no Stripe account set up. Commission cannot be created.' });
-        }
-        
-        if (!artist.stripePayoutsEnabled) {
-            return res.status(400).json({ error: 'Artist Stripe account is not enabled for payouts. Commission cannot be created at this time.' });
-        }
-        
-        if (artist.stripeAccountStatus !== 'active') {
-            return res.status(400).json({ error: `Artist Stripe account status is ${artist.stripeAccountStatus}. Commission cannot be created at this time.` });
+        const payoutValidation = validateUserForPayouts(artist);
+        if (!payoutValidation.valid) {
+            return res.status(400).json({ 
+                error: `Commission cannot be created: ${payoutValidation.reason}. The artist must complete their Stripe account setup first.` 
+            });
         }
         
         const artistPrice = Number(artist.commissionPrice) || 0;
@@ -157,7 +153,7 @@ export const createCommissionRequest = async (req, res) => {
 
 }
 
-// Approve commission and pay out artist
+// Approve commission and add to money owed queue for cron payout
 export const approveCommissionAndPayout = async (req, res) => {
     const { commissionId } = req.body;
     const adminOrCustomerId = req.userId; // Only admin or the customer can approve
@@ -165,7 +161,8 @@ export const approveCommissionAndPayout = async (req, res) => {
     try {
         const commission = await CommissionRequest.findById(commissionId).populate('artist customer');
         if (!commission) return res.status(404).json({ error: 'Commission not found' });
-        // Only allow payout for delivered or approved, NOT cron_pending
+        
+        // Only allow approval for delivered status, NOT cron_pending or paid
         if (commission.status !== 'delivered' && commission.status !== 'approved') {
             return res.status(400).json({ error: 'Commission not ready for approval' });
         }
@@ -176,74 +173,74 @@ export const approveCommissionAndPayout = async (req, res) => {
             !(req.user && req.user.role === 'admin')
         ) {
             return res.status(403).json({ error: 'Not authorized' });
-        }
-
-        // Prevent double payout
-        if (commission.status === 'paid') {
-            return res.status(400).json({ error: 'Already paid out' });
-        }
-
-        // Check if payment has been received
+        }        // Prevent double payout
+        if (commission.status === 'completed' || commission.status === 'cron_pending') {
+            return res.status(400).json({ error: 'Commission already processed or pending payout' });
+        }// Check if payment has been received
         if (!commission.stripePaymentIntentId) {
             return res.status(400).json({ error: 'No payment intent found for this commission.' });
         }
+        
+        // Always set to approved - let webhook handle queueing when payment confirms
+        commission.status = 'approved';
+        await commission.save();
+        
         const paymentIntent = await stripeClient.paymentIntents.retrieve(commission.stripePaymentIntentId);
         if (paymentIntent.status !== 'succeeded') {
-            // Payment not received yet, mark as cron_pending and let cron handle payout
-            commission.status = 'cron_pending';
-            await commission.save();
-            return res.status(200).json({ success: true, message: 'Commission approved. Payout will be processed once payment is received.' });
-        }        // Payment received, proceed with payout logic
+            return res.status(200).json({ success: true, message: 'Commission approved. Payout will be processed once payment is confirmed.' });
+        }
+
+        // Payment already succeeded, queue immediately for payout
         const artist = commission.artist;
         if (!artist.stripeAccountId) {
             return res.status(400).json({ error: 'Artist has no Stripe account' });
         }
-        
-        // Check if artist's Stripe account is ready for payouts
-        if (!artist.stripePayoutsEnabled) {
-            return res.status(400).json({ error: 'Artist Stripe account is not enabled for payouts. Please complete onboarding.' });
-        }
-        
-        if (artist.stripeAccountStatus !== 'active') {
-            return res.status(400).json({ error: `Artist Stripe account status is ${artist.stripeAccountStatus}. Payouts require active status.` });
-        }
-        
-        if (artist.role !== 'artist' && artist.role !== 'admin') {
-            return res.status(403).json({ error: 'Payouts are only allowed to users with role artist or admin.' });
-        }
-        // Guarantee artist receives their set price
+
+        // Calculate artist payout amount
         const artistPrice = Number(artist.commissionPrice) || 0;
-        const platformCommissionRate = 0.15; // 15% platform fee
-        const platformFee = Math.round(artistPrice * platformCommissionRate * 100); // pence
-        const artistAmount = Math.round(artistPrice * 100); // pence
-        const totalAmount = artistAmount + platformFee; // for reference
-        console.log('[PAYOUT DEBUG]', {
+        if (!artistPrice || artistPrice <= 0) {
+            return res.status(400).json({ error: 'Invalid commission price' });
+        }        // Add to money owed queue
+        const moneyOwedEntry = {
+            amount: artistPrice, // Amount in GBP (will be converted to pence in cron job)
+            source: 'commission',
+            reference: `Commission payout for commission ID: ${commission._id}`,
             commissionId: commission._id.toString(),
-            totalAmount,
-            platformFee,
-            artistAmount,
-            artistStripeAccount: artist.stripeAccountId
-        });
-
-        // Transfer to artist
-        const transfer = await stripeClient.transfers.create({
-            amount: artistAmount,
-            currency: 'gbp',
-            destination: artist.stripeAccountId,
-            transfer_group: `commission_${commission._id}`,
+            createdAt: new Date(),
             metadata: {
+                type: 'commission_payout',
                 commissionId: commission._id.toString(),
-                artistId: artist._id.toString(),
+                customerId: commission.customer._id.toString(),
+                customerEmail: commission.customer.email,
+                payoutReason: 'Commission completed and approved'
             }
-        });
+        };
 
-        commission.status = 'paid';
-        commission.stripeTransferId = transfer.id;
+        // Check if this commission is already in money owed to prevent duplicates
+        const existingEntry = artist.moneyOwed.find(entry => 
+            entry.commissionId && entry.commissionId === commission._id.toString()
+        );
+
+        if (existingEntry) {
+            return res.status(400).json({ error: 'Commission already queued for payout' });
+        }
+
+        artist.moneyOwed.push(moneyOwedEntry);
+        await artist.save();
+
+        // Set commission to cron_pending since it's now queued
+        commission.status = 'cron_pending';
         await commission.save();
 
-        return res.status(200).json({ success: true, transferId: transfer.id });
+        console.log(`[COMMISSION APPROVAL] Added £${artistPrice} to money owed queue for artist ${artist._id}, commission ${commission._id}`);
+
+        return res.status(200).json({ 
+            success: true, 
+            message: 'Commission approved and queued for payout. Payment will be processed by the next scheduled payout run.' 
+        });
+
     } catch (error) {
-        console.error('Error approving commission and paying out:', error);
+        console.error('Error approving commission:', error);
         return res.status(500).json({ error: 'Internal server error' });
     }
 };
@@ -264,8 +261,7 @@ export const processExpiredCommissionsStandalone = async () => {
     try {
         const now = new Date();
         // Set expiry threshold to 2 weeks (14 days) from commission creation
-        const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
-        // Find commissions created more than 2 weeks ago, not delivered, paid, refunded, or cancelled
+        const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);        // Find commissions created more than 2 weeks ago, not delivered, completed, refunded, or cancelled
         const expired = await CommissionRequest.find({
             createdAt: { $lt: twoWeeksAgo },
             status: { $in: ['requested', 'accepted', 'in_progress'] }
@@ -456,8 +452,8 @@ export const refundCommission = async (req, res) => {
         const commission = await CommissionRequest.findById(commissionId);
         if (!commission) {
             return res.status(404).json({ error: 'Commission not found' });
-        }        // Only refund if not already refunded or paid
-        if (commission.status === 'cancelled' || commission.status === 'paid') {
+        }        // Only refund if not already refunded or completed
+        if (commission.status === 'cancelled' || commission.status === 'completed') {
             return res.status(400).json({ error: 'Cannot refund this commission' });
         }
         // Refund via Stripe
@@ -491,8 +487,16 @@ export const artistRespondToCommission = async (req, res) => {
         if (!commission) return res.status(404).json({ error: 'Commission not found' });
         if (commission.artist.toString() !== artistId) return res.status(403).json({ error: 'Not authorized' });
         if (commission.status !== 'pending_artist') return res.status(400).json({ error: 'Commission not awaiting artist response' });
+        
         if (action === 'accept') {
-            commission.status = 'requested'; // Now customer can pay
+            // Check if artist can receive payouts before accepting commission
+            const artist = await User.findById(artistId);
+            const payoutValidation = validateUserForPayouts(artist);
+            if (!payoutValidation.valid) {
+                return res.status(403).json({ 
+                    error: `Cannot accept commission: ${payoutValidation.reason}. Please complete your Stripe account setup to enable payouts.` 
+                });
+            }            commission.status = 'requested'; // Now customer can pay
             await commission.save();
             return res.status(200).json({ success: true, message: 'Commission accepted. Awaiting customer payment.' });
         } else if (action === 'reject') {
@@ -642,8 +646,7 @@ export const approveOrDenyCommission = async (req, res) => {
         const commission = await CommissionRequest.findById(commissionId);
         if (!commission) return res.status(404).json({ error: 'Commission not found' });
         if (commission.artist.toString() !== artistId) return res.status(403).json({ error: 'Not authorized' });
-        if (commission.status !== 'pending_artist') return res.status(400).json({ error: 'Commission not awaiting artist response' });
-        if (action === 'approve') {
+        if (commission.status !== 'pending_artist') return res.status(400).json({ error: 'Commission not awaiting artist response' });        if (action === 'approve') {
             commission.status = 'requested'; // Now customer can pay
             await commission.save();
             return res.status(200).json({ success: true, message: 'Commission approved. Awaiting customer payment.' });
@@ -687,9 +690,8 @@ export const getFinishedCommission = async (req, res) => {
         if (!commission) return res.status(404).json({ error: 'Commission not found' });
         if (commission.customer.toString() !== userId && !(req.user && req.user.role === 'admin')) {
             return res.status(403).json({ error: 'Not authorized' });
-        }
-        if (commission.status !== 'paid') {
-            return res.status(400).json({ error: 'Commission not paid for yet' });
+        }        if (commission.status !== 'completed') {
+            return res.status(400).json({ error: 'Commission not completed yet' });
         }
         if (!commission.finishedTrackUrl) return res.status(404).json({ error: 'No finished track available' });
         // Add to purchasedTracks if not already present

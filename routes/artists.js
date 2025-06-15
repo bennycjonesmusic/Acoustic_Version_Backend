@@ -76,12 +76,11 @@ router.get('/analytics', artistAuthMiddleware, async (req, res) => {  try {
     });
 
     // Commission analytics
-    const commissionStats = {
-      total: totalCommissions,
-      completed: commissions.filter(c => c.status === 'paid').length,
+    const commissionStats = {      total: totalCommissions,
+      completed: commissions.filter(c => c.status === 'completed').length,
       pending: commissions.filter(c => ['pending_artist', 'requested', 'accepted', 'in_progress', 'delivered'].includes(c.status)).length,
       revenue: commissions
-        .filter(c => c.status === 'paid')
+        .filter(c => c.status === 'completed')
         .reduce((sum, c) => sum + (c.price || 0), 0)
     };
 

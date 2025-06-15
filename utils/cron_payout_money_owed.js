@@ -1,7 +1,8 @@
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import stripe from 'stripe';
-import User from './models/User.js';
+import User from '../models/User.js';
+import CommissionRequest from '../models/CommissionRequest.js';
 
 dotenv.config();
 
@@ -38,6 +39,7 @@ async function processPayouts() {
     
     // Check platform's Stripe balance first - only payout if we have the money
     const balance = await stripeClient.balance.retrieve();
+    console.log(balance);
     const availableBalance = balance.available[0]?.amount || 0; // in pence
     const pendingBalance = balance.pending[0]?.amount || 0; // in pence
     
@@ -118,10 +120,29 @@ async function processPayouts() {
               createdAt: owed.createdAt.toISOString(),
               ...owed.metadata
             }
-          });
-
-          console.log(`[CRON PAYOUT] ✅ Successfully transferred £${owed.amount} to ${user.email}: ${owed.reference}`);
+          });          console.log(`[CRON PAYOUT] ✅ Successfully transferred £${owed.amount} to ${user.email}: ${owed.reference}`);
           console.log(`[CRON PAYOUT] Transfer ID: ${transfer.id}`);
+            // If this was a commission payout, update the commission status
+          if (owed.source === 'commission' && owed.commissionId) {
+            try {
+              const commission = await CommissionRequest.findById(owed.commissionId);
+              if (commission) {
+                if (commission.status === 'cron_pending') {
+                  commission.status = 'completed';
+                  commission.stripeTransferId = transfer.id;
+                  await commission.save();
+                  console.log(`[CRON PAYOUT] ✅ Updated commission ${owed.commissionId} status to 'completed'`);
+                } else {
+                  console.log(`[CRON PAYOUT] ⚠️  Commission ${owed.commissionId} not in 'cron_pending' status (current: '${commission.status}'), payout successful but status not updated`);
+                }
+              } else {
+                console.error(`[CRON PAYOUT] ⚠️  Commission ${owed.commissionId} not found, payout successful but commission doesn't exist`);
+              }
+            } catch (commissionError) {
+              console.error(`[CRON PAYOUT] ⚠️  Failed to update commission ${owed.commissionId} status:`, commissionError.message);
+              // Don't fail the entire payout for this - the money was transferred successfully
+            }
+          }
           
           // Deduct from our remaining balance
           remainingBalance -= transferAmount;
