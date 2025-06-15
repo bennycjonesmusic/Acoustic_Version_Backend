@@ -362,11 +362,18 @@ router.post('/link-existing-account', authMiddleware, async (req, res) => {
         // Check if user already has a Stripe account
         if (user.stripeAccountId) {
             return res.status(400).json({ error: 'User already has a linked Stripe account' });
-        }
-
-        try {
+        }        try {
             // Verify the account exists and get its details
             const account = await stripeClient.accounts.retrieve(stripeAccountId);
+            
+            // Check if it's a Connect account (not a regular Stripe account)
+            if (!account.type || account.type === 'standard') {
+                // This is good - Connect accounts can receive transfers
+            } else {
+                return res.status(400).json({ 
+                    error: 'This appears to be a regular Stripe account. You need a Stripe Connect account to receive payouts. Please use "Create New Account" or "Connect Existing" instead.' 
+                });
+            }
             
             // Check if account is already linked to another user
             const existingUser = await User.findOne({ stripeAccountId: stripeAccountId });
@@ -404,4 +411,59 @@ router.post('/link-existing-account', authMiddleware, async (req, res) => {
         return res.status(500).json({ error: 'Failed to link Stripe account' });
     }
 });
+
+// Reset/remove Stripe account link
+router.post('/reset-account', authMiddleware, async (req, res) => {
+    try {
+        const user = await User.findById(req.userId);
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        console.log(`[Stripe Reset] Resetting Stripe account for user ${user.email}, current account: ${user.stripeAccountId}`);
+
+        // Clear all Stripe-related fields
+        user.stripeAccountId = null;
+        user.stripeAccountStatus = null;
+        user.stripePayoutsEnabled = false;
+        user.stripeOnboardingComplete = false;
+        
+        await user.save();
+
+        console.log(`[Stripe Reset] Successfully reset Stripe account for user ${user.email}`);
+
+        return res.status(200).json({ 
+            success: true,
+            message: 'Stripe account reset successfully. You can now set up a new account.',
+        });
+
+    } catch (error) {
+        console.error('Error resetting Stripe account:', error);
+        return res.status(500).json({ error: 'Failed to reset Stripe account' });
+    }
+});
+
+// Test endpoint to manually trigger money owed payouts (for development/testing)
+router.post('/trigger-payouts', authMiddleware, async (req, res) => {
+    try {
+        console.log('[MANUAL PAYOUT] Manual payout trigger requested by user:', req.userId);
+        
+        // Import and run the payout process
+        const { processPayouts } = await import('../cron_payout_money_owed.js');
+        await processPayouts();
+        
+        console.log('[MANUAL PAYOUT] Manual payout process completed');
+        return res.status(200).json({ 
+            success: true, 
+            message: 'Payout process completed successfully' 
+        });
+    } catch (error) {
+        console.error('[MANUAL PAYOUT] Error in manual payout trigger:', error);
+        return res.status(500).json({ 
+            error: 'Failed to process payouts',
+            details: error.message 
+        });
+    }
+});
+
 export default router;

@@ -57,6 +57,91 @@ router.get('/me', authMiddleware, async (req, res) => {
   }
 });
 
+// Get scheduled payouts for the current user (artist)
+router.get('/scheduled-payouts', authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId).select('moneyOwed displayName email');
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Calculate total pending
+    const totalPending = user.moneyOwed.reduce((sum, owed) => sum + owed.amount, 0);
+
+    // Format the response for frontend
+    const scheduledPayouts = {
+      totalPending: totalPending,
+      currency: 'GBP',
+      count: user.moneyOwed.length,
+      payouts: user.moneyOwed.map(owed => ({
+        id: owed._id,
+        amount: owed.amount,
+        reference: owed.reference,
+        source: owed.source,
+        createdAt: owed.createdAt,
+        metadata: {
+          trackIds: owed.metadata?.trackIds || [],
+          purchaseType: owed.metadata?.purchaseType || 'unknown',
+          customerEmail: owed.metadata?.customerEmail || 'unknown'
+        }
+      })).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)) // Newest first
+    };
+
+    res.status(200).json(scheduledPayouts);
+  } catch (error) {
+    console.error('Error fetching scheduled payouts:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Admin route: Get scheduled payouts for all artists
+router.get('/admin/all-scheduled-payouts', authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    if (!user || user.role !== 'admin') {
+      return res.status(403).json({ message: 'Admin access required' });
+    }
+
+    const usersWithPayouts = await User.find({ 
+      'moneyOwed.0': { $exists: true } 
+    }).select('displayName email moneyOwed');
+
+    const allScheduledPayouts = usersWithPayouts.map(artist => {
+      const totalPending = artist.moneyOwed.reduce((sum, owed) => sum + owed.amount, 0);
+      
+      return {
+        artistId: artist._id,
+        artistName: artist.displayName || artist.email,
+        artistEmail: artist.email,
+        totalPending: totalPending,
+        count: artist.moneyOwed.length,
+        payouts: artist.moneyOwed.map(owed => ({
+          id: owed._id,
+          amount: owed.amount,
+          reference: owed.reference,
+          source: owed.source,
+          createdAt: owed.createdAt,
+          metadata: owed.metadata
+        })).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      };
+    }).sort((a, b) => b.totalPending - a.totalPending); // Highest pending first
+
+    const summary = {
+      totalArtists: allScheduledPayouts.length,
+      totalPendingAmount: allScheduledPayouts.reduce((sum, artist) => sum + artist.totalPending, 0),
+      totalPendingPayouts: allScheduledPayouts.reduce((sum, artist) => sum + artist.count, 0)
+    };
+
+    res.status(200).json({
+      summary,
+      artists: allScheduledPayouts
+    });
+  } catch (error) {
+    console.error('Error fetching all scheduled payouts:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 // Get all tracks uploaded by a specific user (artist)
 router.get('/users/:id/tracks', authMiddleware, getUploadedTracksByUser);
 router.get('/artist/:id/tracks', getUploadedTracksByUserId);

@@ -83,6 +83,31 @@ cron.schedule('0 3 * * *', async () => {
   }
 });
 
+// Cron job to process money owed payouts
+// TODO: Eventually migrate this to system-level cron for better production practices
+// Reasons to migrate:
+// 1. If we scale to multiple servers, this will run multiple times (bad!)
+// 2. Web server restarts will interrupt payout processing
+// 3. Heavy payout processing could slow down HTTP responses during busy periods
+// 4. Harder to monitor/debug when mixed with web server logs
+// For now it's fine since we're on a single server, but worth moving out later
+
+// Development: Every 2 minutes for faster testing
+// Production: Every hour
+const payoutSchedule = process.env.NODE_ENV === 'production' ? '0 * * * *' : '*/2 * * * *';
+console.log(`[CRON] Setting up payout cron job with schedule: ${payoutSchedule} (${process.env.NODE_ENV === 'production' ? 'hourly' : 'every 2 minutes'})`);
+
+cron.schedule(payoutSchedule, async () => {
+  try {
+    console.log(`Running ${process.env.NODE_ENV === 'production' ? 'hourly' : 'development'} cron job to process money owed payouts`);
+    const { processPayouts } = await import('./cron_payout_money_owed.js');
+    await processPayouts();
+    console.log('Money owed payout cron job completed');
+  } catch (error) {
+    console.error('Error running money owed payout cron job:', error);
+  }
+});
+
 // Run deleteUnusedAvatars immediately on server start
 (async () => {
   try {

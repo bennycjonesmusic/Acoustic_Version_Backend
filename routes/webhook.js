@@ -8,6 +8,21 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+// Function to trigger fast payout after cart purchases
+async function triggerFastPayout() {
+  console.log('[FAST PAYOUT] Scheduling payout in 30 seconds after cart purchase...');
+  setTimeout(async () => {
+    try {
+      console.log('[FAST PAYOUT] Processing triggered payout...');
+      const { processPayouts } = await import('../cron_payout_money_owed.js');
+      await processPayouts();
+      console.log('[FAST PAYOUT] Triggered payout completed');
+    } catch (error) {
+      console.error('[FAST PAYOUT] Error in triggered payout:', error);
+    }
+  }, 30000); // 30 seconds
+}
+
 const router = express.Router();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -60,12 +75,11 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
           const alreadyPurchased = user.purchasedTracks.some(
             p => p.track.toString() === trackIdString && !p.refunded
           );
-          if (!alreadyPurchased) {
-            user.purchasedTracks.push({
+          if (!alreadyPurchased) {            user.purchasedTracks.push({
               track: track._id || track.id,
               paymentIntentId: session.payment_intent,
               purchasedAt: new Date(),
-              price: track.customerPrice,
+              price: track.price, // ✅ Store artist price (what they set), not customer price
               refunded: false
             });
             track.purchaseCount = (track.purchaseCount || 0) + 1;
@@ -83,37 +97,47 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
             artist.totalIncome = (artist.totalIncome || 0) + payoutData.totalEarnings;
             await artist.save();
           }
-        }
-
-        // Automatic transfers to artists
+        }        // Add money owed to artists for cart purchases
         for (const [artistId, payoutData] of Object.entries(artistPayouts)) {
           const artist = await User.findById(artistId);
-          if (artist && artist.stripeAccountId && artist.stripePayoutsEnabled) {
-            try {
-              const transferAmount = Math.round(payoutData.totalEarnings * 100); // Convert to pence
-              
-              const transfer = await stripe.transfers.create({
-                amount: transferAmount,
-                currency: 'gbp',
-                destination: artist.stripeAccountId,
-                description: `Cart purchase: ${payoutData.tracks.length} tracks`,
-                metadata: {
-                  userId: userId,
-                  artistId: artistId,
-                  trackIds: payoutData.tracks.join(','),
-                  purchaseType: 'cart'
-                }
-              });
-              
-              console.log(`Transfer created for artist ${artistId}: £${payoutData.totalEarnings}`);
-            } catch (transferError) {
-              console.error(`Failed to transfer to artist ${artistId}:`, transferError);
-              // Transfer failed but purchase still valid - could retry later
-            }
+          if (artist) {
+            // Create reference for the money owed
+            const trackTitles = payoutData.tracks.map(trackId => {
+              const track = tracks.find(t => t._id.toString() === trackId);
+              return track ? track.title : `Track ${trackId}`;
+            }).join(', ');
+            
+            const reference = `Cart purchase: ${trackTitles} @ ${new Date().toLocaleDateString()}`;
+            
+            // Add to money owed - this will be paid by cron job
+            artist.moneyOwed.push({
+              amount: payoutData.totalEarnings, // Amount in pounds
+              reference: reference,
+              source: 'cart_purchase',
+              metadata: {
+                userId: userId,
+                trackIds: payoutData.tracks,
+                purchaseType: 'cart',
+                paymentIntentId: session.payment_intent,
+                customerEmail: session.customer_email
+              }
+            });
+            
+            await artist.save();
+            console.log(`Added £${payoutData.totalEarnings} to money owed for artist ${artistId}: ${reference}`);
+          }        }        console.log(`Cart purchase completed: ${trackIds.length} tracks for user ${userId}`);
+        
+        // Trigger fast payout for testing (30 seconds after cart purchase)
+        if (process.env.NODE_ENV !== 'production') {
+          console.log('[FAST PAYOUT] Cart purchase detected - triggering fast payout for testing');
+          try {
+            await triggerFastPayout();
+          } catch (error) {
+            console.error('[FAST PAYOUT] Error triggering fast payout:', error);
           }
+        } else {
+          console.log('[PAYOUT] Cart purchase completed - payouts will be processed by hourly cron job');
         }
-
-        console.log(`Cart purchase completed: ${trackIds.length} tracks for user ${userId}`);
       }
     }
     // Handle standard track purchase (existing logic)

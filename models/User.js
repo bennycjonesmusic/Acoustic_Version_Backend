@@ -82,6 +82,14 @@ stripeOnboardingComplete: {
   
   banned: { type: Boolean, default: false },
   totalIncome: { type: Number, default: 0 },
+  // Money owed to this user (for cart purchases, commissions, etc.)
+  moneyOwed: [{
+    amount: { type: Number, required: true }, // Amount in pounds (not pence)
+    reference: { type: String, required: true }, // Description of what this payment is for
+    createdAt: { type: Date, default: Date.now },
+    source: { type: String, required: true }, // 'cart_purchase', 'commission', etc.
+    metadata: { type: Object, default: {} } // Additional data (trackIds, customerEmail, etc.)
+  }],
   averageTrackRating: {
     type: Number,
     default: 0
