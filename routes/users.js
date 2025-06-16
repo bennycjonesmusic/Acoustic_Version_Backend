@@ -41,6 +41,7 @@ router.get('/sort-tracks', authMiddleware, sortUploadedOrPurchasedTracks);
 // Artist example uploads (max 3, 30s each)
 router.post('/artist/examples/upload', authMiddleware, upload.single('file'), uploadArtistExample);
 router.get('/artist/:id/examples', getArtistExamples);
+router.get('/artist/get-artist-examples', authMiddleware, getArtistExamples);
 router.delete('/artist/examples/:exampleId', authMiddleware, deleteArtistExample);
 
 // Update artist/admin profile (with avatar upload to S3)
