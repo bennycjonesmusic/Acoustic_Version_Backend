@@ -41,9 +41,7 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
   }
 
   const sig = req.headers['stripe-signature'];
-  let event;
-
-  try {
+  let event;  try {
     console.log('[WEBHOOK DEBUG] Attempting to construct Stripe event');
     event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
     console.log('Webhook event received:', event.type);
@@ -319,29 +317,42 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
     } catch (err) {
       console.error('[WEBHOOK] Error downgrading user after subscription cancellation:', err);
     }
-  }
-  // Handle Stripe Connect account updates
+  }  // Handle Stripe Connect account updates
   else if (event.type === 'account.updated') {
     const account = event.data.object;
+    console.log(`[WEBHOOK DEBUG] account.updated event received for account: ${account.id}`);
+    console.log(`[WEBHOOK DEBUG] charges_enabled: ${account.charges_enabled}`);
+    console.log(`[WEBHOOK DEBUG] payouts_enabled: ${account.payouts_enabled}`);
+    console.log(`[WEBHOOK DEBUG] requirements:`, account.requirements);
+    
     try {
       const user = await User.findOne({ stripeAccountId: account.id });
+      console.log(`[WEBHOOK DEBUG] Found user for account ${account.id}:`, user ? user.email : 'NOT FOUND');
+      
       if (user) {
+        console.log(`[WEBHOOK DEBUG] Current user status - stripeAccountStatus: ${user.stripeAccountStatus}, stripePayoutsEnabled: ${user.stripePayoutsEnabled}`);
+        
         // Update account status based on Stripe account data
         if (account.charges_enabled && account.payouts_enabled) {
           user.stripeAccountStatus = 'active';
           user.stripePayoutsEnabled = true;
           user.stripeOnboardingComplete = true;
+          console.log(`[WEBHOOK DEBUG] Setting account to ACTIVE (charges and payouts enabled)`);
         } else if (account.requirements && account.requirements.disabled_reason) {
           user.stripeAccountStatus = account.requirements.disabled_reason === 'rejected.other' ? 'rejected' : 'restricted';
           user.stripePayoutsEnabled = account.payouts_enabled || false;
           user.stripeOnboardingComplete = false;
+          console.log(`[WEBHOOK DEBUG] Setting account to ${user.stripeAccountStatus} (disabled_reason: ${account.requirements.disabled_reason})`);
         } else {
           user.stripeAccountStatus = 'pending';
           user.stripePayoutsEnabled = account.payouts_enabled || false;
           user.stripeOnboardingComplete = false;
+          console.log(`[WEBHOOK DEBUG] Setting account to PENDING`);
         }
         await user.save();
         console.log(`[WEBHOOK] Updated Stripe account status for user ${user.email}: status=${user.stripeAccountStatus}, payouts=${user.stripePayoutsEnabled}, complete=${user.stripeOnboardingComplete}`);
+      } else {
+        console.log(`[WEBHOOK DEBUG] No user found with stripeAccountId: ${account.id}`);
       }
     } catch (err) {
       console.error('[WEBHOOK] Error updating user Stripe account status:', err);

@@ -312,18 +312,17 @@ router.get('/dashboard-data', authMiddleware, async (req, res) => {
 })
 
 router.post('/refresh-account-status', authMiddleware, async (req, res) => {
-
+    console.log('[BACKEND] Refresh account status endpoint hit');
     try {
         const user = await User.findById(req.userId);
+        console.log('[BACKEND] User found:', !!user, 'User ID:', req.userId);
         if (!user){
             return res.status(404).json({ error: 'User not found' });
         }
         if (!user.stripeAccountId) {
             return res.status(400).json({ error: 'User does not have a Stripe account' })
         }
-    
-    
-            console.log('[Stripe Refresh] Refreshing account status for:', user.stripeAccountId);
+        console.log('[BACKEND] User has Stripe account:', user.stripeAccountId);console.log('[Stripe Refresh] Refreshing account status for:', user.stripeAccountId);
             const account = await stripeClient.accounts.retrieve(user.stripeAccountId);
          user.stripeAccountStatus = account.charges_enabled ? 'active' : 'pending';
         user.stripePayoutsEnabled = account.payouts_enabled;
