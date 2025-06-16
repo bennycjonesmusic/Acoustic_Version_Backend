@@ -93,10 +93,9 @@ stripeOnboardingComplete: {
   averageTrackRating: {
     type: Number,
     default: 0
-  },
-  maxTimeTakenForCommission: {
+  },  maxTimeTakenForCommission: {
     type: String,
-    default: '2 weeks',
+    default: '1 week',
   },
   commissionPrice: {
     type: Number,
@@ -137,12 +136,16 @@ stripeOnboardingComplete: {
   availableForCommission: {
 
     type: Boolean,
-    default: true,
-  }, // Whether the artist is currently available for commissions
+    default: true,  }, // Whether the artist is currently available for commissions
   numOfCommissions: {
     type: Number,
     default: 0,
     description: 'Number of completed commissions for this user.'
+  },
+  averageCommissionCompletionTime: {
+    type: Number,
+    default: 0,
+    description: 'Average time in days to complete commissions for this artist.'
   },
   lastOnline: {
     type: Date,
@@ -150,11 +153,8 @@ stripeOnboardingComplete: {
     description: 'Timestamp of the user\'s last activity.'
   },
   numOfUploadedTracks: {
-
     type: Number,
     default: 0,
-
-
   }
 }, {
   timestamps: true, // 
@@ -197,6 +197,48 @@ userSchema.methods.calculateAverageTrackRating = async function() {
     this.averageTrackRating = ratings.reduce((a, b) => a + b, 0) / ratings.length;
   }
   await this.save();
+};
+
+// Method to calculate and update average commission completion time
+userSchema.methods.calculateAverageCommissionCompletionTime = async function() {
+  try {
+    // Import CommissionRequest model dynamically to avoid circular dependency
+    const CommissionRequest = mongoose.model('CommissionRequest');
+    
+    // Find all completed commissions for this artist where both createdAt and completedAt exist
+    const completedCommissions = await CommissionRequest.find({
+      artist: this._id,
+      status: 'completed',
+      createdAt: { $exists: true },
+      completedAt: { $exists: true }
+    }).select('createdAt completedAt');
+
+    if (completedCommissions.length === 0) {
+      // No completed commissions, reset to 0
+      this.averageCommissionCompletionTime = 0;
+      this.numOfCommissions = 0;
+    } else {
+      // Calculate completion times in days
+      const completionTimes = completedCommissions.map(commission => {
+        const createdAt = new Date(commission.createdAt);
+        const completedAt = new Date(commission.completedAt);
+        const diffMs = completedAt - createdAt;
+        const diffDays = diffMs / (1000 * 60 * 60 * 24); // Convert ms to days
+        return diffDays;
+      });
+
+      // Calculate average completion time
+      const totalTime = completionTimes.reduce((sum, time) => sum + time, 0);
+      this.averageCommissionCompletionTime = Math.round((totalTime / completionTimes.length) * 100) / 100; // Round to 2 decimal places
+      this.numOfCommissions = completedCommissions.length;
+    }
+
+    await this.save();
+    return this.averageCommissionCompletionTime;
+  } catch (error) {
+    console.error('Error calculating average commission completion time:', error);
+    throw error;
+  }
 };
 
 //sanitize for security purposes

@@ -11,6 +11,34 @@ import { Upload } from '@aws-sdk/lib-storage';
 import path from 'path';
 import fs from 'fs';
 
+// Helper function to calculate expiry date based on delivery time string
+const calculateExpiryDate = (createdAt, deliveryTimeString) => {
+    const created = new Date(createdAt);
+    
+    // Parse the delivery time string (e.g., "2 weeks", "1 month", "3 days")
+    const match = deliveryTimeString.match(/^(\d+)\s+(days?|weeks?|months?)$/i);
+      if (!match) {
+        // Default to 1 week if can't parse
+        console.log(`[CRON] Warning: Could not parse delivery time "${deliveryTimeString}", defaulting to 1 week`);
+        return new Date(created.getTime() + 7 * 24 * 60 * 60 * 1000);
+    }
+    
+    const amount = parseInt(match[1]);
+    const unit = match[2].toLowerCase();
+    
+    let milliseconds = 0;
+    
+    if (unit.startsWith('day')) {
+        milliseconds = amount * 24 * 60 * 60 * 1000; // days to milliseconds
+    } else if (unit.startsWith('week')) {
+        milliseconds = amount * 7 * 24 * 60 * 60 * 1000; // weeks to milliseconds
+    } else if (unit.startsWith('month')) {
+        milliseconds = amount * 30 * 24 * 60 * 60 * 1000; // months to milliseconds (approximate)
+    }
+    
+    return new Date(created.getTime() + milliseconds);
+};
+
 //in wrong place
 // Admin-only: Issue a refund for a regular track purchase (not commission)
 export const refundTrackPurchase = async (req, res) => {
@@ -121,9 +149,8 @@ export const createCommissionRequest = async (req, res) => {
                     quantity: 1,
                 },
             ],
-            mode: 'payment',
-            success_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/commission/success/${commission._id}`,
-            cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/commission/cancel/${commission._id}`,
+            mode: 'payment',            success_url: `${process.env.CLIENT_URL || 'http://localhost:3000'}/commission/success/${commission._id}`,
+            cancel_url: `${process.env.CLIENT_URL || 'http://localhost:3000'}/commission/cancel/${commission._id}`,
             metadata: {
                 commissionId: commission._id.toString(),
                 customerId: customerId,
@@ -260,37 +287,114 @@ export const processExpiredCommissions = async (req, res) => {
 export const processExpiredCommissionsStandalone = async () => {
     try {
         const now = new Date();
-        // Set expiry threshold to 2 weeks (14 days) from commission creation
-        const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);        // Find commissions created more than 2 weeks ago, not delivered, completed, refunded, or cancelled
-        const expired = await CommissionRequest.find({
-            createdAt: { $lt: twoWeeksAgo },
+        
+        // Find all commissions that are in progress and populate artist data
+        const commissions = await CommissionRequest.find({
             status: { $in: ['requested', 'accepted', 'in_progress'] }
-        });
+        }).populate('artist', 'maxTimeTakenForCommission username email');
+        
+        console.log(`[CRON] Found ${commissions.length} active commissions to check for expiry`);
+        
+        let expired = [];
+        
+        // Check each commission individually based on artist's delivery time
+        for (const commission of commissions) {
+            if (!commission.artist) {
+                console.log(`[CRON] Skipping commission ${commission._id} - artist not found`);
+                continue;
+            }
+              // Parse artist's delivery time (default to 1 week if not set)
+            const deliveryTime = commission.artist.maxTimeTakenForCommission || '1 week';
+            const expiryDate = calculateExpiryDate(commission.createdAt, deliveryTime);
+            
+            if (now > expiryDate) {
+                expired.push(commission);
+                console.log(`[CRON] Commission ${commission._id} expired (artist: ${commission.artist.username}, delivery time: ${deliveryTime})`);
+            }
+        }
         
         console.log(`[CRON] Found ${expired.length} expired commissions to process`);
-        
-        let results = [];
+          let results = [];
         for (const commission of expired) {
-            // Refund via Stripe if payment was made
+            // Only process refunds if payment was made AND successfully captured
             if (commission.stripePaymentIntentId) {
                 try {
+                    // First, verify the payment intent status to ensure money was actually received
+                    const paymentIntent = await stripeClient.paymentIntents.retrieve(commission.stripePaymentIntentId);
+                    
+                    if (paymentIntent.status !== 'succeeded') {
+                        console.log(`[CRON] Skipping refund for commission ${commission._id} - payment status: ${paymentIntent.status}`);
+                        // Just cancel the commission without refunding since payment wasn't completed
+                        commission.status = 'cancelled';
+                        commission.cancellationReason = `Commission expired after ${commission.artist.maxTimeTakenForCommission || '1 week'} - payment not completed (${paymentIntent.status})`;
+                        await commission.save();
+                        results.push({ 
+                            commissionId: commission._id, 
+                            refunded: false,
+                            reason: `Payment not completed (${paymentIntent.status})`,
+                            deliveryTime: commission.artist.maxTimeTakenForCommission || '1 week',
+                            artist: commission.artist.username
+                        });
+                        continue;
+                    }
+                    
+                    // Verify the payment was captured (money actually received)
+                    if (paymentIntent.charges?.data?.[0]?.captured !== true) {
+                        console.log(`[CRON] Skipping refund for commission ${commission._id} - payment not captured`);
+                        commission.status = 'cancelled';
+                        commission.cancellationReason = `Commission expired after ${commission.artist.maxTimeTakenForCommission || '1 week'} - payment not captured`;
+                        await commission.save();
+                        results.push({ 
+                            commissionId: commission._id, 
+                            refunded: false,
+                            reason: 'Payment not captured',
+                            deliveryTime: commission.artist.maxTimeTakenForCommission || '1 week',
+                            artist: commission.artist.username
+                        });
+                        continue;
+                    }
+                    
+                    // Now we know the payment was successful and captured - safe to refund
                     await stripeClient.refunds.create({
                         payment_intent: commission.stripePaymentIntentId,
-                        reason: 'requested_by_customer',                        metadata: { commissionId: commission._id.toString() }
+                        reason: 'requested_by_customer',
+                        metadata: { 
+                            commissionId: commission._id.toString(),
+                            expiredAfter: commission.artist.maxTimeTakenForCommission || '1 week'
+                        }
                     });
                     commission.status = 'cancelled';
+                    commission.cancellationReason = `Commission expired after ${commission.artist.maxTimeTakenForCommission || '1 week'} - automatically refunded`;
                     await commission.save();
-                    results.push({ commissionId: commission._id, refunded: true });
-                    console.log(`[CRON] Refunded commission ${commission._id}`);
+                    results.push({ 
+                        commissionId: commission._id, 
+                        refunded: true,
+                        deliveryTime: commission.artist.maxTimeTakenForCommission || '1 week',
+                        artist: commission.artist.username
+                    });
+                    console.log(`[CRON] Refunded commission ${commission._id} (expired after ${commission.artist.maxTimeTakenForCommission || '1 week'})`);
                 } catch (err) {
-                    results.push({ commissionId: commission._id, refunded: false, error: err.message });
+                    results.push({
+                        commissionId: commission._id, 
+                        refunded: false, 
+                        error: err.message,
+                        deliveryTime: commission.artist.maxTimeTakenForCommission || '1 week',
+                        artist: commission.artist.username
+                    });
                     console.error(`[CRON] Failed to refund commission ${commission._id}:`, err.message);
                 }
             } else {
                 commission.status = 'cancelled';
+                commission.cancellationReason = `Commission expired after ${commission.artist.maxTimeTakenForCommission || '1 week'} - no payment to refund`;
                 await commission.save();
-                results.push({ commissionId: commission._id, refunded: false, error: 'No payment intent' });
-                console.log(`[CRON] Cancelled commission ${commission._id} (no payment intent)`);
+                results.push({ 
+                    commissionId: commission._id, 
+                    refunded: false, 
+                    error: 'No payment intent',
+                    deliveryTime: commission.artist.maxTimeTakenForCommission || '1 week',
+                    artist: commission.artist.username
+                });
+                console.log(`[CRON] Cancelled commission ${commission._id} (expired after ${commission.artist.maxTimeTakenForCommission || '1 week'}, no payment intent)`);
             }
         }
         
@@ -773,4 +877,143 @@ export const getCommissionById = async (req, res) => {
   } catch (err) {
     return res.status(500).json({ error: 'Internal server error', details: err.message || err });
   }
+};
+
+// TEST ROUTE: Manually trigger commission expiry processing for testing
+export const testProcessExpiredCommissions = async (req, res) => {
+    try {
+        // Only allow in development or if explicitly enabled
+        if (process.env.NODE_ENV === 'production' && !process.env.ENABLE_TEST_ROUTES) {
+            return res.status(403).json({ error: 'Test routes not enabled in production' });
+        }
+        
+        console.log('[TEST] Manually triggering commission expiry processing...');
+        const results = await processExpiredCommissionsStandalone();
+        
+        return res.status(200).json({ 
+            message: 'Commission expiry processing completed',
+            results: results,
+            processedCount: results.length
+        });
+    } catch (error) {
+        console.error('[TEST] Error processing expired commissions:', error);
+        return res.status(500).json({ error: 'Internal server error', details: error.message });
+    }
+};
+
+// TEST ROUTE: Create a test commission that appears expired for testing refund logic
+export const createTestExpiredCommission = async (req, res) => {
+    try {
+        // Only allow in development or if explicitly enabled
+        if (process.env.NODE_ENV === 'production' && !process.env.ENABLE_TEST_ROUTES) {
+            return res.status(403).json({ error: 'Test routes not enabled in production' });
+        }
+        
+        const { artistId, customerId, paymentIntentId } = req.body;
+        
+        if (!artistId || !customerId) {
+            return res.status(400).json({ error: 'artistId and customerId are required' });
+        }
+        
+        // Create a commission that's "expired" (created 30 days ago)
+        const expiredDate = new Date();
+        expiredDate.setDate(expiredDate.getDate() - 30); // 30 days ago
+        
+        const testCommission = new CommissionRequest({
+            customer: customerId,
+            artist: artistId,
+            requirements: 'Test commission for refund testing',
+            price: 25.00,
+            status: 'accepted', // In progress status so it can be expired
+            stripePaymentIntentId: paymentIntentId, // Optional - if you want to test with real payment
+            createdAt: expiredDate,
+            updatedAt: expiredDate
+        });
+        
+        await testCommission.save();
+        
+        console.log(`[TEST] Created test expired commission: ${testCommission._id}`);
+        
+        return res.status(201).json({
+            message: 'Test expired commission created',
+            commission: {
+                id: testCommission._id,
+                createdAt: testCommission.createdAt,
+                status: testCommission.status,
+                paymentIntentId: testCommission.stripePaymentIntentId
+            }
+        });
+        
+    } catch (error) {
+        console.error('[TEST] Error creating test commission:', error);
+        return res.status(500).json({ error: 'Internal server error', details: error.message });
+    }
+};
+
+// TEST ROUTE: Make all active commissions appear expired for testing
+export const makeAllCommissionsExpired = async (req, res) => {
+    try {
+        // Only allow in development or if explicitly enabled
+        if (process.env.NODE_ENV === 'production' && !process.env.ENABLE_TEST_ROUTES) {
+            return res.status(403).json({ error: 'Test routes not enabled in production' });
+        }
+        
+        // Find all active commissions that could potentially expire
+        const activeCommissions = await CommissionRequest.find({
+            status: { $in: ['requested', 'accepted', 'in_progress'] }
+        }).populate('artist', 'maxTimeTakenForCommission username');
+        
+        console.log(`[TEST] Found ${activeCommissions.length} active commissions to make expired`);
+        
+        let updatedCount = 0;
+        
+        for (const commission of activeCommissions) {
+            const deliveryTime = commission.artist?.maxTimeTakenForCommission || '1 week';
+            
+            // Calculate how far back to set the creation date to make it expired
+            let daysToSubtract = 8; // Default to 8 days (more than 1 week)
+            
+            // Parse delivery time to determine how far back to set the date
+            const match = deliveryTime.match(/^(\d+)\s+(days?|weeks?|months?)$/i);
+            if (match) {
+                const amount = parseInt(match[1]);
+                const unit = match[2].toLowerCase();
+                
+                if (unit.startsWith('day')) {
+                    daysToSubtract = amount + 1;
+                } else if (unit.startsWith('week')) {
+                    daysToSubtract = (amount * 7) + 1;
+                } else if (unit.startsWith('month')) {
+                    daysToSubtract = (amount * 30) + 1;
+                }
+            }
+            
+            // Set creation date to make the commission expired
+            const expiredDate = new Date();
+            expiredDate.setDate(expiredDate.getDate() - daysToSubtract);
+            
+            await CommissionRequest.findByIdAndUpdate(commission._id, {
+                createdAt: expiredDate,
+                updatedAt: expiredDate
+            });
+            
+            updatedCount++;
+            console.log(`[TEST] Made commission ${commission._id} expired (backdated by ${daysToSubtract} days for delivery time: ${deliveryTime})`);
+        }
+        
+        return res.status(200).json({
+            message: `Successfully made ${updatedCount} commissions appear expired`,
+            updatedCommissions: updatedCount,
+            details: activeCommissions.map(c => ({
+                id: c._id,
+                artist: c.artist?.username,
+                deliveryTime: c.artist?.maxTimeTakenForCommission || '1 week',
+                status: c.status
+            }))
+        });
+        
+    } catch (error) {
+        console.error('[TEST] Error making commissions expired:', error);
+        return res.status(500).json({ error: 'Internal server error', details: error.message });
+    }
 };

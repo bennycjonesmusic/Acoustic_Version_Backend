@@ -8,7 +8,9 @@ export function toUserSummary(users) {
     avatar: user.avatar,
     customerCommissionPrice: user.customerCommissionPrice,  // Fixed spelling to match frontend interface
     averageTrackRating: user.averageTrackRating,
-    artistExample: user.artistExamples && user.artistExamples.length > 0 ? user.artistExamples[0].url : null
- 
+    artistExample: user.artistExamples && user.artistExamples.length > 0 ? user.artistExamples[0].url : null,
+    maxTimeTakenForCommission: user.maxTimeTakenForCommission,
+    averageCommissionCompletionTime: user.averageCommissionCompletionTime,
+    numOfCommissions: user.numOfCommissions
   }));
 }

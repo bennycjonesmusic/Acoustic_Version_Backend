@@ -386,7 +386,7 @@ export const resetPassword = async (req, res) => {
 // Update user profile (avatar, about, etc.)
 export const updateProfile = async (req, res) => {
   try {
-    const allowedFields = ['about', 'commissionPrice', 'availableForCommission'];
+    const allowedFields = ['about', 'commissionPrice', 'availableForCommission', 'maxTimeTakenForCommission'];
     const updates = allowedFields.reduce((acc, key) => {
       if (req.body[key] !== undefined) acc[key] = req.body[key];
       return acc;
@@ -401,14 +401,18 @@ export const updateProfile = async (req, res) => {
       updates.avatar = undefined;
     }
 
-    
-
-    //real defensive code here...
+        //real defensive code here...
     if (req.body.availableForCommission !== undefined) {
-      if (typeof req.body.availableForCommission !== 'boolean') {
+      // Handle string conversion from FormData
+      let boolValue;
+      if (typeof req.body.availableForCommission === 'string') {
+        boolValue = req.body.availableForCommission.toLowerCase() === 'true';
+      } else if (typeof req.body.availableForCommission === 'boolean') {
+        boolValue = req.body.availableForCommission;
+      } else {
         return res.status(400).json({ message: 'Invalid value for availableForCommission.' });
       }
-      updates.availableForCommission = req.body.availableForCommission;
+      updates.availableForCommission = boolValue;
     }
 
     if (Object.keys(updates).length === 0) {
@@ -437,6 +441,39 @@ export const updateProfile = async (req, res) => {
       }
       updates.commissionPrice = price;
       // Note: customerCommissionPrice will be auto-calculated by User model pre-save middleware
+    }    // Validate maxTimeTakenForCommission if present
+    if (updates.maxTimeTakenForCommission !== undefined) {
+      if (typeof updates.maxTimeTakenForCommission !== 'string' || updates.maxTimeTakenForCommission.trim().length === 0) {
+        return res.status(400).json({ message: 'Commission delivery time must be a non-empty string.' });
+      }
+      
+      // Parse and validate minimum 7 days
+      const timeString = updates.maxTimeTakenForCommission.trim();
+      const timePattern = /^(\d+)\s+(days?|weeks?|months?)$/i;
+      const match = timePattern.exec(timeString);
+      
+      if (!match) {
+        return res.status(400).json({ message: 'Commission delivery time must be in format like "1 week", "2 weeks", "1 month", etc.' });
+      }
+      
+      const amount = parseInt(match[1]);
+      const unit = match[2].toLowerCase();
+      
+      // Convert to days for validation
+      let totalDays = 0;
+      if (unit.startsWith('day')) {
+        totalDays = amount;
+      } else if (unit.startsWith('week')) {
+        totalDays = amount * 7;
+      } else if (unit.startsWith('month')) {
+        totalDays = amount * 30; // approximate
+      }
+      
+      if (totalDays < 7) {
+        return res.status(400).json({ message: 'Commission delivery time must be at least 7 days (1 week).' });
+      }
+      
+      updates.maxTimeTakenForCommission = timeString;
     }
   
     // No need to validate avatar here, multer-s3 already does it

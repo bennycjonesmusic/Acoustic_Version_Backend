@@ -3,6 +3,9 @@ import {
   createCommissionRequest, 
   approveCommissionAndPayout, 
   processExpiredCommissions,
+  testProcessExpiredCommissions,
+  createTestExpiredCommission,
+  makeAllCommissionsExpired,
   uploadFinishedTrack,
   confirmOrDenyCommission,
   refundCommission,
@@ -36,6 +39,15 @@ router.post('/approve-and-payout', authMiddleware, approveCommissionAndPayout);
 
 // Process expired commissions and refund (admin only, can be called by cron or manually)
 router.post('/process-expired', authMiddleware, isAdmin, processExpiredCommissions);
+
+// TEST ROUTE: Manually trigger commission expiry processing (development/testing only)
+router.post('/test/process-expired', testProcessExpiredCommissions);
+
+// TEST ROUTE: Create a test expired commission for testing refund logic
+router.post('/test/create-expired', createTestExpiredCommission);
+
+// TEST ROUTE: Make all active commissions appear expired for testing
+router.post('/test/expire-all', makeAllCommissionsExpired);
 
 // Artist uploads finished track for commission (audio file)
 router.post('/upload-finished', authMiddleware, upload.single('file'), uploadFinishedTrack);
@@ -117,9 +129,8 @@ router.post('/pay', authMiddleware, async (req, res) => {
           quantity: 1,
         },
       ],
-      mode: 'payment',
-      success_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/commission/success/${commission._id}`,
-      cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/commission/cancel/${commission._id}`,
+      mode: 'payment',      success_url: `${process.env.CLIENT_URL || 'http://localhost:3000'}/commission/success/${commission._id}`,
+      cancel_url: `${process.env.CLIENT_URL || 'http://localhost:3000'}/commission/cancel/${commission._id}`,
       metadata: {
         commissionId: commission._id.toString(),
         customerId: commission.customer._id.toString(),

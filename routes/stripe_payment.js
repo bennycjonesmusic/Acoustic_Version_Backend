@@ -47,11 +47,9 @@ router.post('/create-account-link', authMiddleware, async (req, res) => {
         }
         // Fetch user again to confirm
         const updatedUser = await User.findById(req.userId);
-        console.log('[Stripe Onboarding] User after:', updatedUser);
-        const accountLink = await stripeClient.accountLinks.create({
-            account: user.stripeAccountId,
-            refresh_url: `${process.env.CLIENT_URL}/reauth`,
-            return_url: `${process.env.CLIENT_URL}/artist-dashboard`,
+        console.log('[Stripe Onboarding] User after:', updatedUser);        const accountLink = await stripeClient.accountLinks.create({
+            account: user.stripeAccountId,            refresh_url: `${process.env.CLIENT_URL || 'http://localhost:3000'}/reauth`,
+            return_url: `${process.env.CLIENT_URL || 'http://localhost:3000'}/artist-dashboard`,
             type: 'account_onboarding',
         });
         res.status(200).json({ url: accountLink.url });
@@ -62,16 +60,15 @@ router.post('/create-account-link', authMiddleware, async (req, res) => {
 }); 
 
 router.post('/create-cart-checkout-session', authMiddleware, async (req, res) => {
-
+    console.log('[CART CHECKOUT] Starting cart checkout session creation for user:', req.userId);
+    
     try {
-
         const user = await User.findById(req.userId).populate('cart.track');
+        console.log('[CART CHECKOUT] User found:', !!user, 'Cart length:', user?.cart?.length || 0);
+        
         if (!user || !user.cart || user.cart.length === 0){
-
-
+            console.log('[CART CHECKOUT] Cart is empty');
             return res.status(400).json({error: 'Cart is empty'})
-
-
         }
 
         // Validate tracks and collect artist payouts
@@ -102,11 +99,13 @@ router.post('/create-cart-checkout-session', authMiddleware, async (req, res) =>
             }
             artistPayouts[artistId].tracks.push(trackIdString);
             artistPayouts[artistId].totalEarnings += Number(track.price);
-        }
-
-        if (validTracks.length === 0) {
+        }        if (validTracks.length === 0) {
+            console.log('[CART CHECKOUT] No valid tracks found after filtering');
             return res.status(400).json({ error: 'No valid tracks in cart to purchase' });
         }
+
+        console.log('[CART CHECKOUT] Valid tracks found:', validTracks.length);
+        console.log('[CART CHECKOUT] Artist payouts:', artistPayouts);
 
         // Build line items for all tracks
         const line_items = [];
@@ -129,27 +128,41 @@ router.post('/create-cart-checkout-session', authMiddleware, async (req, res) =>
                 },
                 quantity: 1,
             });
-        }        const session = await stripeClient.checkout.sessions.create({
+        }
+
+        console.log('[CART CHECKOUT] Line items created:', line_items.length);
+        console.log('[CART CHECKOUT] Total platform fee:', totalPlatformFee);
+        console.log('[CART CHECKOUT] Environment check - CLIENT_URL:', process.env.CLIENT_URL);        const session = await stripeClient.checkout.sessions.create({
             payment_method_types: ['card'],
             line_items: line_items,
             mode: 'payment',
-            success_url: `${process.env.CLIENT_URL}/success?session_id={CHECKOUT_SESSION_ID}`,
-            cancel_url: `${process.env.CLIENT_URL}/cancel`,
+            success_url: `${process.env.CLIENT_URL || 'http://localhost:3000'}/success?session_id={CHECKOUT_SESSION_ID}`,
+            cancel_url: `${process.env.CLIENT_URL || 'http://localhost:3000'}/cancel`,
             metadata: {
                 userId: req.userId.toString(),
                 purchaseType: 'cart',
                 trackIds: validTracks.map(t => (t._id || t.id).toString()).join(','),
                 artistPayouts: JSON.stringify(artistPayouts),
                 totalPlatformFee: totalPlatformFee.toString()
-            }
-        });
+            }        });
 
+        console.log('[CART CHECKOUT] Stripe session created successfully:', session.id);
+        
         if (!session) {
+            console.log('[CART CHECKOUT] Session creation returned null/undefined');
             return res.status(500).json({ error: 'Failed to create checkout session' });
         }
+        
+        console.log('[CART CHECKOUT] Returning session URL:', session.url);
         return res.status(200).json({ url: session.url });
     } catch (error) {
-        console.error('Error creating cart checkout session:', error);
+        console.error('[CART CHECKOUT] Error creating cart checkout session:', error);
+        console.error('[CART CHECKOUT] Error details:', {
+            message: error.message,
+            stack: error.stack,
+            code: error.code,
+            type: error.type
+        });
         return res.status(500).json({ error: 'Failed to create checkout session' });
     }
 });
@@ -231,10 +244,9 @@ router.post('/create-checkout-session', authMiddleware, async (req, res) => {
                     },
                     quantity: 1,
                 },
-            ],
-            mode: 'payment',
-            success_url: `${process.env.CLIENT_URL}/success?session_id={CHECKOUT_SESSION_ID}`,
-            cancel_url: `${process.env.CLIENT_URL}/cancel`,
+            ],            mode: 'payment',
+            success_url: `${process.env.CLIENT_URL || 'http://localhost:3000'}/success?session_id={CHECKOUT_SESSION_ID}`,
+            cancel_url: `${process.env.CLIENT_URL || 'http://localhost:3000'}/cancel`,
             payment_intent_data: {
                 application_fee_amount: platformFee, // platform receives this
                 transfer_data: {

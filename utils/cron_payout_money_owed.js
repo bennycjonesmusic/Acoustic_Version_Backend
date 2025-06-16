@@ -118,9 +118,15 @@ async function processPayouts() {
               source: owed.source,
               originalAmount: owed.amount.toString(),
               createdAt: owed.createdAt.toISOString(),
-              ...owed.metadata
+              // Ensure all metadata values are strings for Stripe
+              ...Object.fromEntries(
+                Object.entries(owed.metadata || {}).map(([key, value]) => [
+                  key, 
+                  typeof value === 'string' ? value : JSON.stringify(value)
+                ])
+              )
             }
-          });          console.log(`[CRON PAYOUT] ✅ Successfully transferred £${owed.amount} to ${user.email}: ${owed.reference}`);
+          });console.log(`[CRON PAYOUT] ✅ Successfully transferred £${owed.amount} to ${user.email}: ${owed.reference}`);
           console.log(`[CRON PAYOUT] Transfer ID: ${transfer.id}`);
             // If this was a commission payout, update the commission status
           if (owed.source === 'commission' && owed.commissionId) {

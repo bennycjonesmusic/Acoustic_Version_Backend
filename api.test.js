@@ -3,7 +3,7 @@
 import { expect } from 'chai';
 import dotenv from 'dotenv';
 dotenv.config();
-process.env.FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
+process.env.CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:3000';
 import request from 'supertest';
 import mongoose from 'mongoose';
 import User from './models/User.js';

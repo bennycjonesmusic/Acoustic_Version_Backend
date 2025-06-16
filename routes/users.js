@@ -146,6 +146,31 @@ router.get('/admin/all-scheduled-payouts', authMiddleware, async (req, res) => {
 router.get('/users/:id/tracks', authMiddleware, getUploadedTracksByUser);
 router.get('/artist/:id/tracks', getUploadedTracksByUserId);
 
+// Recalculate average commission completion time for the current user (artist only)
+router.post('/recalculate-commission-time', authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (user.role !== 'artist') {
+      return res.status(403).json({ message: 'Only artists can recalculate commission completion time' });
+    }
+
+    const averageTime = await user.calculateAverageCommissionCompletionTime();
+
+    res.status(200).json({
+      message: 'Average commission completion time recalculated successfully',
+      averageCommissionCompletionTime: averageTime,
+      numOfCommissions: user.numOfCommissions
+    });
+  } catch (error) {
+    console.error('Error recalculating commission completion time:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 // Remove the registration route from users.js (handled in auth.js)
 
 export default router;

@@ -39,14 +39,26 @@ export const addToCart = async (req, res) => {
             console.log('🛒 addToCart: Track not found for ID:', trackId);
             return res.status(404).json({ message: "Track not found" });
         }
-        
-        console.log('🛒 addToCart: Track found:', track.title);
+          console.log('🛒 addToCart: Track found:', track.title);
         console.log('🛒 addToCart: Track owner:', track.user.toString());
-        console.log('🛒 addToCart: Current user:', req.userId.toString());        // 🔒 Security: Prevent users from adding their own tracks to cart
+        console.log('🛒 addToCart: Current user:', req.userId.toString());
+        
+        // 🔒 Security: Prevent users from adding their own tracks to cart
         if (track.user.toString() === req.userId.toString()) {
             console.log('🛒 addToCart: User trying to add their own track');
             return res.status(400).json({ message: "You cannot add your own track to cart" });
         }
+        
+        // Security: Check if user has already purchased this track
+        const alreadyPurchased = user.purchasedTracks.some(purchase => 
+            purchase.track && purchase.track.toString() === trackId && !purchase.refunded
+        );
+        if (alreadyPurchased) {
+            console.log('🛒 addToCart: User has already purchased this track');
+            return res.status(400).json({ message: "You have already purchased this track" });
+        }
+
+
         
         console.log('🛒 addToCart: Current cart items:', user.cart.length);
         
@@ -125,3 +137,40 @@ export const getCart = async (req, res) => {
         return res.status(500).json({ message: "Internal server error" });
     }
 }
+
+// 🧹 Helper function to clean cart of already purchased tracks
+export const cleanCart = async (req, res) => {
+    try {
+        const user = await User.findById(req.userId);
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+        
+        const originalCartLength = user.cart.length;
+        
+        // Filter out tracks that have already been purchased
+        user.cart = user.cart.filter(cartItem => {
+            const alreadyPurchased = user.purchasedTracks.some(purchase => 
+                purchase.track && purchase.track.toString() === cartItem.track.toString() && !purchase.refunded
+            );
+            return !alreadyPurchased;
+        });
+        
+        const removedCount = originalCartLength - user.cart.length;
+        
+        if (removedCount > 0) {
+            await user.save();
+            console.log(`🧹 Cleaned ${removedCount} already purchased tracks from ${user.username}'s cart`);
+        }
+        
+        return res.status(200).json({ 
+            message: `Cart cleaned. Removed ${removedCount} already purchased tracks.`,
+            removedCount,
+            currentCartSize: user.cart.length
+        });
+        
+    } catch (error) {
+        console.error("🧹 Error cleaning cart:", error);
+        return res.status(500).json({ message: "Internal server error" });
+    }
+};

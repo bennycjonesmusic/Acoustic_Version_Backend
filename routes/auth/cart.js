@@ -1,6 +1,6 @@
 import express from 'express';
 import authMiddleware from '../../middleware/customer_auth.js';
-import { addToCart, removeFromCart, getCart } from '../../controllers/cart.js';
+import { addToCart, removeFromCart, getCart, cleanCart } from '../../controllers/cart.js';
 
 const router = express.Router();
 
@@ -15,6 +15,9 @@ router.post('/add', authMiddleware, addToCart);
 // DELETE /auth/cart/remove/:trackId - Remove track from cart
 router.delete('/remove/:trackId', authMiddleware, removeFromCart);
 
+// POST /auth/cart/clean - Remove already purchased tracks from cart
+router.post('/clean', authMiddleware, cleanCart);
+
 // POST /auth/cart/clear - Clear entire cart (bonus route)
 router.post('/clear', authMiddleware, async (req, res) => {
     try {
@@ -26,8 +29,8 @@ router.post('/clear', authMiddleware, async (req, res) => {
         
         user.cart = [];
         await user.save();
-        return res.status(200).json({ message: "Cart cleared successfully" });
         
+        return res.status(200).json({ message: "Cart cleared successfully" });
     } catch (error) {
         console.error("Error clearing cart:", error);
         return res.status(500).json({ message: "Internal server error" });

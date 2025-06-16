@@ -107,8 +107,7 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
               return track ? track.title : `Track ${trackId}`;
             }).join(', ');
             
-            const reference = `Cart purchase: ${trackTitles} @ ${new Date().toLocaleDateString()}`;
-              // Add to money owed - this will be paid by cron job
+            const reference = `Cart purchase: ${trackTitles} @ ${new Date().toLocaleDateString()}`;              // Add to money owed - this will be paid by cron job
             artist.moneyOwed.push({
               amount: payoutData.totalEarnings, // Amount in pounds
               reference: reference,
@@ -116,7 +115,7 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
               metadata: {
                 type: 'track_purchase_payout',
                 userId: userId,
-                trackIds: payoutData.tracks,
+                trackIds: Array.isArray(payoutData.tracks) ? payoutData.tracks.join(',') : payoutData.tracks.toString(),
                 purchaseType: 'cart',
                 paymentIntentId: session.payment_intent,
                 customerEmail: session.customer_email,

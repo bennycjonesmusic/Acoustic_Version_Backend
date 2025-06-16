@@ -14,7 +14,7 @@ const transporter = nodemailer.createTransport({
 
 export const sendFollowersNewTrack = async (userEmail, artist, newTrack) => {
   // Direct link to the track detail page
-  const trackUrl = `${process.env.FRONTEND_URL}/track/${newTrack._id}`;
+  const trackUrl = `${process.env.CLIENT_URL}/track/${newTrack._id}`;
 
   const mailOptions = {
     from: `AcousticVersion <${process.env.EMAIL_USER}>`,
@@ -37,7 +37,7 @@ export const sendFollowersNewTrack = async (userEmail, artist, newTrack) => {
 
 export const sendCommissionPreviewEmail = async (customerEmail, artist, commission) => {
   // Direct link to the preview file (assuming a frontend route for preview)
-  const previewUrl = `${process.env.FRONTEND_URL}/commission/preview/${commission._id}`;
+  const previewUrl = `${process.env.CLIENT_URL}/commission/preview/${commission._id}`;
 
   const mailOptions = {
     from: `AcousticVersion <${process.env.EMAIL_USER}>`,

@@ -663,17 +663,31 @@ export const getTrack = async (req, res) => {
         // Validate ObjectId BEFORE querying
         if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
             return res.status(400).json({ message: 'Invalid track ID' });
-        }        const track = await BackingTrack.findById(req.params.id)
-            .populate('user', 'avatar username')
-            .populate('comments.user', 'avatar username');
+        }
+
+        // First get the track without populate to see if basic fetch works
+        const track = await BackingTrack.findById(req.params.id);
         if (!track) {
             return res.status(404).json({ message: 'Track not found' });
         }
-        return res.status(200).json(track.toJSON({
-            viewerRole: req.user?.role || 'public',
-            viewerId: req.userId || null,
-            purchasedTrackIds: user?.purchasedTracks || []
-        }));
+
+        // Then try to populate - if it fails, return track without populated data
+        try {
+            await track.populate('user', 'avatar username');
+            await track.populate({
+                path: 'comments.user', 
+                select: 'avatar username',
+                options: { strictPopulate: false }
+            });
+            await track.populate({
+                path: 'ratings.user',
+                select: 'avatar username', 
+                options: { strictPopulate: false }
+            });
+        } catch (populateError) {
+            console.error('Error populating track data:', populateError);
+            // Continue with unpopulated track data
+        }        return res.status(200).json(track);
     } catch (error) {
         console.error('Error in getTrack:', error); // Log the actual error for debugging
         return res.status(500).json({ message: 'Internal server error' });
