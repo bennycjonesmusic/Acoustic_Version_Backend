@@ -9,7 +9,7 @@ import * as Filter from 'bad-words'; //package to prevent profanity. due to impo
 import zxcvbn from 'zxcvbn'; //package for password strength
 import { validateEmail } from '../utils/emailValidator.js';
 import { sendVerificationEmail, sendPasswordResetEmail } from '../utils/emailAuthentication.js';
-import { registerSchema, loginSchema, artistAboutSchema } from './validationSchemas.js';
+import { registerSchema, loginSchema, artistAboutSchema, artistInstrumentSchema } from './validationSchemas.js';
 import crypto from 'crypto';
 import adminEmails from '../utils/admins.js';
 import makeAdmin from '../middleware/make_admin.js';
@@ -54,15 +54,22 @@ export const register = async (req, res) => {
                 if (typeof avatar !== 'string' || !urlPattern.test(avatar)) {
                     return res.status(400).json({ message: 'Avatar must be a valid image URL (jpg, jpeg, png, gif, webp).' });
                 }
-            }
-        } else {
+            }        } else {
             // For non-artist/admin, ignore or skip about and avatar validation
             // Optionally, you could delete about and avatar if present: delete req.body.about; delete req.body.avatar;
         }
-        const isEmailValid = await validateEmail(email);
-        if (! isEmailValid){
-            return res.status(400).json({message: "Invalid email, please try a different email"});
+        
+        // Validate email format and availability
+        try {
+            const isEmailValid = await validateEmail(email);
+            if (!isEmailValid) {
+                return res.status(400).json({message: "Invalid email format. Please enter a valid email address."});
+            }
+        } catch (emailError) {
+            console.error('Email validation error:', emailError.message);
+            return res.status(500).json({message: "Email validation service unavailable. Please try again later."});
         }
+        
         const passwordStrength = zxcvbn(password);
         if (passwordStrength.score < 3){
             return res.status(400).json({message: "Password is too weak. Needs more power."});
@@ -189,8 +196,61 @@ export const deleteAccount = async(req, res) => {
             return res.status(400).json({ message: "Invalid password"});
         }
    
+   // Find all tracks uploaded by this user
+   const userTracks = await BackingTrack.find({ user: req.userId });
    
-    await User.findByIdAndDelete(req.userId);
+   if (userTracks.length > 0) {
+       // Find users who have purchased these tracks
+       const tracksPurchasedByUser = await User.find({
+           purchasedTracks: { $elemMatch: { track: { $in: userTracks.map(track => track._id) } } }
+       });
+       
+       const purchasedTrackIds = new Set();
+       for (const purchaser of tracksPurchasedByUser) {
+           for (const purchasedTrack of purchaser.purchasedTracks) {
+               purchasedTrackIds.add(purchasedTrack.track.toString());
+           }
+       }
+       
+       // Delete tracks that haven't been purchased by anyone
+       const tracksToDelete = userTracks.filter(track => !purchasedTrackIds.has(track._id.toString()));
+       
+       if (tracksToDelete.length > 0) {
+           await BackingTrack.deleteMany({ _id: { $in: tracksToDelete.map(track => track._id) } });
+           console.log(`Deleted ${tracksToDelete.length} tracks that had no purchases`);
+       }
+       
+       // For tracks that have been purchased, just remove them from public listings
+       // but keep them in the database for purchased users to access
+       const tracksToHide = userTracks.filter(track => purchasedTrackIds.has(track._id.toString()));
+       if (tracksToHide.length > 0) {
+           await BackingTrack.updateMany(
+               { _id: { $in: tracksToHide.map(track => track._id) } },
+               { $set: { isDeleted: true, deletedAt: new Date() } }
+           );
+           console.log(`Marked ${tracksToHide.length} purchased tracks as deleted but preserved for buyers`);
+       }
+   }   
+   await User.findByIdAndDelete(req.userId);
+
+   // Trigger frontend revalidation to clear cached data
+   try {
+       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
+       await fetch(`${frontendUrl}/api/revalidate`, {
+           method: 'POST',
+           headers: {
+               'Content-Type': 'application/json',
+           },
+           body: JSON.stringify({ 
+               secret: process.env.REVALIDATION_SECRET || 'default-secret',
+               paths: ['/'] // Revalidate homepage and featured tracks
+           })
+       });
+       console.log('Frontend revalidation triggered after account deletion');
+   } catch (revalidationError) {
+       console.error('Failed to trigger frontend revalidation:', revalidationError);
+       // Don't fail the account deletion if revalidation fails
+   }
 
     return res.status(200).json({message: "Account successfully deleted"});
     }catch(error){
@@ -386,7 +446,7 @@ export const resetPassword = async (req, res) => {
 // Update user profile (avatar, about, etc.)
 export const updateProfile = async (req, res) => {
   try {
-    const allowedFields = ['about', 'commissionPrice', 'availableForCommission', 'maxTimeTakenForCommission'];
+    const allowedFields = ['about', 'commissionPrice', 'availableForCommission', 'maxTimeTakenForCommission', 'artistInstrument'];
     const updates = allowedFields.reduce((acc, key) => {
       if (req.body[key] !== undefined) acc[key] = req.body[key];
       return acc;
@@ -422,8 +482,7 @@ export const updateProfile = async (req, res) => {
     if (!user) return res.status(404).json({ message: 'User not found.' });
     if (user.role !== 'artist' && user.role !== 'admin') {
       return res.status(403).json({ message: 'Only artists or admins can update their profile.' });
-    }
-    // Profanity and length check for 'about' using artistAboutSchema
+    }    // Profanity and length check for 'about' using artistAboutSchema
     if (updates.about !== undefined) {
       const { error } = artistAboutSchema.validate({ about: updates.about });
       if (error) {
@@ -433,7 +492,28 @@ export const updateProfile = async (req, res) => {
       if (profanity.isProfane(updates.about)) {
         return res.status(400).json({ message: 'Please avoid using inappropriate language in your about section.' });
       }
-    }    // Validate commissionPrice if present
+    }
+
+    // Validation, profanity check, and sanitization for 'artistInstrument'
+    if (updates.artistInstrument !== undefined) {
+      // Sanitize input - trim whitespace and remove excessive spaces
+      const sanitizedInstrument = updates.artistInstrument.toString().trim().replace(/\s+/g, ' ');
+      
+      // JOI validation
+      const { error } = artistInstrumentSchema.validate({ artistInstrument: sanitizedInstrument });
+      if (error) {
+        return res.status(400).json({ message: error.details[0].message });
+      }
+      
+      // Profanity check
+      const profanity = new Filter.Filter();
+      if (profanity.isProfane(sanitizedInstrument)) {
+        return res.status(400).json({ message: 'Please avoid using inappropriate language in your instrument field.' });
+      }
+      
+      // Use sanitized value
+      updates.artistInstrument = sanitizedInstrument;
+    }// Validate commissionPrice if present
     if (updates.commissionPrice !== undefined) {
       const price = Number(updates.commissionPrice);
       if (isNaN(price) || price < 0) {

@@ -236,12 +236,11 @@ export const getFeaturedTracks = async (req, res) => {
 
         console.log('[getFeaturedTracks] Returning cached data');
         return res.status(200).json(cached); //if we have cached data, return it. simples.
-    }
-    console.log('[getFeaturedTracks] ENTERED');
+    }    console.log('[getFeaturedTracks] ENTERED');
     // get popular and recent tracks
-    const popularTracks = await BackingTrack.find({ isPrivate: false }).sort({ purchaseCount: -1 }).limit(10).populate('user', 'avatar username');
+    const popularTracks = await BackingTrack.find({ isPrivate: false, isDeleted: { $ne: true } }).sort({ purchaseCount: -1 }).limit(10).populate('user', 'avatar username');
     console.log('[getFeaturedTracks] popularTracks:', popularTracks.length);
-    const recentTracks = await BackingTrack.find({ isPrivate: false }).sort({ createdAt: -1 }).limit(10).populate('user', 'avatar username');
+    const recentTracks = await BackingTrack.find({ isPrivate: false, isDeleted: { $ne: true } }).sort({ createdAt: -1 }).limit(10).populate('user', 'avatar username');
     console.log('[getFeaturedTracks] recentTracks:', recentTracks.length);
 
     // exclude popular and recent tracks from the random selection
@@ -524,9 +523,9 @@ export const queryTracks = async (req, res) => {
             if (!mongoose.Types.ObjectId.isValid(artistId)) {
                 return res.status(400).json({ error: "Invalid artistId" });
             }
-            filter.user = artistId;
-        }
+            filter.user = artistId;        }
         filter.isPrivate = false; //show public tracks only
+        filter.isDeleted = { $ne: true }; //exclude deleted tracks
 
         let tracks;
         let totalTracks;
@@ -613,10 +612,8 @@ export const searchTracks = async (req, res) => {
         let pageNum = parseInt(page, 10);
         if (isNaN(pageNum) || pageNum < 1) pageNum = 1;
         const limit = 10;
-        const skip = (pageNum - 1) * limit;
-
-        // 4. Use raw query for $text search
-        let tracks = await BackingTrack.find({ $text: { $search: query }, isPrivate: false })
+        const skip = (pageNum - 1) * limit;        // 4. Use raw query for $text search
+        let tracks = await BackingTrack.find({ $text: { $search: query }, isPrivate: false, isDeleted: { $ne: true } })
             .sort({ score: { $meta: 'textScore' } })
             .skip(skip)
             .limit(limit)
@@ -627,7 +624,8 @@ export const searchTracks = async (req, res) => {
             const safeQuery = escapeRegex(query);
             tracks = await BackingTrack.find({
                 title: { $regex: safeQuery, $options: 'i' },
-                isPrivate: false
+                isPrivate: false,
+                isDeleted: { $ne: true }
             })
                 .skip(skip)
                 .limit(limit)

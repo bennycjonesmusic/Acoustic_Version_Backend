@@ -1,5 +1,65 @@
 import User from '../models/User.js';
 import * as Filter from 'bad-words';
+import { validateUserForPayouts } from '../utils/stripeAccountStatus.js';
+
+export const getArtistApprovalStatus = async (req, res) => {
+try {
+
+  const user = await User.findById(req.userId);
+  if (!user) {
+    return res.status(404).json({ message: 'User not found' });
+  }
+  if (user.role !== 'artist' && user.role !== 'admin') {
+    return res.status(403).json({ message: 'Only artists can check approval status' });
+  }
+
+  if (user.profileStatus !== 'approved') {
+    return res.status(403).json({ message: 'Your artist profile is not approved yet.' });
+  }
+
+  return res.status(200).json({ message: 'Artist is approved. Please continue to route.', status: user.profileStatus });
+
+
+
+}catch(error) {
+
+  console.error('Error fetching artist approval status:', error);
+  return res.status(500).json({ message: 'Internal server error' });
+}
+
+
+}
+
+export const getArtistStripeStatus = async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (user.role !== 'artist' && user.role !== 'admin') {
+      return res.status(403).json({ message: 'Only artists can check Stripe status' });
+    }
+
+    // Use the existing validation function
+    const payoutValidation = validateUserForPayouts(user);
+    if (!payoutValidation.valid) {
+      return res.status(403).json({ 
+        message: `Cannot upload tracks: ${payoutValidation.reason}. Please complete your Stripe account setup to enable payouts.`,
+        reason: payoutValidation.reason
+      });
+    }
+
+    return res.status(200).json({ 
+      message: 'Stripe account is properly set up for payouts',
+      status: 'valid'
+    });
+
+  } catch (error) {
+    console.error('Error fetching artist Stripe status:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
 
 // Add a review to an artist
 export const addArtistReview = async (req, res) => {

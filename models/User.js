@@ -97,6 +97,12 @@ stripeOnboardingComplete: {
     type: String,
     default: '1 week',
   },
+  artistInstrument: {
+    type: String,
+    default: '',
+
+
+  },
   commissionPrice: {
     type: Number,
     default: 0,

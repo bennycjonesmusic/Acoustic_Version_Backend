@@ -6,9 +6,11 @@ export const uploadTrackSchema = Joi.object({
   title: Joi.string().min(1).max(100).required(),
   description: Joi.string().max(500).required(),
   price: Joi.number().min(0).required(),
-  originalArtist: Joi.string().min(1).max(100).required(),  backingTrackType: Joi.string().valid('Acoustic Guitar', 'Piano', 'Full Arrangement Track', 'Other').required(),
+  originalArtist: Joi.string().min(1).max(100).required(),
+  type: Joi.string().valid('Backing Track', 'Jam Track', 'Acoustic Instrumental Version').required(),  backingTrackType: Joi.string().valid('Acoustic Guitar', 'Piano', 'Full Arrangement Track', 'Other').required(),
   genre: Joi.string().valid('Pop', 'Rock', 'Folk', 'Jazz', 'Classical', 'Musical Theatre', 'Country', 'Other').optional(),
   vocalRange: Joi.string().valid('Soprano', 'Mezzo-Soprano', 'Contralto', 'Countertenor', 'Tenor', 'Baritone', 'Bass').optional(),
+  keySignature: Joi.string().allow('').optional(), // Optional key signature (e.g., "C", "Dm", "F#", "Bb")
   instructions: Joi.string().max(1000).allow('').optional(),
   youtubeGuideUrl: Joi.string().uri().allow('').optional(),
   guideTrackUrl: Joi.string().uri().allow('').optional(),
@@ -30,9 +32,9 @@ export const editTrackSchema = Joi.object({
   title: Joi.string().min(1).max(100).optional(),
   description: Joi.string().max(500).optional(),
   price: Joi.number().min(0).optional(),
-  originalArtist: Joi.string().min(1).max(100).optional(),  backingTrackType: Joi.string().valid('Acoustic Guitar', 'Piano', 'Full Arrangement Track', 'Other').optional(),
-  genre: Joi.string().valid('Pop', 'Rock', 'Folk', 'Jazz', 'Classical', 'Musical Theatre', 'Country', 'Other').optional(),
+  originalArtist: Joi.string().min(1).max(100).optional(),  backingTrackType: Joi.string().valid('Acoustic Guitar', 'Piano', 'Full Arrangement Track', 'Other').optional(),  genre: Joi.string().valid('Pop', 'Rock', 'Folk', 'Jazz', 'Classical', 'Musical Theatre', 'Country', 'Other').optional(),
   vocalRange: Joi.string().valid('Soprano', 'Mezzo-Soprano', 'Contralto', 'Countertenor', 'Tenor', 'Baritone', 'Bass').optional(),
+  keySignature: Joi.string().allow('').optional(), // Optional key signature for editing
   instructions: Joi.string().max(1000).allow('').optional(),
   youtubeGuideUrl: Joi.string().uri().allow('').optional(),
   guideTrackUrl: Joi.string().uri().allow('').optional(),
@@ -71,6 +73,15 @@ export const commentSchema = Joi.object({
 
 export const artistAboutSchema = Joi.object({
   about: Joi.string().min(1).max(500).required(),
+});
+
+export const artistInstrumentSchema = Joi.object({
+  artistInstrument: Joi.string().min(1).max(100).required().messages({
+    'string.empty': 'Artist instrument cannot be empty.',
+    'string.min': 'Artist instrument must be at least 1 character long.',
+    'string.max': 'Artist instrument cannot exceed 100 characters.',
+    'any.required': 'Artist instrument is required.'
+  }),
 });
 
 export const contactForumSchema = Joi.object({

@@ -79,11 +79,6 @@ const backingTrackSchema = new mongoose.Schema({
     default: false,
   },
 
-  jamTrack: {
-
-    type: Boolean,
-    default: false
-  },
 
   backingTrackType: {
 
@@ -201,10 +196,13 @@ const backingTrackSchema = new mongoose.Schema({
   guideTrackUrl: {
     type: String,
     default: ''
-  },
-  isDeleted: {
+  },  isDeleted: {
     type: Boolean,
     default: false
+  },
+  deletedAt: {
+    type: Date,
+    default: null
   },
   fileSize: {
     type: Number,

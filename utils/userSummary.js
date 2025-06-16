@@ -11,6 +11,7 @@ export function toUserSummary(users) {
     artistExample: user.artistExamples && user.artistExamples.length > 0 ? user.artistExamples[0].url : null,
     maxTimeTakenForCommission: user.maxTimeTakenForCommission,
     averageCommissionCompletionTime: user.averageCommissionCompletionTime,
-    numOfCommissions: user.numOfCommissions
+    numOfCommissions: user.numOfCommissions,
+    artistInstrument: user.artistInstrument
   }));
 }

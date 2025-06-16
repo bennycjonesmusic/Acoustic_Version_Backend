@@ -18,6 +18,7 @@ import {
     getUserRole,
     upgradeToArtist
 } from '../controllers/authController.js';
+import { getArtistApprovalStatus, getArtistStripeStatus } from '../controllers/artistController.js';
 import { addToCart, removeFromCart, getCart, cleanCart } from '../controllers/cart.js';
 
 //i know there are routes in here that should be in other route.js files. However, I am learning as i go and this project has quickly developed in size.
@@ -56,6 +57,12 @@ router.get('/user-role', authMiddleware, getUserRole);
 
 // Upgrade user to artist
 router.post('/upgrade-to-artist', authMiddleware, avatarUpload.single('avatar'), upgradeToArtist);
+
+// Check artist approval status
+router.get('/artist-approval-status', authMiddleware, getArtistApprovalStatus);
+
+// Check artist Stripe status
+router.get('/artist-stripe-status', authMiddleware, getArtistStripeStatus);
 
 // Cart routes
 router.get('/cart', authMiddleware, getCart);
