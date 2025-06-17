@@ -129,8 +129,7 @@ stripeOnboardingComplete: {
   stripeSubscriptionId: {
     type: String,
     description: 'Stripe subscription ID for recurring payments.'
-  },
-  storageUsed: {
+  },  storageUsed: {
     type: Number,
     default: 0, // in bytes
     description: 'Total storage used by the user in bytes.'
@@ -164,6 +163,19 @@ stripeOnboardingComplete: {
   }
 }, {
   timestamps: true, // 
+});
+
+// Virtual field for maximum storage based on subscription tier
+userSchema.virtual('maxStorage').get(function() {
+  // Storage limits based on subscription tier (matching song_upload.js)
+  if (this.subscriptionTier === 'pro') return 10 * 1024 * 1024 * 1024; // 10GB
+  if (this.subscriptionTier === 'enterprise') return 100 * 1024 * 1024 * 1024; // 100GB
+  return 1024 * 1024 * 1024; // 1GB for free tier (default)
+});
+
+// Virtual field for storage usage percentage
+userSchema.virtual('storageUsagePercentage').get(function() {
+  return Math.round((this.storageUsed / this.maxStorage) * 100);
 });
 
 // Middleware: Set role to admin if email is in adminEmails whitelist
@@ -250,9 +262,13 @@ userSchema.methods.calculateAverageCommissionCompletionTime = async function() {
 //sanitize for security purposes
 
 userSchema.set('toJSON', {
+  virtuals: true, // Include virtual fields
   transform: (doc, ret, options) => {
-    ret.id = ret._id.toString();
-    delete ret._id;
+    // Safety check for _id and create id field
+    if (ret._id) {
+      ret.id = ret._id.toString();
+      delete ret._id;
+    }
     delete ret.__v;
     delete ret.password;
     delete ret.stripeAccountId; // Always hide Stripe account ID from all users
@@ -261,7 +277,8 @@ userSchema.set('toJSON', {
     const viewerId = options?.viewerId || null;
 
     const isAdmin = viewerRole === 'admin';
-    const isSelf = viewerId && viewerId.toString() === ret.id;
+    // Use ret.id for comparison BEFORE we potentially delete it
+    const isSelf = viewerId && ret.id && viewerId.toString() === ret.id;
 
     // show less details if not admin or self
     if (!isAdmin && !isSelf) {

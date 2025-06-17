@@ -1,6 +1,7 @@
 import express from 'express';
 import authMiddleware from '../middleware/customer_auth.js';
 import artistAuthMiddleware from '../middleware/artist_auth.js';
+import { getArtistStorage } from '../controllers/artistController.js';
 import User from '../models/User.js';
 import BackingTrack from '../models/backing_track.js';
 import CommissionRequest from '../models/CommissionRequest.js';
@@ -132,8 +133,13 @@ router.get('/analytics', artistAuthMiddleware, async (req, res) => {  try {
 
   } catch (error) {
     console.error('Error fetching artist analytics:', error);
-    return res.status(500).json({ error: 'Failed to fetch analytics data' });
-  }
+    return res.status(500).json({ error: 'Failed to fetch analytics data' });  }
 });
+
+// Get artist storage information
+router.get('/storage', (req, res, next) => {
+  console.log('Storage route hit:', req.method, req.path);
+  next();
+}, artistAuthMiddleware, getArtistStorage);
 
 export default router;

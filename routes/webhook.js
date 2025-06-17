@@ -72,12 +72,11 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
           const trackIdString = (track._id || track.id).toString();
           const alreadyPurchased = user.purchasedTracks.some(
             p => p.track.toString() === trackIdString && p.paymentIntentId === session.payment_intent
-          );
-          if (!alreadyPurchased) {user.purchasedTracks.push({
+          );          if (!alreadyPurchased) {user.purchasedTracks.push({
               track: track._id || track.id,
               paymentIntentId: session.payment_intent,
               purchasedAt: new Date(),
-              price: track.price, // ✅ Store artist price (what they set), not customer price
+              price: track.customerPrice, // ✅ Store customer price (what they actually paid)
               refunded: false
             });
             track.purchaseCount = (track.purchaseCount || 0) + 1;
@@ -147,13 +146,11 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
       if (user && track) {        // Only add if not already purchased (check payment intent to avoid duplicates)
         const alreadyPurchased = user.purchasedTracks.some(
           p => p.track.toString() === track._id.toString() && p.paymentIntentId === session.payment_intent
-        );
-        if (!alreadyPurchased) {
-          user.purchasedTracks.push({
-            track: track._id,
+        );        if (!alreadyPurchased) {          user.purchasedTracks.push({
+            track: track._id || track.id,
             paymentIntentId: session.payment_intent,
             purchasedAt: new Date(),
-            price: track.price,
+            price: track.customerPrice, // ✅ Store customer price (what they actually paid)
             refunded: false
           });
           await user.save();

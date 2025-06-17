@@ -527,13 +527,12 @@ router.post('/verify-purchase', authMiddleware, async (req, res) => {
                 
                 if (existingPurchase) {
                     alreadyProcessed = true;
-                } else {
-                    // Add the track to purchases
+                } else {                    // Add the track to purchases
                     user.purchasedTracks.push({
                         track: track._id || track.id,
                         paymentIntentId: session.payment_intent,
                         purchasedAt: new Date(),
-                        price: track.price,
+                        price: track.customerPrice, // ✅ Store customer price (what they actually paid)
                         refunded: false
                     });
                     
@@ -601,13 +600,12 @@ router.post('/verify-purchase', authMiddleware, async (req, res) => {
             
             if (existingPurchase) {
                 alreadyProcessed = true;
-            } else {
-                // Add the track to purchases
+            } else {                // Add the track to purchases
                 user.purchasedTracks.push({
                     track: track._id,
                     paymentIntentId: session.payment_intent,
                     purchasedAt: new Date(),
-                    price: track.price,
+                    price: track.customerPrice, // ✅ Store customer price (what they actually paid)
                     refunded: false
                 });
                 

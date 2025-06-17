@@ -80,6 +80,12 @@ for (const track of tracksToDelete) {
             }
         }        // Delete from DB
         await BackingTrack.findByIdAndDelete(trackId);
+        
+        // Decrement user's storageUsed by the deleted track's fileSize
+        if (track.user && track.fileSize) {
+            await User.findByIdAndUpdate(track.user, { $inc: { storageUsed: -Math.abs(track.fileSize) } });
+        }
+        
         console.log(`[DELETECRON] Permanently deleted track ${trackId} (${track.title}) from S3 and DB`);
         deletedCount++;
     } else {

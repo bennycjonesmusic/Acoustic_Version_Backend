@@ -11,6 +11,8 @@ import {
 
 const router = express.Router();
 
+//now defunct routes for guide tracks
+
 // Upload a guide track for an existing backing track
 router.post('/guide/:id/upload', uploadLimiter, authMiddleware, upload.single('file'), uploadGuideTrack);
 

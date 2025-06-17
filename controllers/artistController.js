@@ -2,6 +2,57 @@ import User from '../models/User.js';
 import * as Filter from 'bad-words';
 import { validateUserForPayouts } from '../utils/stripeAccountStatus.js';
 
+export const getArtistStorage = async (req, res) => {
+try{
+
+  const user = await User.findById(req.userId);
+  if (!user) {
+    return res.status(404).json({ message: 'User not found' });
+  }
+
+  // Check if user is artist
+  if (user.role !== 'artist' && user.role !== 'admin') {
+    return res.status(403).json({ message: 'Only artists can access storage information' });
+  }
+
+  // Helper function to format bytes to human readable format
+  const formatBytes = (bytes) => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  return res.status(200).json({
+    message: 'Artist storage information retrieved successfully',
+    data: {
+      storageUsed: user.storageUsed || 0,
+      maxStorage: user.maxStorage, // Virtual field from User model
+      storageUsagePercentage: user.storageUsagePercentage, // Virtual field from User model
+      subscriptionTier: user.subscriptionTier || 'free',
+      // Human-readable formats for display
+      formatted: {
+        storageUsed: formatBytes(user.storageUsed || 0),
+        maxStorage: formatBytes(user.maxStorage),
+        remaining: formatBytes(user.maxStorage - (user.storageUsed || 0))
+      },
+      // Storage status indicators
+      status: {
+        isNearLimit: user.storageUsagePercentage > 80,
+        isOverLimit: user.storageUsagePercentage >= 100,
+        canUpload: user.storageUsagePercentage < 100
+      }
+    }
+  });
+
+} catch (error) {
+
+  console.error('Error fetching artist storage:', error);
+  return res.status(500).json({ message: 'Internal server error' });
+}
+}
+
 export const getArtistApprovalStatus = async (req, res) => {
 try {
 

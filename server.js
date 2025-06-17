@@ -13,7 +13,7 @@ import tracksRoutes from './routes/tracks.js';
 import userRoutes from './routes/users.js';
 import publicRoutes from './routes/public.js';
 import commissionRoutes from './routes/commission.js';
-import guideRoutes from './routes/guide.js';
+// import guideRoutes from './routes/guide.js'; // Commented out - using new guide routes in tracks.js
 import rateLimit from 'express-rate-limit';
 import cron from 'node-cron';
 import { processExpiredCommissionsStandalone } from './controllers/commissionControl.js';
@@ -133,8 +133,8 @@ cron.schedule(payoutSchedule, async () => {
 // Recalculate user storage at server start
 recalculateAllUserStorage().catch(err => console.error('Storage recalculation error:', err));
 
-// Schedule to run every 6 hours
-cron.schedule('0 */6 * * *', () => {
+// Schedule to run once daily at midnight
+cron.schedule('0 0 * * *', () => {
   recalculateAllUserStorage().catch(err => console.error('Scheduled storage recalculation error:', err));
 });
 
@@ -207,7 +207,7 @@ app.use('/users', userRoutes);
 app.use('/artists', artistsRoutes); // Add artists routes
 app.use('/orders', ordersRoutes); // Add orders routes
 app.use('/commission', commissionRoutes);
-app.use('/', guideRoutes);
+// app.use('/', guideRoutes); // Commented out - using new guide routes in tracks.js
 app.use('/', tracksRoutes);
 app.get('/', (req, res) =>{
 

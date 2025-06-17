@@ -279,8 +279,7 @@ backingTrackSchema.set('toJSON', {
 
       const viewerRole = options?.viewerRole || 'user';
       const viewerId = options?.viewerId || null;
-      const isAdmin = viewerRole === 'admin';
-      // Defensive: ret.user can be ObjectId or populated object
+      const isAdmin = viewerRole === 'admin';      // Defensive: ret.user can be ObjectId or populated object
       let userIdString = null;
       if (ret.user) {
         if (typeof ret.user === 'object' && ret.user._id) {

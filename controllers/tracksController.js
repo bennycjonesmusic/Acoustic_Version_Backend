@@ -435,6 +435,12 @@ export const getUploadedTracks = async (req, res) => {
             return res.status(401).json({ message: 'User not authenticated' });
         }
 
+        // Get the user to determine their actual role
+        const user = await User.findById(req.userId);
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
         // Parse pagination parameters
         const { page = 1, limit = 10, orderBy = 'date-uploaded' } = req.query;
         let pageNum = parseInt(page, 10);
@@ -453,19 +459,25 @@ export const getUploadedTracks = async (req, res) => {
         if (orderBy === "alphabetical") sort = { title: 1 };
 
         // Get total count for pagination metadata
-        const totalTracks = await BackingTrack.countDocuments({ user: req.userId });
-          // Get paginated tracks with only essential fields for display
+        const totalTracks = await BackingTrack.countDocuments({ user: req.userId });        // Get paginated tracks with only essential fields for display
         const tracks = await BackingTrack.find({ user: req.userId })
-            .select('title price customerPrice averageRating numOfRatings previewUrl createdAt purchaseCount downloadCount originalArtist backingTrackType genre isPrivate')
+            .select('title price customerPrice averageRating numOfRatings previewUrl guideTrackUrl createdAt purchaseCount downloadCount originalArtist backingTrackType genre isPrivate user')
             .sort(sort)
             .skip(skip)
             .limit(limitNum);
-
-        // Calculate pagination metadata
-        const totalPages = Math.ceil(totalTracks / limitNum);
-
-        return res.status(200).json({ 
-            tracks: Array.isArray(tracks) ? tracks : [],
+            
+        console.log(`Found ${tracks.length} tracks for user ${req.userId} with role ${user.role}`);
+        tracks.forEach(track => {
+            console.log(`Track: ${track.title}, Raw guideTrackUrl: ${track.guideTrackUrl}`);
+        });// Calculate pagination metadata
+        const totalPages = Math.ceil(totalTracks / limitNum);        // Convert tracks to JSON with proper context so guideTrackUrl is included
+        const tracksWithContext = tracks.map(track => 
+            track.toJSON({ 
+                viewerId: req.userId,
+                viewerRole: user.role
+            })
+        );return res.status(200).json({ 
+            tracks: Array.isArray(tracksWithContext) ? tracksWithContext : [],
             pagination: {
                 currentPage: pageNum,
                 totalPages: totalPages,
@@ -493,23 +505,25 @@ export const getPurchasedTracks = async (req, res) => {
         if (isNaN(limitNum) || limitNum < 1) limitNum = 10;
         if (limitNum > 50) limitNum = 50; // Cap at 50 tracks per page
 
-        const skip = (pageNum - 1) * limitNum;
+        const skip = (pageNum - 1) * limitNum;        // Get the user to determine their actual role
+        const user = await User.findById(req.userId);
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
 
         // Only populate essential fields for purchased tracks display
-        const user = await User.findById(req.userId).populate({
+        const userWithTracks = await User.findById(req.userId).populate({
             path: 'purchasedTracks.track',
-            select: 'title originalArtist price customerPrice averageRating numOfRatings previewUrl createdAt user',
+            select: 'title originalArtist price customerPrice averageRating numOfRatings previewUrl guideTrackUrl createdAt user',
             populate: {
                 path: 'user',
                 select: 'username avatar'
             }
-        });
-
-        if (!user) {
+        });        if (!userWithTracks) {
             return res.status(401).json({ message: "User not found" });
         }
 
-        const purchasedTracks = Array.isArray(user.purchasedTracks) ? user.purchasedTracks : [];
+        const purchasedTracks = Array.isArray(userWithTracks.purchasedTracks) ? userWithTracks.purchasedTracks : [];
 
          if (purchasedTracks.length === 0) {
             return res.status(200).json({ 
@@ -544,18 +558,33 @@ export const getPurchasedTracks = async (req, res) => {
             purchasedTracks.sort((a, b) => {
                 if (!a.track || !b.track) return 0;
                 return (b.track.averageRating || 0) - (a.track.averageRating || 0);
-            });
-        }
+            });        }
 
         // Apply pagination
         const totalTracks = purchasedTracks.length;
-        const paginatedTracks = purchasedTracks.slice(skip, skip + limitNum);
+        const paginatedTracks = purchasedTracks.slice(skip, skip + limitNum);        // Apply role-based transform to each track to include guideTrackUrl for customers
+        const purchasedTrackIds = paginatedTracks.map(pt => pt.track?.id || pt.track?._id).filter(Boolean);
+        
+        const tracksWithContext = paginatedTracks.map(purchasedTrack => {
+            if (purchasedTrack.track) {
+                const trackWithContext = purchasedTrack.track.toJSON({
+                    viewerRole: user.role,
+                    viewerId: req.userId,
+                    purchasedTrackIds: purchasedTrackIds
+                });
+                return {
+                    ...purchasedTrack.toJSON(),
+                    track: trackWithContext
+                };
+            }
+            return purchasedTrack;
+        });
 
         // Calculate pagination metadata
         const totalPages = Math.ceil(totalTracks / limitNum);
 
         return res.status(200).json({ 
-            tracks: paginatedTracks,
+            tracks: tracksWithContext,
             pagination: {
                 currentPage: pageNum,
                 totalPages: totalPages,
@@ -713,7 +742,6 @@ export const deleteComment = async (req, res) => {
 export const getUploadedTracksByUserId = async (req, res) => {
     try {
         const userId = req.params.id;
-        console.log('[DEBUG] getUploadedTracksByUserId userId param:', userId);
 
         // Parse pagination parameters
         const { page = 1, limit = 10, orderBy = 'date-uploaded' } = req.query;
@@ -740,10 +768,7 @@ export const getUploadedTracksByUserId = async (req, res) => {
             .select('title price customerPrice averageRating numOfRatings previewUrl createdAt purchaseCount downloadCount originalArtist backingTrackType genre user')
             .sort(sort)
             .skip(skip)
-            .limit(limitNum)
-            .populate('user', 'avatar username');
-
-        console.log('[DEBUG] getUploadedTracksByUserId found tracks:', tracks.map(t => ({id: t._id, user: t.user, title: t.title})));
+            .limit(limitNum)            .populate('user', 'avatar username');
 
         // Calculate pagination metadata
         const totalPages = Math.ceil(totalTracks / limitNum);

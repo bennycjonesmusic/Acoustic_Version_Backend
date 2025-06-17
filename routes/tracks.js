@@ -16,8 +16,13 @@ import {
   commentTrack,
   deleteComment, // import deleteComment
   editTrack, // import editTrack
-  
 } from '../controllers/tracksController.js';
+
+import {
+  uploadGuideTrack,
+  downloadGuideTrack,
+  deleteGuideTrack
+} from '../controllers/guideController.js';
 
 const router = express.Router();
 
@@ -50,6 +55,11 @@ router.get('/tracks/download/:id', (req, res, next) => {
   console.log('[ROUTER DEBUG] /tracks/download/:id hit for', req.params.id);
   next();
 }, downloadLimiter, authMiddleware, downloadTrack); //req.params.id = :id needed in route
+
+// Guide track routes
+router.post('/tracks/:id/guide-track', uploadLimiter, authMiddleware, upload.single('guideTrack'), uploadGuideTrack);
+router.get('/tracks/:id/guide-track/download', downloadLimiter, authMiddleware, downloadGuideTrack);
+router.delete('/tracks/:id/guide-track', authMiddleware, deleteGuideTrack);
 
 router.delete('/tracks/delete/:id', authMiddleware, deleteTrack)
 export default router;
