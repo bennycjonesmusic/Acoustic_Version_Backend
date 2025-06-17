@@ -8,30 +8,43 @@ import { pathToFileURL } from "url";
 
 
 export async function deleteCron() {
+    console.log('[DELETECRON] Starting cleanup of soft-deleted tracks...');
 
     //find tracks that are marked as deleted
 const tracksToDelete = await BackingTrack.find({
     isDeleted: true
-
 });
+
+console.log(`[DELETECRON] Found ${tracksToDelete.length} soft-deleted tracks to examine`);
+
+if (tracksToDelete.length === 0) {
+    console.log('[DELETECRON] No soft-deleted tracks found, cleanup complete');
+    return;
+}
 
 //find users who have purchased these tracks
 const tracksPurchasedByUser = await User.find({
-    purchasedTracks: { $elemMatch: { track: { $in: tracksToDelete.map(track => track._id) } } }
+    purchasedTracks: { $elemMatch: { track: { $in: tracksToDelete.map(track => track._id || track.id) } } }
 });
 
 const purchasedTrackIds = new Set();
 
-for (const user of tracksPurchasedByUser) 
+for (const user of tracksPurchasedByUser) {
     for (const purchasedTrack of user.purchasedTracks) {
         purchasedTrackIds.add(purchasedTrack.track.toString())
     }
+}
+
+console.log(`[DELETECRON] Found ${purchasedTrackIds.size} unique tracks still in users' purchased tracks`);
+
+let deletedCount = 0;
 
 for (const track of tracksToDelete) {
-    if (!purchasedTrackIds.has(track._id.toString())) {
+    const trackId = track._id || track.id;
+    if (!purchasedTrackIds.has(trackId.toString())) {
         // Use the same S3 delete logic as in deleteTrack controller
         if (!track.s3Key) {
-            console.error(`Track ${track._id} does not have an associated s3Key.`);
+            console.error(`Track ${trackId} does not have an associated s3Key.`);
         } else {
             const s3Client = new S3Client({
                 region: process.env.AWS_REGION,
@@ -43,11 +56,10 @@ for (const track of tracksToDelete) {
             const deleteParameters = {
                 Bucket: process.env.AWS_BUCKET_NAME,
                 Key: track.s3Key,
-            };
-            try {
+            };            try {
                 await s3Client.send(new DeleteObjectCommand(deleteParameters));
             } catch (err) {
-                console.error(`Error deleting S3 object for track ${track._id}:`, err);
+                console.error(`Error deleting S3 object for track ${trackId}:`, err);
             }
             // Delete preview from S3 if it exists
             if (track.previewUrl) {
@@ -63,13 +75,17 @@ for (const track of tracksToDelete) {
                         }));
                     }
                 } catch (err) {
-                    console.error(`Error deleting preview from S3 for track ${track._id}:`, err);
+                    console.error(`Error deleting preview from S3 for track ${trackId}:`, err);
                 }
             }
-        }
-        // Delete from DB
-        await BackingTrack.findByIdAndDelete(track._id);
-        console.log(`Deleted track ${track._id} from S3 and DB`);
+        }        // Delete from DB
+        await BackingTrack.findByIdAndDelete(trackId);
+        console.log(`[DELETECRON] Permanently deleted track ${trackId} (${track.title}) from S3 and DB`);
+        deletedCount++;
+    } else {
+        console.log(`[DELETECRON] Skipping track ${trackId} (${track.title}) - still purchased by users`);
     }
 }
+
+console.log(`[DELETECRON] Cleanup complete: ${deletedCount} tracks permanently deleted, ${tracksToDelete.length - deletedCount} tracks preserved for purchasers`);
 }

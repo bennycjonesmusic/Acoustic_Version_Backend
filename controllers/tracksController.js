@@ -345,19 +345,40 @@ export const deleteTrack = async (req, res) => {
         const isAdmin = requestingUser && requestingUser.role === 'admin';
         if (!isUploader && !isAdmin) {
             return res.status(403).json({ message: "You are not authorized to delete this track." });
-        }
-
-        if (!isAdmin){ //make it so admin can delete tracks regardless of purchases. DANGEROUS, make sure to only use sparingly.
+        }        if (!isAdmin){ //make it so admin can delete tracks regardless of purchases. DANGEROUS, make sure to only use sparingly.
+            const trackId = Track._id || Track.id;
+            const purchasers = await User.find({ 
+                'purchasedTracks.track': trackId
+            });
+            if (purchasers.length > 0){
+                Track.isDeleted = true; //mark track as deleted, then we will use CRON job to monitor when the track is no longer part of anyones purchases
+                await Track.save();
+                return res.status(200).json({ message: "Track marked as deleted. It will be permanently removed once no longer purchased"});
+            }
+        } else {
+            // Admin is deleting - check if track has purchasers
+            const trackId = Track._id || Track.id;
+            const purchasers = await User.find({ 
+                'purchasedTracks.track': trackId
+            });
+            if (purchasers.length > 0){
+                // Even for admin, just soft delete if there are purchasers to preserve user access
+                Track.isDeleted = true;
+                await Track.save();
+                return res.status(200).json({ message: "Track marked as deleted by admin. It will be permanently removed once no longer purchased"});
+            }
+            // If admin delete and no purchasers, proceed with hard delete below
+        }        // Hard delete - only reached if no purchasers exist
+        const trackId = Track._id || Track.id;
         const purchasers = await User.find({ 
-            'purchasedTracks.track': Track._id
+            'purchasedTracks.track': trackId
         });
-        if (purchasers.length > 0){
-
-            Track.isDeleted = true; //mark track as deleted, then we will use CRON job to monitor when the track is no longer part of anyones purchases
+        if (purchasers.length > 0) {
+            // Safety check - should not reach here, but if we do, soft delete instead
+            Track.isDeleted = true;
             await Track.save();
             return res.status(200).json({ message: "Track marked as deleted. It will be permanently removed once no longer purchased"});
         }
-    }
         if (!Track.s3Key) {
             return res.status(400).json({ message: "Track does not have an associated s3Key." });
         }
@@ -371,16 +392,15 @@ export const deleteTrack = async (req, res) => {
         const deleteParameters = {
             Bucket: process.env.AWS_BUCKET_NAME,
             Key: Track.s3Key,
-        };
-        await User.findByIdAndUpdate(req.userId, { $pull: { uploadedTracks: req.params.id } }, { new: true });
-        // Remove track from all users' purchasedTracks arrays
+        };        await User.findByIdAndUpdate(req.userId, { $pull: { uploadedTracks: req.params.id } }, { new: true });
+        
+        // NOTE: We don't remove from purchasedTracks here because hard delete only happens 
+        // when there are no purchasers (verified by safety check above)
+        
+        // Remove track from all users' uploadedTracks arrays (should only be uploader, but for safety)
         await User.updateMany(
-          { 'purchasedTracks.track': Track._id },
-          { $pull: { purchasedTracks: { track: Track._id } } }
-        );        // Remove track from all users' uploadedTracks arrays (should only be uploader, but for safety)
-        await User.updateMany(
-          { uploadedTracks: Track._id },
-          { $pull: { uploadedTracks: Track._id } }
+          { uploadedTracks: trackId },
+          { $pull: { uploadedTracks: trackId } }
         );
 
         await User.findByIdAndUpdate(req.userId, {$inc: {numOfUploadedTracks: -1}}, {new: true});
@@ -400,12 +420,11 @@ export const deleteTrack = async (req, res) => {
                         Bucket: process.env.AWS_BUCKET_NAME,
                         Key: previewKey,
                     }));
-                }
-            } catch (err) {
+                }            } catch (err) {
                 console.error('Error deleting preview from S3:', err);
             }
         }
-        await BackingTrack.findByIdAndDelete(req.params.id);
+        await BackingTrack.findByIdAndDelete(trackId);
         // Decrement user's storageUsed by the deleted track's fileSize
         if (Track.user && Track.fileSize) {
             await User.findByIdAndUpdate(Track.user, { $inc: { storageUsed: -Math.abs(Track.fileSize) } });

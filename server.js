@@ -20,6 +20,7 @@ import { processExpiredCommissionsStandalone } from './controllers/commissionCon
 import User from './models/User.js';
 import adminEmails from './utils/admins.js'; // Import adminEmails
 import { deleteUnusedAvatars } from './utils/deleteUnusedAvatars.js'; // Import the function to delete unused avatars
+import { deleteCron } from './utils/deleteCron.js'; // Import the function to delete soft-deleted tracks
 import helmet from 'helmet'; // Import helmet middleware
 import compression from 'compression'; // Import compression middleware
 import stripeSubscriptionsRouter from './routes/stripe_subscriptions.js'; // Import the new Stripe subscriptions router
@@ -80,6 +81,17 @@ cron.schedule('0 3 * * *', async () => {
     await deleteUnusedAvatars();
   } catch (error) {
     console.error('Error running deleteUnusedAvatars cron job:', error);
+  }
+});
+
+// Cron job to delete soft-deleted tracks that are no longer purchased by anyone
+cron.schedule('0 * * * *', async () => {
+  try {
+    console.log('Running hourly cron job to clean up soft-deleted tracks');
+    await deleteCron();
+    console.log('Soft-deleted tracks cleanup cron job completed');
+  } catch (error) {
+    console.error('Error running deleteCron job:', error);
   }
 });
 
