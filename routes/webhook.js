@@ -67,13 +67,13 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
       const user = await User.findById(userId);
       const tracks = await BackingTrack.find({ _id: { $in: trackIds } });
 
-      if (user && tracks.length > 0) {        // Add all tracks to user's purchases
+      if (user && tracks.length > 0) {        // Add all tracks to user's purchases (check for existing payment intent to avoid duplicates)
         for (const track of tracks) {
           const trackIdString = (track._id || track.id).toString();
           const alreadyPurchased = user.purchasedTracks.some(
-            p => p.track.toString() === trackIdString && !p.refunded
+            p => p.track.toString() === trackIdString && p.paymentIntentId === session.payment_intent
           );
-          if (!alreadyPurchased) {            user.purchasedTracks.push({
+          if (!alreadyPurchased) {user.purchasedTracks.push({
               track: track._id || track.id,
               paymentIntentId: session.payment_intent,
               purchasedAt: new Date(),
@@ -144,10 +144,9 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
       const trackId = session.metadata.trackId;
       const user = await User.findById(userId);
       const track = await BackingTrack.findById(trackId);
-      if (user && track) {
-        // Only add if not already purchased
+      if (user && track) {        // Only add if not already purchased (check payment intent to avoid duplicates)
         const alreadyPurchased = user.purchasedTracks.some(
-          p => p.track.toString() === track._id.toString() && !p.refunded
+          p => p.track.toString() === track._id.toString() && p.paymentIntentId === session.payment_intent
         );
         if (!alreadyPurchased) {
           user.purchasedTracks.push({

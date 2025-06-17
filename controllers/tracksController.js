@@ -341,44 +341,28 @@ export const deleteTrack = async (req, res) => {
         }
         // Only allow the uploader (track.user) or an admin to delete the track
         const requestingUser = await User.findById(req.userId);
-        const isUploader = Track.user.toString() === req.userId;
-        const isAdmin = requestingUser && requestingUser.role === 'admin';
+        const isUploader = Track.user.toString() === req.userId;        const isAdmin = requestingUser && requestingUser.role === 'admin';
         if (!isUploader && !isAdmin) {
             return res.status(403).json({ message: "You are not authorized to delete this track." });
-        }        if (!isAdmin){ //make it so admin can delete tracks regardless of purchases. DANGEROUS, make sure to only use sparingly.
-            const trackId = Track._id || Track.id;
-            const purchasers = await User.find({ 
-                'purchasedTracks.track': trackId
-            });
-            if (purchasers.length > 0){
-                Track.isDeleted = true; //mark track as deleted, then we will use CRON job to monitor when the track is no longer part of anyones purchases
-                await Track.save();
-                return res.status(200).json({ message: "Track marked as deleted. It will be permanently removed once no longer purchased"});
-            }
-        } else {
-            // Admin is deleting - check if track has purchasers
-            const trackId = Track._id || Track.id;
-            const purchasers = await User.find({ 
-                'purchasedTracks.track': trackId
-            });
-            if (purchasers.length > 0){
-                // Even for admin, just soft delete if there are purchasers to preserve user access
-                Track.isDeleted = true;
-                await Track.save();
-                return res.status(200).json({ message: "Track marked as deleted by admin. It will be permanently removed once no longer purchased"});
-            }
-            // If admin delete and no purchasers, proceed with hard delete below
-        }        // Hard delete - only reached if no purchasers exist
+        }
+
+        // Check if track has any purchasers (do this once)
         const trackId = Track._id || Track.id;
         const purchasers = await User.find({ 
             'purchasedTracks.track': trackId
         });
+
         if (purchasers.length > 0) {
-            // Safety check - should not reach here, but if we do, soft delete instead
+            // Track has purchasers - always soft delete to preserve user access
             Track.isDeleted = true;
             await Track.save();
-            return res.status(200).json({ message: "Track marked as deleted. It will be permanently removed once no longer purchased"});
+            const adminMessage = isAdmin ? " by admin" : "";
+            return res.status(200).json({ 
+                message: `Track marked as deleted${adminMessage}. It will be permanently removed once no longer purchased`
+            });
         }
+
+        // Track has no purchasers - safe to hard delete
         if (!Track.s3Key) {
             return res.status(400).json({ message: "Track does not have an associated s3Key." });
         }

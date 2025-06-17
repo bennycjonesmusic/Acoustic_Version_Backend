@@ -477,4 +477,207 @@ router.post('/trigger-payouts', authMiddleware, async (req, res) => {
     }
 });
 
+// Verify and fulfill purchase if webhook failed
+router.post('/verify-purchase', authMiddleware, async (req, res) => {
+    console.log('[PURCHASE VERIFICATION] Starting verification for user:', req.userId);
+    
+    try {
+        const { sessionId } = req.body;
+        
+        if (!sessionId) {
+            return res.status(400).json({ error: 'Session ID is required' });
+        }
+
+        // Retrieve the session from Stripe
+        const session = await stripeClient.checkout.sessions.retrieve(sessionId);
+        console.log('[PURCHASE VERIFICATION] Retrieved session:', session.id, 'status:', session.payment_status);
+
+        if (session.payment_status !== 'paid') {
+            return res.status(400).json({ 
+                error: 'Payment not completed',
+                status: session.payment_status 
+            });
+        }
+
+        // Check if this purchase has already been processed
+        const userId = session.metadata.userId;
+        if (userId !== req.userId.toString()) {
+            return res.status(403).json({ error: 'Session does not belong to current user' });
+        }
+
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        let alreadyProcessed = false;
+        let tracksPurchased = [];
+
+        // Handle cart purchase
+        if (session.metadata && session.metadata.purchaseType === 'cart') {
+            const trackIds = session.metadata.trackIds.split(',');
+            const tracks = await BackingTrack.find({ _id: { $in: trackIds } });
+            
+            // Check if any of these tracks are already purchased
+            for (const track of tracks) {
+                const trackIdString = (track._id || track.id).toString();
+                const existingPurchase = user.purchasedTracks.find(
+                    p => p.track.toString() === trackIdString && p.paymentIntentId === session.payment_intent
+                );
+                
+                if (existingPurchase) {
+                    alreadyProcessed = true;
+                } else {
+                    // Add the track to purchases
+                    user.purchasedTracks.push({
+                        track: track._id || track.id,
+                        paymentIntentId: session.payment_intent,
+                        purchasedAt: new Date(),
+                        price: track.price,
+                        refunded: false
+                    });
+                    
+                    // Update track purchase count
+                    track.purchaseCount = (track.purchaseCount || 0) + 1;
+                    await track.save();
+                    
+                    tracksPurchased.push(track.title);
+                    
+                    // Process artist payouts (replicate webhook logic)
+                    const artistPayouts = JSON.parse(session.metadata.artistPayouts);
+                    for (const [artistId, payoutData] of Object.entries(artistPayouts)) {
+                        const artist = await User.findById(artistId);
+                        if (artist && payoutData.tracks.includes(trackIdString)) {
+                            // Update artist stats
+                            artist.amountOfTracksSold = (artist.amountOfTracksSold || 0) + 1;
+                            artist.totalIncome = (artist.totalIncome || 0) + track.price;
+                            
+                            // Add to money owed
+                            const reference = `Verification fulfillment: ${track.title} @ ${new Date().toLocaleDateString()}`;
+                            const existingOwed = artist.moneyOwed.find(m => 
+                                m.metadata?.paymentIntentId === session.payment_intent &&
+                                m.metadata?.trackIds?.includes(trackIdString)
+                            );
+                            
+                            if (!existingOwed) {
+                                artist.moneyOwed.push({
+                                    amount: track.price,
+                                    reference: reference,
+                                    source: 'purchase_verification',
+                                    metadata: {
+                                        type: 'track_purchase_payout',
+                                        userId: userId,
+                                        trackIds: trackIdString,
+                                        purchaseType: 'cart',
+                                        paymentIntentId: session.payment_intent,
+                                        customerEmail: session.customer_email,
+                                        payoutReason: 'Purchase verified and fulfilled'
+                                    }
+                                });
+                            }
+                            
+                            await artist.save();
+                        }
+                    }
+                }
+            }
+            
+            // Clear cart
+            user.cart = [];
+        }
+        // Handle individual track purchase
+        else if (session.metadata && session.metadata.trackId) {
+            const trackId = session.metadata.trackId;
+            const track = await BackingTrack.findById(trackId);
+            
+            if (!track) {
+                return res.status(404).json({ error: 'Track not found' });
+            }
+            
+            // Check if already purchased
+            const existingPurchase = user.purchasedTracks.find(
+                p => p.track.toString() === trackId && p.paymentIntentId === session.payment_intent
+            );
+            
+            if (existingPurchase) {
+                alreadyProcessed = true;
+            } else {
+                // Add the track to purchases
+                user.purchasedTracks.push({
+                    track: track._id,
+                    paymentIntentId: session.payment_intent,
+                    purchasedAt: new Date(),
+                    price: track.price,
+                    refunded: false
+                });
+                
+                // Update track purchase count
+                track.purchaseCount = (track.purchaseCount || 0) + 1;
+                await track.save();
+                
+                tracksPurchased.push(track.title);
+                
+                // Process artist payout
+                const artist = await User.findById(track.user);
+                if (artist) {
+                    artist.amountOfTracksSold = (artist.amountOfTracksSold || 0) + 1;
+                    artist.totalIncome = (artist.totalIncome || 0) + track.price;
+                    
+                    // Add to money owed
+                    const reference = `Verification fulfillment: ${track.title} @ ${new Date().toLocaleDateString()}`;
+                    const existingOwed = artist.moneyOwed.find(m => 
+                        m.metadata?.paymentIntentId === session.payment_intent &&
+                        m.metadata?.trackIds === trackId
+                    );
+                    
+                    if (!existingOwed) {
+                        artist.moneyOwed.push({
+                            amount: track.price,
+                            reference: reference,
+                            source: 'purchase_verification',
+                            metadata: {
+                                type: 'track_purchase_payout',
+                                userId: userId,
+                                trackIds: trackId,
+                                purchaseType: 'individual',
+                                paymentIntentId: session.payment_intent,
+                                customerEmail: session.customer_email,
+                                payoutReason: 'Purchase verified and fulfilled'
+                            }
+                        });
+                    }
+                    
+                    await artist.save();
+                }
+            }
+        }
+
+        await user.save();
+
+        if (alreadyProcessed && tracksPurchased.length === 0) {
+            console.log('[PURCHASE VERIFICATION] Purchase already processed for session:', sessionId);
+            return res.status(200).json({ 
+                success: true, 
+                message: 'Purchase already processed',
+                alreadyProcessed: true
+            });
+        }
+
+        console.log('[PURCHASE VERIFICATION] Purchase verified and fulfilled:', tracksPurchased);
+        return res.status(200).json({ 
+            success: true, 
+            message: 'Purchase verified and access granted',
+            tracksPurchased: tracksPurchased,
+            alreadyProcessed: false
+        });
+
+    } catch (error) {
+        console.error('[PURCHASE VERIFICATION] Error verifying purchase:', error);
+        return res.status(500).json({ 
+            error: 'Failed to verify purchase',
+            details: error.message 
+        });
+    }
+});
+
 export default router;
