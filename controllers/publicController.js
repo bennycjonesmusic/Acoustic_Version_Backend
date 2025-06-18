@@ -401,6 +401,11 @@ export const queryUsers = async (req, res) => {
         if (orderBy == "num-of-commissions/ascending") sort = { numOfCommissions: 1 };
         if (orderBy == "popularity") sort = { amountOfTracksSold: -1 };
         if (orderBy == "num-of-uploaded-tracks") sort = { numOfUploadedTracks: -1 };
+        if (orderBy == "num-of-uploaded-tracks/ascending") sort = { numOfUploadedTracks: 1 };
+        if (orderBy == "Num of Followers") sort = { numOfFollowers: -1 };
+        if (orderBy == "Num of Followers/ascending") sort = { numOfFollowers: 1 };
+        if (orderBy == "Num of Reviews") sort = { numOfReviews: -1 };
+        if (orderBy == "Num of Reviews/ascending") sort = { numOfReviews: 1 };
         // Filter for users who were online within X days
         if (lastOnlineWithin) {
             const daysNum = parseInt(lastOnlineWithin, 10);
@@ -479,7 +484,7 @@ export const queryUsers = async (req, res) => {
 
 export const queryTracks = async (req, res) => {
     try {
-        const { orderBy, page = 1, limit = 10, keySig, "vocal-range": vocalRange, artistId, qualityValidated, query } = req.query;
+        const { orderBy, page = 1, limit = 10, keySig, "vocal-range": vocalRange, artistId, qualityValidated, query, type, backingTrackType, genre } = req.query;
         let sort = {};
         let filter = {};
         // Validate and sanitize pagination
@@ -510,12 +515,36 @@ export const queryTracks = async (req, res) => {
             } catch (error) {
                 return res.status(400).json({ error: "Something went wrong. Make sure you enter a valid vocal range" });
             }
-        }
-        if (qualityValidated) {
+        }        if (qualityValidated) {
             if (qualityValidated !== 'true' && qualityValidated !== 'false') {
                 return res.status(400).json({ error: "Invalid quality validation filter" });
             }
             filter.qualityValidated = qualityValidated === 'true' ? 'yes' : 'no';
+        }
+
+        // Filter by track type (Backing Track, Jam Track, Acoustic Instrumental Version)
+        if (type) {
+            const validTypes = ["Backing Track", "Jam Track", "Acoustic Instrumental Version"];
+            if (!validTypes.includes(type)) {
+                return res.status(400).json({ error: "Invalid track type. Valid options: " + validTypes.join(", ") });
+            }
+            filter.type = type;
+        }        // Filter by backing track type (Acoustic Guitar, Piano, Full Arrangement Track, Other)
+        if (backingTrackType) {
+            const validBackingTrackTypes = ["Acoustic Guitar", "Piano", "Full Arrangement Track", "Other"];
+            if (!validBackingTrackTypes.includes(backingTrackType)) {
+                return res.status(400).json({ error: "Invalid backing track type. Valid options: " + validBackingTrackTypes.join(", ") });
+            }
+            filter.backingTrackType = backingTrackType;
+        }
+
+        // Filter by genre (Pop, Rock, Folk, Jazz, Classical, Musical Theatre, Country, Other)
+        if (genre) {
+            const validGenres = ["Pop", "Rock", "Folk", "Jazz", "Classical", "Musical Theatre", "Country", "Other"];
+            if (!validGenres.includes(genre)) {
+                return res.status(400).json({ error: "Invalid genre. Valid options: " + validGenres.join(", ") });
+            }
+            filter.genre = genre;
         }
         // Validate artistId if present
         if (artistId) {
