@@ -85,11 +85,19 @@ export const artistInstrumentSchema = Joi.object({
 });
 
 export const contactForumSchema = Joi.object({
-  email: Joi.string().email().required(),
-  description: Joi.string().min(1).max(1000).required(),
-  type: Joi.string().valid('general', 'bug_report', 'feature_request', 'user_report', 'other').required(),
-
-
+  email: Joi.string().email().required().messages({
+    'string.email': 'Please provide a valid email address.',
+    'any.required': 'Email is required.'
+  }),
+  description: Joi.string().min(10).max(1000).required().messages({
+    'string.min': 'Description must be at least 10 characters long.',
+    'string.max': 'Description cannot exceed 1000 characters.',
+    'any.required': 'Description is required.'
+  }),
+  type: Joi.string().valid('general', 'bug_report', 'feature_request', 'user_report', 'other').required().messages({
+    'any.only': 'Type must be one of: general, bug_report, feature_request, user_report, other.',
+    'any.required': 'Contact type is required.'
+  })
 });
 
 // Guide track upload validation schema
