@@ -62,47 +62,55 @@ const getUserStorageLimit = (user) => {
 };
 
 const fileFilter = (req, file, cb) => {
-    // Sanitize file name
-    const sanitized = sanitizeFileName(file.originalname);
-    if (sanitized !== file.originalname) {
-        console.warn('[multer fileFilter] File name sanitized:', file.originalname, '->', sanitized);
-        file.originalname = sanitized;
-    }
-    
-    // Profanity check for file name
-    if (profanityFilter.isProfane(file.originalname)) {
-        console.error('[multer fileFilter] Rejected: profane file name', file.originalname);
-        return cb(new Error('File name contains inappropriate language.'), false);
-    }    console.log('[multer fileFilter] Received file:', {
-        fieldname: file.fieldname,
-        originalname: file.originalname,
-        mimetype: file.mimetype,
-        size: file.size
-    });
-    
-    // Handle application/octet-stream by checking file extension
-    if (file.mimetype === 'application/octet-stream') {
-        const fileExtension = file.originalname.toLowerCase().substring(file.originalname.lastIndexOf('.'));
-        if (!allowedExtensions.includes(fileExtension)) {
-            console.error('[multer fileFilter] Rejected: octet-stream with invalid extension', fileExtension);
+    try {
+        // Sanitize file name
+        const sanitized = sanitizeFileName(file.originalname);
+        if (sanitized !== file.originalname) {
+            console.warn('[multer fileFilter] File name sanitized:', file.originalname, '->', sanitized);
+            file.originalname = sanitized;
+        }
+        
+        // Profanity check for file name
+        if (profanityFilter.isProfane(file.originalname)) {
+            console.error('[multer fileFilter] Rejected: profane file name', file.originalname);
+            return cb(new Error('File name contains inappropriate language.'), false);
+        }
+        
+        console.log('[multer fileFilter] Received file:', {
+            fieldname: file.fieldname,
+            originalname: file.originalname,
+            mimetype: file.mimetype,
+            size: file.size
+        });
+        
+        // Handle application/octet-stream by checking file extension
+        if (file.mimetype === 'application/octet-stream') {
+            const fileExtension = file.originalname.toLowerCase().substring(file.originalname.lastIndexOf('.'));
+            if (!allowedExtensions.includes(fileExtension)) {
+                console.error('[multer fileFilter] Rejected: octet-stream with invalid extension', fileExtension);
+                return cb(new Error('Only audio files are allowed!'), false);
+            }
+            console.log('[multer fileFilter] Accepted octet-stream with valid audio extension:', fileExtension);
+        }
+        // Basic file validation for other MIME types
+        else if (!allowedMimeTypes.includes(file.mimetype)) {
+            console.error('[multer fileFilter] Rejected: invalid mimetype', file.mimetype);
             return cb(new Error('Only audio files are allowed!'), false);
         }
-        console.log('[multer fileFilter] Accepted octet-stream with valid audio extension:', fileExtension);
-    }
-    // Basic file validation for other MIME types
-    else if (!allowedMimeTypes.includes(file.mimetype)) {
-        console.error('[multer fileFilter] Rejected: invalid mimetype', file.mimetype);
-        return cb(new Error('Only audio files are allowed!'), false);
-    }
-    
-    if (file.size > 100 * 1024 * 1024){
-        console.error('[multer fileFilter] Rejected: file too large', file.size);
-        return cb(new Error('File larger than 100mb'), false);
-    }
+        
+        if (file.size > 100 * 1024 * 1024) {
+            console.error('[multer fileFilter] Rejected: file too large', file.size);
+            return cb(new Error('File larger than 100mb'), false);
+        }
 
-    // For storage quota check, we'll handle this in the route handler instead
-    // since multer's fileFilter doesn't handle async operations well
-    cb(null, true);
+        // For storage quota check, we'll handle this in the route handler instead
+        // since multer's fileFilter doesn't handle async operations well
+        cb(null, true);
+        
+    } catch (error) {
+        console.error('[multer fileFilter] Unexpected error:', error);
+        cb(new Error('File validation failed'), false);
+    }
 }
 const upload = multer({ 
     storage: storage,

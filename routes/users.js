@@ -38,8 +38,34 @@ router.delete('/delete-review/:id', authMiddleware, deleteArtistReview);
 // Sort uploaded and bought tracks for the logged-in user
 router.get('/sort-tracks', authMiddleware, sortUploadedOrPurchasedTracks);
 
-// Artist example uploads (max 3, 30s each)
-router.post('/artist/examples/upload', authMiddleware, upload.single('file'), uploadArtistExample);
+// Artist example uploads (max 3, 30s each) with proper error handling
+router.post('/artist/examples/upload', authMiddleware, (req, res, next) => {
+    upload.single('file')(req, res, (err) => {
+        if (err) {
+            console.error('[MULTER ERROR]', err);
+            // Handle specific multer errors
+            if (err.code === 'LIMIT_FILE_SIZE') {
+                return res.status(400).json({ error: 'File too large. Maximum size is 100MB.' });
+            }
+            if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+                return res.status(400).json({ error: 'Unexpected file field.' });
+            }
+            if (err.message.includes('Only audio files are allowed')) {
+                return res.status(400).json({ error: 'Only audio files are allowed.' });
+            }
+            if (err.message.includes('File larger than 100mb')) {
+                return res.status(400).json({ error: 'File too large. Maximum size is 100MB.' });
+            }
+            if (err.message.includes('inappropriate language')) {
+                return res.status(400).json({ error: 'File name contains inappropriate language.' });
+            }
+            // Generic multer error
+            return res.status(400).json({ error: 'File upload failed', details: err.message });
+        }
+        // No multer error, proceed to the upload handler
+        uploadArtistExample(req, res, next);
+    });
+});
 router.get('/artist/:id/examples', getArtistExamples);
 router.get('/artist/get-artist-examples', authMiddleware, getArtistExamples);
 router.delete('/artist/examples/:exampleId', authMiddleware, deleteArtistExample);

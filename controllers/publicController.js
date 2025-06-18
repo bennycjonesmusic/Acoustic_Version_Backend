@@ -15,8 +15,7 @@ import { toUserSummary } from '../utils/userSummary.js';
 import {escapeRegex, isSafeRegexInput, sanitizeFileName} from '../utils/regexSanitizer.js';
 import { parseKeySignature } from '../utils/parseKeySignature.js';
 import mongoose from 'mongoose';
-import NodeCache from 'node-cache';
-const cache = new NodeCache({ stdTTL: 60 * 60 }); //cache for 1 hour
+import cache from '../utils/cache.js';
 
 /** * @typedef {Object} TrackSummary
  * @property {string} id - Track ID

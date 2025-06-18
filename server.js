@@ -234,11 +234,31 @@ app.use('/report', reportRoutes);
 const swaggerDocument = YAML.load('./openapi.yaml');
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
+// Global error handler - MUST be the last middleware before starting the server
+app.use((err, req, res, next) => {
+  const timestamp = new Date().toISOString();
+  console.error(`[GLOBAL ERROR HANDLER] [${timestamp}] ${req.method} ${req.url}`);
+  
+  // Log the error details
+  if (err && err.stack) {
+    console.error('Stack:', err.stack);
+  } else {
+    console.error('Error object:', err);
+  }
+  
+  // Ensure we always send a JSON response, never binary data
+  if (!res.headersSent) {
+    res.status(err.status || 500).json({ 
+      error: 'Internal server error',
+      message: err.message || 'An unexpected error occurred',
+      timestamp: timestamp
+    });
+  }
+});
+
 const port = 3000; //set the port. This will be the port that the server will listen on. Lovely job.
 
 const server = app.listen(port, () => {
-
-
 console.log(`Server is running on http://localhost:${port}`); //check the console to see if server is running
 });
 
@@ -265,14 +285,3 @@ process.on('SIGTERM', gracefulShutdown);
 
  //check aws has loaded properly.
 export default app;
-
-app.use((err, req, res, next) => {
-  const timestamp = new Date().toISOString();
-  console.error(`[GLOBAL ERROR HANDLER] [${timestamp}]`);
-  if (err && err.stack) {
-    console.error('Stack:', err.stack);
-  } else {
-    console.error('Error object:', err);
-  }
-  res.status(500).json({ message: 'Internal server error (global handler)' });
-});
