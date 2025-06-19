@@ -28,6 +28,7 @@ import { recalculateAllUserStorage } from './utils/recalculateUserStorage.js'; /
 import reportRoutes from './routes/report.js'; // Import reportRoutes
 import ordersRoutes from './routes/orders.js'; // Import orders routes
 import artistsRoutes from './routes/artists.js'; // Import artists routes
+import notificationsRoutes from './routes/notifications.js'; // Import notifications routes
 import swaggerUi from 'swagger-ui-express';
 import YAML from 'yamljs';
 
@@ -206,6 +207,7 @@ app.use('/public', publicRoutes);
 app.use('/users', userRoutes);
 app.use('/artists', artistsRoutes); // Add artists routes
 app.use('/orders', ordersRoutes); // Add orders routes
+app.use('/notifications', notificationsRoutes); // Add notifications routes
 app.use('/commission', commissionRoutes);
 // app.use('/', guideRoutes); // Commented out - using new guide routes in tracks.js
 app.use('/', tracksRoutes);

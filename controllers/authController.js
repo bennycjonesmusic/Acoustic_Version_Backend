@@ -10,6 +10,7 @@ import zxcvbn from 'zxcvbn'; //package for password strength
 import { validateEmail } from '../utils/emailValidator.js';
 import { sendVerificationEmail, sendPasswordResetEmail } from '../utils/emailAuthentication.js';
 import { registerSchema, loginSchema, artistAboutSchema, artistInstrumentSchema } from './validationSchemas.js';
+import { createWelcomeNotification, createArtistWelcomeNotification } from '../utils/notificationHelpers.js';
 import crypto from 'crypto';
 import adminEmails from '../utils/admins.js';
 import makeAdmin from '../middleware/make_admin.js';
@@ -92,9 +93,26 @@ export const register = async (req, res) => {
             userData.profileStatus = 'approved';
         } else {
             userData.profileStatus = 'approved';
+        }        const newUser = new User(userData);
+        await newUser.save();        // Create welcome notifications for new users
+        try {
+            // Defensive coding: handle both _id and id fields
+            const newUserId = newUser._id || newUser.id;
+            if (newUserId) {
+                if (userData.role === 'artist' || userData.role === 'admin') {
+                    await createArtistWelcomeNotification(newUserId);
+                    console.log(`Artist welcome notification created for new artist: ${username}`);
+                } else {
+                    await createWelcomeNotification(newUserId);
+                    console.log(`Welcome notification created for new user: ${username}`);
+                }
+            } else {
+                console.error('Could not create welcome notification: missing user ID');
+            }
+        } catch (notifError) {
+            console.error('Error creating registration welcome notification:', notifError);
+            // Don't fail registration if notification creation fails
         }
-        const newUser = new User(userData);
-        await newUser.save();
 
         // If artist or admin, remind to upload at least one example (for admin, show similar message)
         if (role === 'artist' || userData.role === 'admin') {
@@ -135,15 +153,42 @@ export const login = async (req, res) => {
         }        const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
             return res.status(400).json({ message: "Invalid username or password" });
-        }
-        // Set req.userId for downstream middleware
+        }        // Set req.userId for downstream middleware
         req.userId = user._id;
+          // Check if this is the user's first login and their role
+        const isFirstLogin = !user.lastOnline;
+        const isNonArtist = user.role === 'user';
+        const isArtist = user.role === 'artist';
+        
         // Update lastOnline timestamp
         user.lastOnline = new Date();
         await user.save();
-        // Call makeAdmin middleware inline
+          // Create welcome notifications for first-time users
+        if (isFirstLogin) {
+            try {
+                // Defensive coding: handle both _id and id fields
+                const userId = user._id || user.id;
+                if (userId) {
+                    if (isNonArtist) {
+                        await createWelcomeNotification(userId);
+                        console.log(`Welcome notification created for user: ${user.username}`);
+                    } else if (isArtist) {
+                        await createArtistWelcomeNotification(userId);
+                        console.log(`Artist welcome notification created for artist: ${user.username}`);
+                    }
+                } else {
+                    console.error('Could not create welcome notification: missing user ID');
+                }
+            } catch (notifError) {
+                console.error('Error creating welcome notification:', notifError);
+                // Don't fail the login if notification creation fails
+            }
+        }
+          // Call makeAdmin middleware inline
         await makeAdmin(req, res, async () => {
-            const token = jwt.sign({ id: user._id, email: user.email, role: user.role }, process.env.JWT_SECRET, { expiresIn: '2h' });
+            // Defensive coding: handle both _id and id fields
+            const userId = user._id || user.id;
+            const token = jwt.sign({ id: userId, email: user.email, role: user.role }, process.env.JWT_SECRET, { expiresIn: '2h' });
             res.status(200).json({ token, message: "Logged in successfully!" });
         });
     } catch (error) {

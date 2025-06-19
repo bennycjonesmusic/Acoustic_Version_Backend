@@ -11,7 +11,7 @@ import {searchUserByName
 
   
 } from '../controllers/publicController.js';
-import { addArtistReview, getArtistReviews, sortUploadedOrPurchasedTracks, followArtist, unfollowArtist, deleteArtistReview, getUploadedTracksByUser } from '../controllers/artistController.js';
+import { addArtistReview, getArtistReviews, sortUploadedOrPurchasedTracks, followArtist, unfollowArtist, getArtistFollowers, getUserFollowing, deleteArtistReview, getUploadedTracksByUser } from '../controllers/artistController.js';
 import { uploadArtistExample, getArtistExamples, deleteArtistExample } from '../controllers/artistExamplesController.js';
 import avatarUpload from '../middleware/avatar_upload.js';
 import avatarModeration from '../middleware/avatar_moderation.js';
@@ -32,6 +32,12 @@ router.get('/reviews/:id', authMiddleware, getArtistReviews);
 router.post('/follow/:id', authMiddleware, followArtist);
 
 router.post('/unfollow/:id', authMiddleware, unfollowArtist);
+// Get user's following list (with usernames)
+router.get('/following', authMiddleware, getUserFollowing);
+
+// Get user's followers list (with usernames)
+router.get('/followers', authMiddleware, getArtistFollowers);
+
 // Delete your review for an artist
 router.delete('/delete-review/:id', authMiddleware, deleteArtistReview);
 

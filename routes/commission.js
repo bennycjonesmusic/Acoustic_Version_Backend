@@ -151,4 +151,7 @@ router.post('/pay', authMiddleware, async (req, res) => {
 // Get commission by ID (customer, artist, or admin)
 router.get('/:id', authMiddleware, getCommissionById);
 
+// Customer confirms or denies preview by commission ID
+router.post('/:id/confirm', authMiddleware, confirmOrDenyCommission);
+
 export default router;

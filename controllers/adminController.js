@@ -1,6 +1,7 @@
 import { S3Client, ListObjectsCommand, DeleteObjectsCommand } from '@aws-sdk/client-s3';
 import User from '../models/User.js';
 import BackingTrack from '../models/backing_track.js';
+import { createArtistApprovedNotification, createArtistRejectedNotification } from '../utils/notificationHelpers.js';
 import { Parser } from 'json2csv';
 import path from 'path';
 import fs from 'fs';
@@ -126,13 +127,12 @@ export const getAllSalesAndRefunds = async (req, res) => {
     // Flatten all purchases
     const allPurchases = [];
     users.forEach(user => {
-      user.purchasedTracks.forEach(p => {
-        allPurchases.push({
+      user.purchasedTracks.forEach(p => {        allPurchases.push({
           buyer: user.username,
           buyerEmail: user.email,
           trackTitle: p.track?.title,
           artist: p.track?.user?.username,
-          trackId: p.track?._id,
+          trackId: p.track?._id || p.track?.id,
           paymentIntentId: p.paymentIntentId,
           purchasedAt: p.purchasedAt,
           price: p.price,
@@ -162,14 +162,13 @@ export const getSalesStatsAndCsv = async (req, res) => {
     // Flatten all purchases
     const allPurchases = [];
     users.forEach(user => {
-      user.purchasedTracks.forEach(p => {
-        allPurchases.push({
+      user.purchasedTracks.forEach(p => {        allPurchases.push({
           buyer: user.username,
           buyerEmail: user.email,
           trackTitle: p.track?.title,
           originalArtist: p.track?.originalArtist, // Add originalArtist
           artist: p.track?.user?.username,
-          trackId: p.track?._id,
+          trackId: p.track?._id || p.track?.id,
           paymentIntentId: p.paymentIntentId,
           purchasedAt: p.purchasedAt,
           price: p.price,
@@ -224,6 +223,21 @@ export const approveArtist = async (req, res) => {
         }
         artist.profileStatus = 'approved';
         await artist.save();
+          // Create approval notification for the artist
+        try {
+            // Defensive coding: handle both _id and id fields
+            const artistId = artist._id || artist.id;
+            if (artistId) {
+                await createArtistApprovedNotification(artistId);
+                console.log(`Artist approval notification sent to: ${artist.username}`);
+            } else {
+                console.error('Could not create approval notification: missing artist ID');
+            }
+        } catch (notifError) {
+            console.error('Error creating artist approval notification:', notifError);
+            // Don't fail the approval if notification creation fails
+        }
+        
         return res.status(200).json({ message: 'Artist approved', artist });
     } catch (err) {
         return res.status(500).json({ message: 'Failed to approve artist', error: err.message });
@@ -239,6 +253,21 @@ export const rejectArtist = async (req, res) => {
         }
         artist.profileStatus = 'rejected';
         await artist.save();
+          // Create rejection notification for the artist
+        try {
+            // Defensive coding: handle both _id and id fields
+            const artistId = artist._id || artist.id;
+            if (artistId) {
+                await createArtistRejectedNotification(artistId);
+                console.log(`Artist rejection notification sent to: ${artist.username}`);
+            } else {
+                console.error('Could not create rejection notification: missing artist ID');
+            }
+        } catch (notifError) {
+            console.error('Error creating artist rejection notification:', notifError);
+            // Don't fail the rejection if notification creation fails
+        }
+        
         return res.status(200).json({ message: 'Artist rejected', artist });
     } catch (err) {
         return res.status(500).json({ message: 'Failed to reject artist', error: err.message });
@@ -251,11 +280,13 @@ export const rejectArtist = async (req, res) => {
 export const deleteUserByEmail = async (req, res) => {
   const { email } = req.body;
   if (!email) return res.status(400).json({ message: 'Email required' });
-  try {
-    // Only delete the user document. Do NOT delete or modify any tracks.
+  try {    // Only delete the user document. Do NOT delete or modify any tracks.
     const user = await User.findOneAndDelete({ email });
     if (!user) return res.status(404).json({ message: 'User not found' });
-    return res.status(200).json({ message: 'User deleted', userId: user._id });
+    
+    // Defensive coding: handle both _id and id fields
+    const userId = user._id || user.id;
+    return res.status(200).json({ message: 'User deleted', userId });
   } catch (err) {
     return res.status(500).json({ message: 'Error deleting user', error: err.message });
   }

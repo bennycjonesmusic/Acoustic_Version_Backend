@@ -3,6 +3,7 @@ import Stripe from 'stripe';
 import User from '../models/User.js';
 import BackingTrack from '../models/backing_track.js';
 import { sendPurchaseReceiptEmail, sendSaleNotificationEmail } from '../utils/emailAuthentication.js';
+import { createCommissionRequestNotification } from '../utils/notificationHelpers.js';
 import fs from 'fs';
 import dotenv from 'dotenv';
 
@@ -191,17 +192,27 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
           // Always set stripePaymentIntentId, regardless of status
           commission.stripePaymentIntentId = session.payment_intent;
           // Only set to 'in_progress' if in a pre-payment state
-          console.log('[WEBHOOK DEBUG] Commission status before possible update:', commission.status);
-          if (
+          console.log('[WEBHOOK DEBUG] Commission status before possible update:', commission.status);          if (
             commission.status === 'requested' ||
             commission.status === 'accepted' ||
             commission.status === 'in_progress'
           ) {
             commission.status = 'in_progress';
             console.log('[WEBHOOK DEBUG] Commission status set to in_progress');
+            
+            // Create notification for artist that they have a new commission request
+            try {
+              await createCommissionRequestNotification(
+                commission.artist._id,
+                commission.customer.username,
+                commission._id
+              );
+            } catch (notifError) {
+              console.error('[WEBHOOK DEBUG] Error creating commission request notification:', notifError);
+            }
           } else {
             console.log('[WEBHOOK DEBUG] Commission status NOT set to in_progress (current status:', commission.status, ')');
-          }          try {
+          }try {
             await commission.save();
             console.log('[WEBHOOK DEBUG] Commission after update:', commission);
           } catch (saveErr) {

@@ -236,10 +236,11 @@ export const getFeaturedTracks = async (req, res) => {
         console.log('[getFeaturedTracks] Returning cached data');
         return res.status(200).json(cached); //if we have cached data, return it. simples.
     }    console.log('[getFeaturedTracks] ENTERED');
+    
     // get popular and recent tracks
-    const popularTracks = await BackingTrack.find({ isPrivate: false, isDeleted: { $ne: true } }).sort({ purchaseCount: -1 }).limit(10).populate('user', 'avatar username');
+    const popularTracks = await BackingTrack.find({ isPrivate: false, isDeleted: { $ne: true } }).sort({ purchaseCount: -1 }).limit(5).populate('user', 'avatar username');
     console.log('[getFeaturedTracks] popularTracks:', popularTracks.length);
-    const recentTracks = await BackingTrack.find({ isPrivate: false, isDeleted: { $ne: true } }).sort({ createdAt: -1 }).limit(10).populate('user', 'avatar username');
+    const recentTracks = await BackingTrack.find({ isPrivate: false, isDeleted: { $ne: true } }).sort({ createdAt: -1 }).limit(3).populate('user', 'avatar username');
     console.log('[getFeaturedTracks] recentTracks:', recentTracks.length);
 
     // exclude popular and recent tracks from the random selection
@@ -267,13 +268,11 @@ export const getFeaturedTracks = async (req, res) => {
         cache.set('featuredTracks', summary);
         console.log('[getFeaturedTracks] returning early, filtered.length:', filtered.length);
         return res.status(200).json(summary);
-    }
-
-    // isPrivate:false must be inside $match
+    }    // isPrivate:false must be inside $match
     let randomTracks = [];
     randomTracks = await BackingTrack.aggregate([
         { $match: { _id: { $nin: excludeIds }, isPrivate: false } },
-        { $sample: { size: 5 } }
+        { $sample: { size: 2 } }
     ]);
     console.log('[getFeaturedTracks] randomTracks:', randomTracks.length);
     const randomTrackIds = randomTracks.map(track => track._id).filter(id => id);
@@ -321,19 +320,22 @@ export const getFeaturedArtists = async (req, res) => {
             console.log('[getFeaturedArtists] Returning cached data', cached[0]);
             return res.status(200).json(cached);
         }
-        console.log('[getFeaturedArtists] No cache found, fetching fresh data');        // Find artists or admins with at least one uploaded track OR at least one commission as artist, and approved profile
+        console.log('[getFeaturedArtists] No cache found, fetching fresh data');        // First, try to find artists with tracks/commissions (quality filter)
+        const commissionArtistIds = await CommissionRequest.distinct('artist');
         const featuredArtists = await User.find({
             role: { $in: ['artist', 'admin'] },
             profileStatus: 'approved',
             $or: [
                 { uploadedTracks: { $exists: true, $not: { $size: 0 } } },
                 // Artists/admins with at least one commission as artist
-                { _id: { $in: await CommissionRequest.distinct('artist') } }
+                { _id: { $in: commissionArtistIds } }
             ]
-        }).limit(10);
+        }).limit(7);
+        
         // Exclude those already found from random selection
-        const excludeIds = featuredArtists.map(a => a._id);        // Find random additional artists/admins with same criteria
-        const commissionArtistIds = await CommissionRequest.distinct('artist');        const featureRandom = await User.aggregate([
+        const excludeIds = featuredArtists.map(a => a._id);
+        
+        const featureRandom = await User.aggregate([
             { $match: {
                 _id: { $nin: excludeIds },
                 role: { $in: ['artist', 'admin'] },
@@ -343,8 +345,24 @@ export const getFeaturedArtists = async (req, res) => {
                     { _id: { $in: commissionArtistIds } }
                 ]
             } },
-            { $sample: { size: 5 } }
-        ]);const featured = [...featuredArtists, ...featureRandom]; //Merge the arrays in a super array.
+            { $sample: { size: 3 } }
+        ]);
+
+        let featured = [...featuredArtists, ...featureRandom]; //Merge the arrays in a super array.
+          // If we don't have enough featured artists (less than 10), fill with any approved artists
+        const targetFeaturedCount = 10;
+        if (featured.length < targetFeaturedCount) {
+            console.log(`[getFeaturedArtists] Only found ${featured.length} artists with tracks/commissions, filling with any approved artists...`);
+            const alreadyIncludedIds = featured.map(a => a._id);
+            const additionalArtists = await User.find({
+                _id: { $nin: alreadyIncludedIds },
+                role: { $in: ['artist', 'admin'] },
+                profileStatus: 'approved'
+            }).limit(targetFeaturedCount - featured.length);
+            
+            featured = [...featured, ...additionalArtists];
+            console.log(`[getFeaturedArtists] Total featured artists after fallback: ${featured.length}`);
+        }
         console.log('[getFeaturedArtists] Raw featured artists data:', featured[0]);
         
         // Calculate average track rating for all featured artists

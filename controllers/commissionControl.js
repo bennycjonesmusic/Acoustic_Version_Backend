@@ -6,6 +6,11 @@ import User from '../models/User.js';
 import { sendCommissionPreviewEmail } from '../utils/updateFollowers.js';
 import { getAudioPreview } from '../utils/audioPreview.js';
 import { validateUserForPayouts } from '../utils/stripeAccountStatus.js';
+import { 
+    createCommissionRequestNotification, 
+    createCommissionAcceptedNotification, 
+    createCommissionCompletedNotification 
+} from '../utils/notificationHelpers.js';
 import { S3Client } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
 import path from 'path';
@@ -488,11 +493,28 @@ export const uploadFinishedTrack = async (req, res) => {
         const commissionToUpdate = await CommissionRequest.findById(commissionId).populate('customer artist');
         if (!commissionToUpdate) {
             return res.status(404).json({ error: 'Commission not found' });
-        }
-        commissionToUpdate.finishedTrackUrl = finishedTrackUrl;
+        }        commissionToUpdate.finishedTrackUrl = finishedTrackUrl;
         commissionToUpdate.previewTrackUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${previewKey}`;
         commissionToUpdate.status = 'delivered';
         await commissionToUpdate.save();
+          // Create notification for customer that commission is completed
+        try {
+            // Defensive coding: handle both _id and id fields
+            const customerId = commissionToUpdate.customer._id || commissionToUpdate.customer.id;
+            const commissionId = commissionToUpdate._id || commissionToUpdate.id;
+            if (customerId && commissionId) {
+                await createCommissionCompletedNotification(
+                    customerId,
+                    commissionToUpdate.artist.username,
+                    commissionId
+                );
+            } else {
+                console.error('Could not create commission completed notification: missing customer or commission ID');
+            }
+        } catch (notifError) {
+            console.error('Error creating commission completed notification:', notifError);
+        }
+        
         // Send preview email to customer
         if (commissionToUpdate.customer && commissionToUpdate.customer.email && commissionToUpdate.artist) {
             sendCommissionPreviewEmail(
@@ -513,8 +535,15 @@ export const uploadFinishedTrack = async (req, res) => {
 
 // Customer confirms or denies preview
 export const confirmOrDenyCommission = async (req, res) => {
-    const { commissionId, action } = req.body; // action: 'approve' or 'deny'
+    // Get commission ID from URL params or request body (backward compatibility)
+    const commissionId = req.params.id || req.body.commissionId;
+    const { action } = req.body; // action: 'approve' or 'request_changes' (or legacy 'deny')
     const customerId = req.userId;
+    
+    if (!commissionId) {
+        return res.status(400).json({ error: 'Commission ID is required' });
+    }
+    
     try {
         const commission = await CommissionRequest.findById(commissionId);
         console.log('[confirmOrDenyCommission] Loaded commission:', commission);
@@ -529,11 +558,11 @@ export const confirmOrDenyCommission = async (req, res) => {
             await commission.save();
             console.log('[confirmOrDenyCommission] Commission approved:', commissionId);
             return res.status(200).json({ success: true, message: 'Commission approved. Artist will be paid out.' });
-        } else if (action === 'deny') {
+        } else if (action === 'request_changes' || action === 'deny') {
             commission.status = 'in_progress'; // Allow artist to re-upload
             await commission.save();
-            console.log('[confirmOrDenyCommission] Commission denied:', commissionId);
-            return res.status(200).json({ success: true, message: 'Commission denied. Artist may re-upload.' });
+            console.log('[confirmOrDenyCommission] Commission changes requested:', commissionId);
+            return res.status(200).json({ success: true, message: 'Changes requested. Artist may re-upload.' });
         } else {
             return res.status(400).json({ error: 'Invalid action' });
         }
@@ -591,8 +620,7 @@ export const artistRespondToCommission = async (req, res) => {
         if (!commission) return res.status(404).json({ error: 'Commission not found' });
         if (commission.artist.toString() !== artistId) return res.status(403).json({ error: 'Not authorized' });
         if (commission.status !== 'pending_artist') return res.status(400).json({ error: 'Commission not awaiting artist response' });
-        
-        if (action === 'accept') {
+          if (action === 'accept') {
             // Check if artist can receive payouts before accepting commission
             const artist = await User.findById(artistId);
             const payoutValidation = validateUserForPayouts(artist);
@@ -602,6 +630,24 @@ export const artistRespondToCommission = async (req, res) => {
                 });
             }            commission.status = 'requested'; // Now customer can pay
             await commission.save();
+              // Create notification for customer that commission was accepted
+            try {
+                // Defensive coding: handle both _id and id fields
+                const customerId = commission.customer._id || commission.customer.id || commission.customer;
+                const commissionId = commission._id || commission.id;
+                if (customerId && commissionId) {
+                    await createCommissionAcceptedNotification(
+                        customerId,
+                        artist.username,
+                        commissionId
+                    );
+                } else {
+                    console.error('Could not create commission accepted notification: missing customer or commission ID');
+                }
+            } catch (notifError) {
+                console.error('Error creating commission accepted notification:', notifError);
+            }
+            
             return res.status(200).json({ success: true, message: 'Commission accepted. Awaiting customer payment.' });
         } else if (action === 'reject') {
             commission.status = 'rejected_by_artist';

@@ -1,4 +1,5 @@
 import User from '../models/User.js';
+import { createFollowNotification } from '../utils/notificationHelpers.js';
 import * as Filter from 'bad-words';
 import { validateUserForPayouts } from '../utils/stripeAccountStatus.js';
 
@@ -187,86 +188,166 @@ export const getArtistReviews = async (req, res) => {
 };
 
 export const followArtist = async (req, res) => {
-
   try {
-
     const artistId = req.params.id;
-    const artist = await User.findById(artistId);
+    
+    // Validate artistId format
+    if (!artistId || !artistId.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ message: "Invalid artist ID" });
+    }
+
     const user = await User.findById(req.userId);
+    const artist = await User.findById(artistId);
 
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
 
+    if (!artist) {
+      return res.status(404).json({ message: "Artist not found" });
+    }
 
+    // Prevent users from following themselves
+    if (user._id.equals(artist._id)) {
+      return res.status(400).json({ message: "You cannot follow yourself" });
+    }
 
- if (!user) {
-  console.error('User not found:', req.userId);
-    return res.status(404).json({ message: "User not found" });
- }
+    // Only allow following artists or admins
+    if (artist.role !== 'artist' && artist.role !== 'admin') {
+      return res.status(400).json({ message: "You can only follow artists" });
+    }
 
- if (user.following.includes(artistId)) {
-    return res.status(400).json({ message: "You are already following this artist" });
- }
+    // Check if already following
+    if (user.following.includes(artistId)) {
+      return res.status(400).json({ message: "You are already following this artist" });
+    }    // Add to following/followers arrays
+    user.following.push(artistId);
+    artist.followers.push(user._id || user.id);
+    artist.amountOfFollowers = artist.followers.length; // Use correct field name
 
- user.following.push(artistId);
- artist.followers.push(user._id);
- artist.numOfFollowers = artist.followers.length;
- await user.save();
- await artist.save();
- return res.status(200).json({ message: "Successfully followed artist", following: user.following, followers: artist.followers, numOfFollowers: artist.numOfFollowers });
+    await user.save();
+    await artist.save();
 
+    // Create notification for the artist being followed
+    try {
+      // Defensive coding: handle both _id and id fields
+      const followerId = user._id || user.id;
+      if (followerId) {
+        await createFollowNotification(artistId, followerId, user.username);
+      } else {
+        console.error('Could not create follow notification: missing user ID');
+      }
+    } catch (notificationError) {
+      console.error('Error creating follow notification:', notificationError);
+      // Don't fail the follow operation if notification fails
+    }
 
-  
-}
-  catch(error) {
+    return res.status(200).json({ 
+      message: "Successfully followed artist", 
+      following: user.following, 
+      followers: artist.followers, 
+      amountOfFollowers: artist.amountOfFollowers 
+    });
 
+  } catch(error) {
     console.error('Error following artist:', error);
     return res.status(500).json({ message: 'Internal server error' });
-
   }
- 
 }
 
 export const unfollowArtist = async (req, res) => {
-
-
   try {
-
-    const user = await User.findById(req.userId); //get id from token
-    const artist = await User.findById(req.params.id);
-
-    const artistId = artist._id || artist.id; 
-    const userId = user._id || user.id;
-
-    if (!user || !artist) {
-      return res.status(404).json({ message: "User/Artist not found" });
+    const artistId = req.params.id;
+    
+    // Validate artistId format
+    if (!artistId || !artistId.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ message: "Invalid artist ID" });
     }
 
-    const followingIndex = user.following.indexOf(artistId);
+    const user = await User.findById(req.userId);
+    const artist = await User.findById(artistId);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (!artist) {
+      return res.status(404).json({ message: "Artist not found" });
+    }
+
+    // Check if user is actually following the artist
+    const followingIndex = user.following.findIndex(id => id.equals(artistId));
     if (followingIndex === -1) {
       return res.status(400).json({ message: "You are not following this artist" });
     }
 
-    user.following.splice(followingIndex, 1);
-    await user.save();
-
-    const followerIndex = artist.followers.indexOf(userId);
+    const followerIndex = artist.followers.findIndex(id => id.equals(user._id));
     if (followerIndex === -1) {
       return res.status(400).json({ message: "Artist is not followed by you" });
     }
 
+    // Remove from following/followers arrays
+    user.following.splice(followingIndex, 1);
     artist.followers.splice(followerIndex, 1);
-    artist.numOfFollowers = artist.followers.length;
+    artist.amountOfFollowers = artist.followers.length; // Use correct field name
 
+    await user.save();
     await artist.save();
-    return res.status(200).json({ message: "Successfully unfollowed artist", following: user.following, followers: artist.followers, numOfFollowers: artist.numOfFollowers });
 
+    return res.status(200).json({ 
+      message: "Successfully unfollowed artist", 
+      following: user.following, 
+      followers: artist.followers, 
+      amountOfFollowers: artist.amountOfFollowers 
+    });
 
-    
-  } catch (err) {
-    console.error('Error unfollowing artist:', err);
+  } catch (error) {
+    console.error('Error unfollowing artist:', error);
     return res.status(500).json({ message: 'Internal server error' });
   }
 }
 
+export const getArtistFollowers = async (req, res) => {
+  try {
+    const user = await User.findById(req.userId).populate({
+      path: 'followers',
+      select: 'username'
+    });
+    
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    return res.status(200).json({
+      message: "Followers retrieved successfully",
+      followers: user.followers || [],
+    });
+  } catch (error) {
+    console.error('Error getting followers:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+export const getUserFollowing = async (req, res) => {
+  try {
+    const user = await User.findById(req.userId).populate({
+      path: 'following',
+      select: 'username'
+    });
+    
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    return res.status(200).json({
+      message: "Following retrieved successfully",
+      following: user.following || [],
+    });
+  } catch (error) {
+    console.error('Error getting following:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
 
 export const deleteArtistReview = async (req, res) => {
   

@@ -1,0 +1,174 @@
+import mongoose from 'mongoose';
+import dotenv from 'dotenv';
+dotenv.config();
+import adminEmails from '../utils/admins.js';
+
+const notificationsSchema = new mongoose.Schema({
+    userId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true,
+        index: true // Index for faster queries by user
+    },
+    type: {
+        type: String,
+        enum: [
+            'follow', 
+            'unfollow', 
+            'track_purchase', 
+            'commission_request', 
+            'commission_accepted', 
+            'commission_completed', 
+            'commission_declined',
+            'track_uploaded',
+            'track_approved',
+            'track_rejected',
+            'payout_processed',
+            'review_added',
+            'system'
+        ],
+        required: true
+    },
+    title: {
+        type: String,
+        required: true
+    },
+    message: {
+        type: String,
+        required: true
+    },
+    // Related entity information
+    relatedUser: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+    },
+    relatedTrack: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'BackingTrack'
+    },
+    relatedCommission: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'CommissionRequest'
+    },
+    // Additional data for the notification
+    metadata: {
+        type: mongoose.Schema.Types.Mixed,
+        default: {}
+    },
+    read: {
+        type: Boolean,
+        default: false,
+        index: true // Index for filtering read/unread
+    },
+    readAt: {
+        type: Date
+    },
+    createdAt: {
+        type: Date,
+        default: Date.now,
+        index: true // Index for sorting by date
+    }
+}, {
+    timestamps: true
+});
+
+// Compound index for efficient queries
+notificationsSchema.index({ userId: 1, createdAt: -1 });
+notificationsSchema.index({ userId: 1, read: 1 });
+
+// Pre-save middleware to automatically clean up old notifications
+notificationsSchema.pre('save', async function() {
+    // Only run cleanup for new notifications
+    if (this.isNew) {
+        const userId = this.userId;
+        
+        // Count total notifications for this user
+        const notificationCount = await this.constructor.countDocuments({ userId });
+        
+        // If we'll exceed 10 notifications after saving this one, delete the oldest
+        if (notificationCount >= 10) {
+            const excessCount = notificationCount - 9; // Keep 9, so with the new one we'll have 10
+            
+            // Find the oldest notifications to delete
+            const oldestNotifications = await this.constructor
+                .find({ userId })
+                .sort({ createdAt: 1 }) // Oldest first
+                .limit(excessCount)
+                .select('_id');
+            
+            const idsToDelete = oldestNotifications.map(n => n._id);
+            
+            if (idsToDelete.length > 0) {
+                await this.constructor.deleteMany({ 
+                    _id: { $in: idsToDelete } 
+                });
+                
+                console.log(`[Notifications] Cleaned up ${idsToDelete.length} old notifications for user ${userId}`);
+            }
+        }
+    }
+});
+
+// Static method to create notification with automatic cleanup
+notificationsSchema.statics.createNotification = async function(notificationData) {
+    const notification = new this(notificationData);
+    await notification.save();
+    return notification;
+};
+
+// Static method to mark notification as read
+notificationsSchema.statics.markAsRead = async function(notificationId, userId) {
+    return await this.findOneAndUpdate(
+        { _id: notificationId, userId },
+        { 
+            read: true, 
+            readAt: new Date() 
+        },
+        { new: true }
+    );
+};
+
+// Static method to mark all notifications as read for a user
+notificationsSchema.statics.markAllAsRead = async function(userId) {
+    return await this.updateMany(
+        { userId, read: false },
+        { 
+            read: true, 
+            readAt: new Date() 
+        }
+    );
+};
+
+// Static method to get unread count for a user
+notificationsSchema.statics.getUnreadCount = async function(userId) {
+    return await this.countDocuments({ userId, read: false });
+};
+
+// Static method to get paginated notifications for a user
+notificationsSchema.statics.getUserNotifications = async function(userId, page = 1, limit = 10) {
+    const skip = (page - 1) * limit;
+    
+    const notifications = await this.find({ userId })
+        .populate('relatedUser', 'username avatar')
+        .populate('relatedTrack', 'title')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit);
+    
+    const total = await this.countDocuments({ userId });
+    const unreadCount = await this.getUnreadCount(userId);
+    
+    return {
+        notifications,
+        pagination: {
+            page,
+            limit,
+            total,
+            pages: Math.ceil(total / limit)
+        },
+        unreadCount
+    };
+};
+
+const Notification = mongoose.model('Notification', notificationsSchema);
+export default Notification;

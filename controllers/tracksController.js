@@ -7,7 +7,7 @@ import { parseKeySignature } from '../utils/parseKeySignature.js';
 import { uploadTrackSchema, editTrackSchema, reviewSchema, commentSchema } from './validationSchemas.js';
 import { validateUserForPayouts } from '../utils/stripeAccountStatus.js';
 import * as Filter from 'bad-words';
-import { sendFollowersNewTrack } from '../utils/updateFollowers.js';
+import { notifyFollowersOfNewTrack, createFirstUploadCongratulationsNotification } from '../utils/notificationHelpers.js';
 import { getAudioPreview } from '../utils/audioPreview.js';
 import path from 'path';
 import { sanitizeFileName } from '../utils/regexSanitizer.js';
@@ -83,15 +83,15 @@ try{
     const { error } = reviewSchema.validate({ rating });
     if (error) {
         return res.status(400).json({ message: error.details[0].message });
-    }
-    // Only allow one rating per user per track (update if exists)
-    const existingRating = track.ratings.find(r => r.user.equals(user._id));
+    }    // Only allow one rating per user per track (update if exists)
+    const userId = user._id || user.id;
+    const existingRating = track.ratings.find(r => r.user.equals(userId));
     if (existingRating) {
         existingRating.stars = rating;
         existingRating.ratedAt = new Date();
     } else {
         track.ratings.push({
-            user: user._id,
+            user: userId,
             stars: rating,
             ratedAt: new Date()
         });
@@ -271,23 +271,37 @@ export const uploadTrack = async (req, res) => {
             ...keyData // Spread the parsed key signature data
         });
         await newTrack.save();
-        // Update user's storageUsed
-
-         Artist.numOfUploadedTracks += 1;
-        await Artist.save(); //not Sure why I wrote the code below seeing as it is basically redundant with Artist. could just use Artist instead
-        await User.findByIdAndUpdate(req.userId, { $inc: { storageUsed: req.file.size }, $push: { uploadedTracks: newTrack._id } });
-        // Notify followers by email
-        if (Artist.followers && Artist.followers.length > 0) {
-            // Get followers' emails
-            const followers = await User.find({ _id: { $in: Artist.followers } }, 'email');
-            for (const follower of followers) {
-                if (follower.email) {
-                    // Send email asynchronously, don't block response
-                    sendFollowersNewTrack(follower.email, Artist, newTrack).catch(e => {
-                        console.error('Email error:', e);
-                    });
+        // Update user's storageUsed        // Check if this is the artist's first upload (before adding the new track)
+        const isFirstUpload = Artist.uploadedTracks.length === 0;
+        
+        Artist.numOfUploadedTracks = Artist.uploadedTracks.length + 1;
+        await Artist.save(); //not Sure why I wrote the code below seeing as it is basically redundant with Artist. could just use Artist instead        await User.findByIdAndUpdate(req.userId, { $inc: { storageUsed: req.file.size }, $push: { uploadedTracks: newTrack._id || newTrack.id } });
+        
+        // Send congratulations notification for first upload
+        if (isFirstUpload) {
+            try {
+                // Defensive coding: handle both _id and id fields
+                const artistId = Artist._id || Artist.id;
+                if (artistId) {
+                    await createFirstUploadCongratulationsNotification(artistId);
+                    console.log(`First upload congratulations notification sent to artist: ${Artist.username}`);
+                } else {
+                    console.error('Could not create first upload notification: missing artist ID');
                 }
+            } catch (notifError) {
+                console.error('Error creating first upload congratulations notification:', notifError);
+                // Don't fail the upload if notification fails
             }
+        }
+        
+        // Notify followers via in-app notifications
+        if (Artist.followers && Artist.followers.length > 0) {
+            // Send notifications asynchronously, don't block response
+            // Defensive coding: handle both _id and id fields
+            const trackId = newTrack._id || newTrack.id;
+            notifyFollowersOfNewTrack(req.userId, trackId, newTrack.title).catch(e => {
+                console.error('Notification error:', e);
+            });
         }
         // If preview failed, include error in response for debugging
         if (!previewUrl && res.locals.previewError) {
@@ -387,7 +401,11 @@ export const deleteTrack = async (req, res) => {
           { $pull: { uploadedTracks: trackId } }
         );
 
-        await User.findByIdAndUpdate(req.userId, {$inc: {numOfUploadedTracks: -1}}, {new: true});
+        const user = await User.findById(req.userId);
+        if (user) {
+             user.numOfUploadedTracks = user.uploadedTracks.length;
+            await user.save();
+            }
         await s3Client.send(new DeleteObjectCommand(deleteParameters));
         // Delete preview from S3 if it exists
         if (Track.previewUrl) {
@@ -688,10 +706,9 @@ export const commentTrack = async (req, res) => {
     const profanity = new Filter.Filter();
     if (profanity.isProfane(comment)) {
       return res.status(400).json({ message: 'Please avoid using inappropriate language.' });
-    }
-    // Add comment to track
+    }    // Add comment to track
     track.comments.push({
-      user: user._id,
+      user: user._id || user.id,
       text: comment,
       createdAt: new Date()
     });
