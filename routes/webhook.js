@@ -3,7 +3,7 @@ import Stripe from 'stripe';
 import User from '../models/User.js';
 import BackingTrack from '../models/backing_track.js';
 import { sendPurchaseReceiptEmail, sendSaleNotificationEmail } from '../utils/emailAuthentication.js';
-import { createCommissionRequestNotification } from '../utils/notificationHelpers.js';
+import { createCommissionRequestNotification, createTrackPurchaseNotification } from '../utils/notificationHelpers.js';
 import fs from 'fs';
 import dotenv from 'dotenv';
 
@@ -82,6 +82,19 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
             });
             track.purchaseCount = (track.purchaseCount || 0) + 1;
             await track.save();
+            
+            // Create purchase notification for the artist
+            try {
+              await createTrackPurchaseNotification(
+                track.user, // artistId
+                user.username, // buyerUsername
+                track._id, // trackId
+                track.title // trackTitle
+              );
+              console.log(`[WEBHOOK] Created purchase notification for artist ${track.user} for track "${track.title}"`);
+            } catch (notificationError) {
+              console.error('[WEBHOOK] Error creating purchase notification:', notificationError);
+            }
           }
         }
 
@@ -157,6 +170,19 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
           await user.save();
           // Only increment purchaseCount if not already purchased
           track.purchaseCount = (track.purchaseCount || 0) + 1;
+          
+          // Create purchase notification for the artist
+          try {
+            await createTrackPurchaseNotification(
+              track.user, // artistId
+              user.username, // buyerUsername
+              track._id, // trackId
+              track.title // trackTitle
+            );
+            console.log(`[WEBHOOK] Created purchase notification for artist ${track.user} for track "${track.title}"`);
+          } catch (notificationError) {
+            console.error('[WEBHOOK] Error creating purchase notification:', notificationError);
+          }
         }
         const artist = await User.findById(track.user);
         if (artist) {

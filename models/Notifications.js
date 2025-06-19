@@ -9,20 +9,38 @@ const notificationsSchema = new mongoose.Schema({
         ref: 'User',
         required: true,
         index: true // Index for faster queries by user
-    },
-    type: {
+    },    type: {
         type: String,
         enum: [
+            // Core user interactions
             'follow', 
-            'unfollow', 
+            'unfollow',
+            
+            // Track-related notifications
             'track_purchase', 
+            'track_uploaded',
+            'track_upload',  // frontend uses this variant too
+            'track_approved',
+            'track_rejected',
+            
+            // Commission-related notifications
             'commission_request', 
             'commission_accepted', 
             'commission_completed', 
             'commission_declined',
-            'track_uploaded',
-            'track_approved',
-            'track_rejected',
+            
+            // Welcome/onboarding notifications
+            'welcome',
+            'artist_welcome',
+            
+            // Artist management notifications
+            'artist_approved',
+            'artist_rejected',
+            
+            // Achievement notifications
+            'first_upload_congratulations',
+            
+            // System notifications
             'payout_processed',
             'review_added',
             'system'
@@ -111,9 +129,20 @@ notificationsSchema.pre('save', async function() {
 
 // Static method to create notification with automatic cleanup
 notificationsSchema.statics.createNotification = async function(notificationData) {
-    const notification = new this(notificationData);
-    await notification.save();
-    return notification;
+    console.log('[NOTIFICATION MODEL DEBUG] Creating notification with data:', notificationData);
+    
+    try {
+        const notification = new this(notificationData);
+        console.log('[NOTIFICATION MODEL DEBUG] Notification object created:', notification);
+        
+        await notification.save();
+        console.log('[NOTIFICATION MODEL DEBUG] Notification saved successfully:', notification);
+        
+        return notification;
+    } catch (error) {
+        console.error('[NOTIFICATION MODEL DEBUG] Error creating notification:', error);
+        throw error;
+    }
 };
 
 // Static method to mark notification as read

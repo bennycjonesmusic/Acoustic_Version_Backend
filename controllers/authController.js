@@ -154,26 +154,33 @@ export const login = async (req, res) => {
         if (!isMatch) {
             return res.status(400).json({ message: "Invalid username or password" });
         }        // Set req.userId for downstream middleware
-        req.userId = user._id;
-          // Check if this is the user's first login and their role
-        const isFirstLogin = !user.lastOnline;
+        req.userId = user._id;        // Check if this is the user's first login and their role
+        const isFirstLogin = !user.hasLoggedInBefore;
         const isNonArtist = user.role === 'user';
         const isArtist = user.role === 'artist';
         
-        // Update lastOnline timestamp
+        // Update lastOnline timestamp and mark as logged in
         user.lastOnline = new Date();
-        await user.save();
-          // Create welcome notifications for first-time users
         if (isFirstLogin) {
+            user.hasLoggedInBefore = true;
+        }
+        await user.save();        // Create welcome notifications for first-time users
+        if (isFirstLogin) {
+            console.log('[AUTH DEBUG] First time login detected for user:', user.username);
             try {
                 // Defensive coding: handle both _id and id fields
                 const userId = user._id || user.id;
-                if (userId) {
+                console.log('[AUTH DEBUG] User ID for notification:', userId);
+                  if (userId) {
                     if (isNonArtist) {
-                        await createWelcomeNotification(userId);
+                        console.log('[AUTH DEBUG] Creating welcome notification for regular user');
+                        const result = await createWelcomeNotification(userId);
+                        console.log('[AUTH DEBUG] Welcome notification result:', result);
                         console.log(`Welcome notification created for user: ${user.username}`);
                     } else if (isArtist) {
-                        await createArtistWelcomeNotification(userId);
+                        console.log('[AUTH DEBUG] Creating artist welcome notification');
+                        const result = await createArtistWelcomeNotification(userId);
+                        console.log('[AUTH DEBUG] Artist welcome notification result:', result);
                         console.log(`Artist welcome notification created for artist: ${user.username}`);
                     }
                 } else {
@@ -183,6 +190,8 @@ export const login = async (req, res) => {
                 console.error('Error creating welcome notification:', notifError);
                 // Don't fail the login if notification creation fails
             }
+        } else {
+            console.log('[AUTH DEBUG] Not first login, skipping notification for user:', user.username);
         }
           // Call makeAdmin middleware inline
         await makeAdmin(req, res, async () => {

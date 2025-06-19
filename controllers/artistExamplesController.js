@@ -176,8 +176,7 @@ export const getArtistExamples = async (req, res) => {
         if (!user || (user.role !== 'artist' && user.role !== 'admin')) {
             return res.status(404).json({ error: 'Artist not found' });
         }
-        
-        // Map _id to id for response consistency
+          // Map _id to id for response consistency
         const mappedExamples = user.artistExamples.map(e => ({
             ...e.toObject(),
             id: e._id.toString(),
@@ -186,6 +185,7 @@ export const getArtistExamples = async (req, res) => {
         
         return res.status(200).json({ 
             artistExamples: mappedExamples,
+            artistYoutubeLink: user.artistYoutubeLink || null,
             count: mappedExamples.length
         });
         
@@ -278,6 +278,47 @@ export const deleteArtistExample = async (req, res) => {
             error: 'Failed to delete example', 
             details: errorMessage,
             timestamp: new Date().toISOString()
+        });
+    }
+};
+
+// PUT /artist/youtube-link
+export const updateArtistYoutubeLink = async (req, res) => {
+    try {
+        const user = await User.findById(req.userId);
+        if (!user || (user.role !== 'artist' && user.role !== 'admin')) {
+            return res.status(403).json({ error: 'Not authorized' });
+        }
+        
+        const { youtubeLink } = req.body;
+        
+        // Validate YouTube URL if provided
+        if (youtubeLink && youtubeLink.trim() !== '') {
+            const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com\/(watch\?v=|embed\/)|youtu\.be\/)[\w-]+/;
+            if (!youtubeRegex.test(youtubeLink.trim())) {
+                return res.status(400).json({ error: 'Invalid YouTube URL format' });
+            }
+        }
+        
+        // Update or remove the YouTube link
+        user.artistYoutubeLink = youtubeLink && youtubeLink.trim() !== '' ? youtubeLink.trim() : null;
+        await user.save();
+        
+        // Invalidate featured artists cache since YouTube link might be part of the featured data
+        cache.del('featuredArtists');
+        console.log('Invalidated featuredArtists cache after YouTube link update');
+        
+        return res.status(200).json({ 
+            success: true, 
+            artistYoutubeLink: user.artistYoutubeLink,
+            message: user.artistYoutubeLink ? 'YouTube link updated successfully' : 'YouTube link removed successfully'
+        });
+        
+    } catch (err) {
+        console.error('Update YouTube link error:', err);
+        return res.status(500).json({ 
+            error: 'Failed to update YouTube link', 
+            details: err.message 
         });
     }
 };

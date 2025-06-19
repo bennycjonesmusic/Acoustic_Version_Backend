@@ -151,11 +151,15 @@ stripeOnboardingComplete: {
     type: Number,
     default: 0,
     description: 'Average time in days to complete commissions for this artist.'
-  },
-  lastOnline: {
+  },  lastOnline: {
     type: Date,
     default: null,
     description: 'Timestamp of the user\'s last activity.'
+  },
+  hasLoggedInBefore: {
+    type: Boolean,
+    default: false,
+    description: 'Whether the user has ever logged in (for first-time login notifications).'
   },
   numOfUploadedTracks: {
     type: Number,

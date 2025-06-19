@@ -12,7 +12,7 @@ import {searchUserByName
   
 } from '../controllers/publicController.js';
 import { addArtistReview, getArtistReviews, sortUploadedOrPurchasedTracks, followArtist, unfollowArtist, getArtistFollowers, getUserFollowing, deleteArtistReview, getUploadedTracksByUser } from '../controllers/artistController.js';
-import { uploadArtistExample, getArtistExamples, deleteArtistExample } from '../controllers/artistExamplesController.js';
+import { uploadArtistExample, getArtistExamples, deleteArtistExample, updateArtistYoutubeLink } from '../controllers/artistExamplesController.js';
 import avatarUpload from '../middleware/avatar_upload.js';
 import avatarModeration from '../middleware/avatar_moderation.js';
 import { updateProfile } from '../controllers/authController.js';
@@ -56,7 +56,7 @@ router.post('/artist/examples/upload', authMiddleware, (req, res, next) => {
             if (err.code === 'LIMIT_UNEXPECTED_FILE') {
                 return res.status(400).json({ error: 'Unexpected file field.' });
             }
-            if (err.message.includes('Only audio files are allowed')) {
+            if (err.message.includes('Only audio files areallowed')) {
                 return res.status(400).json({ error: 'Only audio files are allowed.' });
             }
             if (err.message.includes('File larger than 100mb')) {
@@ -75,6 +75,9 @@ router.post('/artist/examples/upload', authMiddleware, (req, res, next) => {
 router.get('/artist/:id/examples', getArtistExamples);
 router.get('/artist/get-artist-examples', authMiddleware, getArtistExamples);
 router.delete('/artist/examples/:exampleId', authMiddleware, deleteArtistExample);
+
+// Update YouTube link for artist
+router.put('/artist/youtube-link', authMiddleware, updateArtistYoutubeLink);
 
 // Update artist/admin profile (with avatar upload to S3)
 router.patch('/profile', authMiddleware, avatarUpload.single('avatar'), avatarModeration, updateProfile);

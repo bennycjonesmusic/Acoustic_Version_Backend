@@ -6,13 +6,26 @@ import Notification from '../models/Notifications.js';
  */
 
 export const createFollowNotification = async (followedUserId, followerUserId, followerUsername) => {
-    return await Notification.createNotification({
-        userId: followedUserId,
-        type: 'follow',
-        title: 'New Follower',
-        message: `${followerUsername} started following you`,
-        relatedUser: followerUserId
+    console.log('[NOTIFICATION DEBUG] Creating follow notification:', {
+        followedUserId,
+        followerUserId,
+        followerUsername
     });
+    
+    try {
+        const result = await Notification.createNotification({
+            userId: followedUserId,
+            type: 'follow',
+            title: 'New Follower',
+            message: `${followerUsername} started following you`,
+            relatedUser: followerUserId
+        });
+        console.log('[NOTIFICATION DEBUG] Follow notification created successfully:', result);
+        return result;
+    } catch (error) {
+        console.error('[NOTIFICATION DEBUG] Error creating follow notification:', error);
+        throw error;
+    }
 };
 
 export const createTrackPurchaseNotification = async (artistId, buyerUsername, trackId, trackTitle) => {
@@ -122,6 +135,17 @@ export const createReviewAddedNotification = async (artistId, reviewerUsername, 
     });
 };
 
+export const createRatingNotification = async (artistId, raterUsername, trackId, trackTitle, rating) => {
+    return await Notification.createNotification({
+        userId: artistId,
+        type: 'review_added',
+        title: 'New Track Rating',
+        message: `${raterUsername} rated your track "${trackTitle}" ${rating} star${rating !== 1 ? 's' : ''}`,
+        relatedTrack: trackId,
+        metadata: { raterUsername, trackTitle, rating }
+    });
+};
+
 export const createSystemNotification = async (userId, title, message, metadata = {}) => {
     return await Notification.createNotification({
         userId,
@@ -221,29 +245,47 @@ export const cleanupOldNotifications = async (userId) => {
 };
 
 export const createWelcomeNotification = async (userId) => {
-    return await Notification.createNotification({
-        userId: userId,
-        type: 'welcome',
-        title: 'Welcome to Acoustic Version!',
-        message: 'A home for Custom Made Acoustic Backing Tracks. Click "Shop" to get started. If you would like to learn more about our commission-a-musician service, please go to "About" and read the FAQ.',
-        metadata: {
-            isWelcome: true,
-            priority: 'high'
-        }
-    });
+    console.log('[NOTIFICATION DEBUG] Creating welcome notification for user:', userId);
+    
+    try {
+        const result = await Notification.createNotification({
+            userId: userId,
+            type: 'welcome',
+            title: 'Welcome to Acoustic Version!',
+            message: 'A home for Custom Made Acoustic Backing Tracks. Click "Shop" to get started. If you would like to learn more about our commission-a-musician service, please go to "About" and read the FAQ.',
+            metadata: {
+                isWelcome: true,
+                priority: 'high'
+            }
+        });
+        console.log('[NOTIFICATION DEBUG] Welcome notification created successfully:', result);
+        return result;
+    } catch (error) {
+        console.error('[NOTIFICATION DEBUG] Error creating welcome notification:', error);
+        throw error;
+    }
 };
 
 export const createArtistWelcomeNotification = async (userId) => {
-    return await Notification.createNotification({
-        userId: userId,
-        type: 'artist_welcome',
-        title: 'Welcome to Our Artist Team!',
-        message: 'Thanks for wanting to be a part of our team. To get started with your application, please go to "Artist Examples" in the artist dashboard section and upload some examples of your playing. If your profile is approved, you can then head to "Track Management" to upload your licensed tracks. Otherwise, if you have no tracks, feel free to head to "Artist Settings" and tick the box to make yourself available for commissions!',
-        metadata: {
-            isArtistWelcome: true,
-            priority: 'high'
-        }
-    });
+    console.log('[NOTIFICATION DEBUG] Creating artist welcome notification for user:', userId);
+    
+    try {
+        const result = await Notification.createNotification({
+            userId: userId,
+            type: 'artist_welcome',
+            title: 'Welcome to Our Artist Team!',
+            message: 'Thanks for wanting to be a part of our team. To get started with your application, please go to "Artist Examples" in the artist dashboard section and upload some examples of your playing. If your profile is approved, you can then head to "Track Management" to upload your licensed tracks. Otherwise, if you have no tracks, feel free to head to "Artist Settings" and tick the box to make yourself available for commissions!',
+            metadata: {
+                isArtistWelcome: true,
+                priority: 'high'
+            }
+        });
+        console.log('[NOTIFICATION DEBUG] Artist welcome notification created successfully:', result);
+        return result;
+    } catch (error) {
+        console.error('[NOTIFICATION DEBUG] Error creating artist welcome notification:', error);
+        throw error;
+    }
 };
 
 export const createArtistApprovedNotification = async (userId) => {

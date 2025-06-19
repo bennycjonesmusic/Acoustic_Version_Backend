@@ -7,7 +7,7 @@ import { parseKeySignature } from '../utils/parseKeySignature.js';
 import { uploadTrackSchema, editTrackSchema, reviewSchema, commentSchema } from './validationSchemas.js';
 import { validateUserForPayouts } from '../utils/stripeAccountStatus.js';
 import * as Filter from 'bad-words';
-import { notifyFollowersOfNewTrack, createFirstUploadCongratulationsNotification } from '../utils/notificationHelpers.js';
+import { notifyFollowersOfNewTrack, createFirstUploadCongratulationsNotification, createRatingNotification } from '../utils/notificationHelpers.js';
 import { getAudioPreview } from '../utils/audioPreview.js';
 import path from 'path';
 import { sanitizeFileName } from '../utils/regexSanitizer.js';
@@ -95,9 +95,25 @@ try{
             stars: rating,
             ratedAt: new Date()
         });
-    }
-    track.calculateAverageRating();
+    }    track.calculateAverageRating();
     await track.save();
+    
+    // Create rating notification for the artist (only for new ratings, not updates)
+    if (!existingRating) {
+        try {
+            await createRatingNotification(
+                track.user, // artistId
+                user.username, // raterUsername
+                track._id, // trackId
+                track.title, // trackTitle
+                rating // rating
+            );
+            console.log(`[TRACKS] Created rating notification for artist ${track.user} for track "${track.title}"`);
+        } catch (notificationError) {
+            console.error('[TRACKS] Error creating rating notification:', notificationError);
+        }
+    }
+    
     // Update artist's averageTrackRating
     const artist = await User.findById(track.user);
     if (artist && (artist.role === 'artist' || artist.role === 'admin')) {
