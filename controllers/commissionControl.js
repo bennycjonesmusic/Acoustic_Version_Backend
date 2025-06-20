@@ -451,47 +451,48 @@ export const uploadFinishedTrack = async (req, res) => {
         }
         try { fs.existsSync(tempFinishedPath) && fs.unlinkSync(tempFinishedPath); } catch (e) {}
         const finishedTrackUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${finishedKey}`;
-        // Generate 30s preview using shared utility
-        let tempFullPath, tempPreviewPath;
+        // --- 30-second preview logic (EXACT copy of tracksController) ---
+        let previewUrl = null;
+        const previewPath = tempFinishedPath + '-preview.mp3';
         try {
-            tempFullPath = path.join(tmpDir, `${commissionId}_full${ext}`);
-            tempPreviewPath = path.join(tmpDir, `${commissionId}_preview.mp3`);
-            fs.writeFileSync(tempFullPath, req.file.buffer);
-            // Debug: check file size and buffer length
-            console.log('[DEBUG] tempFullPath:', tempFullPath, 'size:', fs.statSync(tempFullPath).size, 'buffer length:', req.file.buffer.length);
-            // Try running ffmpeg manually if this fails
-            await getAudioPreview(tempFullPath, tempPreviewPath, 30);
-            // Debug: check preview file size
-            if (fs.existsSync(tempPreviewPath)) {
-              console.log('[DEBUG] tempPreviewPath:', tempPreviewPath, 'size:', fs.statSync(tempPreviewPath).size);
-            } else {
-              console.error('[DEBUG] tempPreviewPath was not created!');
-            }
-            try {
-                await new Upload({
-                    client: s3Client,
-                    params: {
-                        Bucket: process.env.AWS_BUCKET_NAME,
-                        Key: previewKey,
-                        Body: fs.createReadStream(tempPreviewPath),
-                        ACL: 'private',
-                        ContentType: req.file.mimetype,
-                    },
-                }).done();
-            } catch (s3Err) {
-                return res.status(500).json({ error: 'Failed to upload preview to S3', details: s3Err.message });
-            }
-        } catch (previewErr) {
-            return res.status(500).json({ error: 'Failed to generate preview', details: previewErr.message });
+            // Write buffer to temp file for ffmpeg
+            fs.writeFileSync(tempFinishedPath + '-full', req.file.buffer);
+            await getAudioPreview(tempFinishedPath + '-full', previewPath, 30);
+            // Use commissionId as the clean file name
+            let cleanFileName = commissionId.toString().replace(/\.[^/.]+$/, '');
+            const previewUploadParams = {
+                Bucket: process.env.AWS_BUCKET_NAME,
+                Key: `previews/${Date.now()}-${cleanFileName}.mp3`,
+                Body: fs.createReadStream(previewPath),
+                StorageClass: 'STANDARD',
+                ContentType: 'audio/mpeg',
+                ACL: 'public-read',
+                CacheControl: 'public, max-age=3600, must-revalidate',
+                Metadata: {
+                    'Content-Type': 'audio/mpeg',
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Methods': 'GET, HEAD',
+                    'Access-Control-Allow-Headers': 'Range, Content-Range'
+                }
+            };
+            const previewData = await new Upload({ client: s3Client, params: previewUploadParams }).done();
+            previewUrl = previewData.Location;
+            // Clean up temp files
+            fs.unlinkSync(previewPath);
+            fs.unlinkSync(tempFinishedPath + '-full');
+        } catch (err) {
+            console.error('Error generating/uploading preview:', err);
+            try { fs.existsSync(previewPath) && fs.unlinkSync(previewPath); } catch {}
+            try { fs.existsSync(tempFinishedPath + '-full') && fs.unlinkSync(tempFinishedPath + '-full'); } catch {}
+            previewUrl = null;
         }
-        try { fs.existsSync(tempFullPath) && fs.unlinkSync(tempFullPath); } catch (e) {}
-        try { fs.existsSync(tempPreviewPath) && fs.unlinkSync(tempPreviewPath); } catch (e) {}
+        // --- end preview logic ---
         // Update commission
         const commissionToUpdate = await CommissionRequest.findById(commissionId).populate('customer artist');
         if (!commissionToUpdate) {
             return res.status(404).json({ error: 'Commission not found' });
         }        commissionToUpdate.finishedTrackUrl = finishedTrackUrl;
-        commissionToUpdate.previewTrackUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${previewKey}`;
+        commissionToUpdate.previewTrackUrl = previewUrl;
         commissionToUpdate.status = 'delivered';
         await commissionToUpdate.save();
           // Create notification for customer that commission is completed
