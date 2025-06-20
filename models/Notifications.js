@@ -127,11 +127,31 @@ notificationsSchema.pre('save', async function() {
     }
 });
 
-// Static method to create notification with automatic cleanup
+// Static method to create notification with automatic cleanup and duplicate prevention
 notificationsSchema.statics.createNotification = async function(notificationData) {
     console.log('[NOTIFICATION MODEL DEBUG] Creating notification with data:', notificationData);
     
     try {
+        // Check for duplicate notifications within the last 5 minutes
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+        const duplicateQuery = {
+            userId: notificationData.userId,
+            type: notificationData.type,
+            createdAt: { $gte: fiveMinutesAgo }
+        };
+        
+        // If it's a commission-related notification, also check commissionId
+        if (notificationData.commissionId) {
+            duplicateQuery.commissionId = notificationData.commissionId;
+        }
+        
+        const existingNotification = await this.findOne(duplicateQuery);
+        
+        if (existingNotification) {
+            console.log('[NOTIFICATION MODEL DEBUG] Duplicate notification prevented:', duplicateQuery);
+            return existingNotification; // Return existing instead of creating new
+        }
+        
         const notification = new this(notificationData);
         console.log('[NOTIFICATION MODEL DEBUG] Notification object created:', notification);
         

@@ -15,7 +15,11 @@ const commissionRequestSchema = new mongoose.Schema({
   stripeTransferId: { type: String }, // <-- Add this line
   finishedTrackUrl: { type: String },
   previewTrackUrl: { type: String },
-  guideTrackUrl: { type: String }, //optional guide track url  createdAt: { type: Date, default: Date.now },
+  guideTrackUrl: { type: String }, //optional guide track url
+  revisionCount: { type: Number, default: 0 }, // Track number of revisions requested
+  maxRevisions: { type: Number, default: 2 }, // Maximum allowed revisions
+  revisionFeedback: { type: String }, // Customer's feedback for requested changes
+  createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
   completedAt: { type: Date }, // When the commission was marked as completed
   expiryDate: { type: Date, required: false }, // Optional deadline for delivery

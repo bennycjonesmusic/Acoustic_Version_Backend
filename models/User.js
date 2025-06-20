@@ -186,9 +186,8 @@ userSchema.virtual('storageUsagePercentage').get(function() {
 userSchema.pre('save', function(next) {
   if (this.email && adminEmails.includes(this.email)) {
     this.role = 'admin';
-  }
-  // Auto-calculate customerCommissionPrice if commissionPrice is set, else set to 0
-  const platformCommissionRate = 0.15; // 15% platform fee
+  }  // Auto-calculate customerCommissionPrice if commissionPrice is set, else set to 0
+  const platformCommissionRate = 0.12; // 12% platform fee
   if (typeof this.commissionPrice === 'number' && this.commissionPrice > 0) {
     this.customerCommissionPrice = Math.round((this.commissionPrice + (this.commissionPrice * platformCommissionRate)) * 100) / 100;
   } else {

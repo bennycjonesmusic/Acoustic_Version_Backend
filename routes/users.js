@@ -26,8 +26,8 @@ router.get("/search-by-username", authMiddleware, searchUserByName);
 
 // Add a review to an artist
 router.post('/review/:id', authMiddleware, addArtistReview);
-// Get all reviews for an artist
-router.get('/reviews/:id', authMiddleware, getArtistReviews);
+// Get all reviews for an artist (public endpoint)
+router.get('/reviews/:id', getArtistReviews);
 // Follow an artist
 router.post('/follow/:id', authMiddleware, followArtist);
 

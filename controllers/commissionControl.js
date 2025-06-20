@@ -119,22 +119,21 @@ export const createCommissionRequest = async (req, res) => {
                 error: `Commission cannot be created: ${payoutValidation.reason}. The artist must complete their Stripe account setup first.` 
             });
         }
+          const artistPrice = Number(artist.commissionPrice) || 0;
+        const customerPrice = Number(artist.customerCommissionPrice) || 0;
         
-        const artistPrice = Number(artist.commissionPrice) || 0;
-        const platformCommissionRate = 0.15; // 15% platform fee
-        const platformCommission = Math.round(artistPrice * platformCommissionRate * 100) / 100; // round to 2 decimals
-        const finalPrice = Math.round((artistPrice + platformCommission) * 100) / 100;
         console.log('[createCommissionRequest] artist.commissionPrice:', artist.commissionPrice);
-        console.log('[createCommissionRequest] platformCommission:', platformCommission);
-        console.log('[createCommissionRequest] finalPrice (customer pays):', finalPrice);
+        console.log('[createCommissionRequest] artist.customerCommissionPrice:', artist.customerCommissionPrice);
+        
         if (!artistPrice || artistPrice <= 0) {
             return res.status(400).json({ error: 'No valid commission price set for this artist.' });
         }
+        
         const commission = await CommissionRequest.create({
             customer: customerId,
             artist: artistId,
             requirements,
-            price: finalPrice,
+            price: customerPrice, // Use the schema-calculated customer price
             status: 'pending_artist',
             ...rest
         });
@@ -149,7 +148,7 @@ export const createCommissionRequest = async (req, res) => {
                         product_data: {
                             name: 'Custom Backing Track Commission Request',
                         },
-                        unit_amount: Math.round(finalPrice * 100), // Convert to pence
+                        unit_amount: Math.round(customerPrice * 100), // Convert to pence
                     },
                     quantity: 1,
                 },
@@ -165,17 +164,15 @@ export const createCommissionRequest = async (req, res) => {
         console.log('[createCommissionRequest] stripe session:', session);
         console.log('[createCommissionRequest] session metadata:', session.metadata);
         commission.stripeSessionId = session.id;
-        await commission.save();
-
-        // Respond with detailed price breakdown for transparency
-        console.log('[createCommissionRequest] Response price breakdown:', { artistPrice, platformCommission, finalPrice });
+        await commission.save();        // Respond with detailed price breakdown for transparency
+        console.log('[createCommissionRequest] Response price breakdown:', { artistPrice, customerPrice });
         return res.status(200).json({
             sessionId: session.id,
             sessionUrl: session.url, // Add the Stripe Checkout URL for frontend/manual use
             commissionId: commission._id,
             artistPrice,
-            platformCommission,
-            finalPrice
+            customerPrice,
+            platformCommission: customerPrice - artistPrice
         });
     }
     catch(error){
@@ -557,12 +554,36 @@ export const confirmOrDenyCommission = async (req, res) => {
             commission.status = 'approved';
             await commission.save();
             console.log('[confirmOrDenyCommission] Commission approved:', commissionId);
-            return res.status(200).json({ success: true, message: 'Commission approved. Artist will be paid out.' });
-        } else if (action === 'request_changes' || action === 'deny') {
+            return res.status(200).json({ success: true, message: 'Commission approved. Artist will be paid out.' });        } else if (action === 'request_changes' || action === 'deny') {
+            // Check if revisions are still allowed
+            const currentRevisions = commission.revisionCount || 0;
+            const maxRevisions = commission.maxRevisions || 2;
+            
+            if (currentRevisions >= maxRevisions) {
+                return res.status(400).json({ 
+                    error: `Maximum number of revisions (${maxRevisions}) has been reached. Commission cannot be revised further.`,
+                    maxRevisionsReached: true
+                });
+            }
+            
+            // Save revision feedback if provided
+            const { revisionFeedback } = req.body;
+            if (revisionFeedback && revisionFeedback.trim()) {
+                commission.revisionFeedback = revisionFeedback.trim();
+            }
+            
+            // Increment revision count and set status back to in_progress
+            commission.revisionCount = currentRevisions + 1;
             commission.status = 'in_progress'; // Allow artist to re-upload
             await commission.save();
-            console.log('[confirmOrDenyCommission] Commission changes requested:', commissionId);
-            return res.status(200).json({ success: true, message: 'Changes requested. Artist may re-upload.' });
+            
+            console.log('[confirmOrDenyCommission] Commission changes requested:', commissionId, 'Revision:', commission.revisionCount);
+            return res.status(200).json({ 
+                success: true, 
+                message: `Changes requested (revision ${commission.revisionCount}/${maxRevisions}). Artist may re-upload.`,
+                revisionCount: commission.revisionCount,
+                maxRevisions: maxRevisions
+            });
         } else {
             return res.status(400).json({ error: 'Invalid action' });
         }

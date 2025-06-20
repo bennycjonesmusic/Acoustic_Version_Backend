@@ -159,9 +159,15 @@ export const addArtistReview = async (req, res) => {
       user: req.userId,
       text: review,
       createdAt: new Date()
-    });
-    artist.numOfReviews = artist.reviews.length;
+    });    artist.numOfReviews = artist.reviews.length;
     await artist.save();
+    
+    // Populate user data for the response
+    await artist.populate({
+      path: 'reviews.user',
+      select: 'username avatar'
+    });
+    
     return res.status(200).json({ message: 'Review added successfully', reviews: artist.reviews, numOfReviews: artist.numOfReviews });
   } catch (error) {
     console.error('Error adding review:', error);
@@ -173,14 +179,53 @@ export const addArtistReview = async (req, res) => {
 export const getArtistReviews = async (req, res) => {
   try {
     const artistId = req.params.id;
+    
+    // Parse pagination parameters
+    const { page = 1, limit = 10, orderBy = 'date-added' } = req.query;
+    let pageNum = parseInt(page, 10);
+    if (isNaN(pageNum) || pageNum < 1) pageNum = 1;
+    let limitNum = parseInt(limit, 10);
+    if (isNaN(limitNum) || limitNum < 1) limitNum = 10;
+    if (limitNum > 50) limitNum = 50; // Cap at 50 reviews per page
+
+    const skip = (pageNum - 1) * limitNum;
+
     const artist = await User.findById(artistId).populate({
       path: 'reviews.user',
       select: 'username avatar',
     });
-    if (!artist || (artist.role !== 'artist' && artist.role !== 'admin')) {
+
+     if (!artist || (artist.role !== 'artist' && artist.role !== 'admin')) {
       return res.status(404).json({ message: 'Artist not found.' });
     }
-    return res.status(200).json({ reviews: artist.reviews, numOfReviews: artist.numOfReviews });
+
+    // Sort reviews based on orderBy parameter
+    let sortedReviews = [...artist.reviews];
+    if (orderBy === 'date-added') {
+      sortedReviews.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)); // Newest first
+    } else if (orderBy === 'date-added/ascending') {
+      sortedReviews.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)); // Oldest first
+    }
+
+    // Apply pagination
+    const totalReviews = sortedReviews.length;
+    const paginatedReviews = sortedReviews.slice(skip, skip + limitNum);
+
+    // Calculate pagination metadata
+    const totalPages = Math.ceil(totalReviews / limitNum);
+
+    return res.status(200).json({ 
+      reviews: paginatedReviews, 
+      numOfReviews: artist.numOfReviews,
+      pagination: {
+        currentPage: pageNum,
+        totalPages: totalPages,
+        totalReviews: totalReviews,
+        hasNextPage: pageNum < totalPages,
+        hasPrevPage: pageNum > 1,
+        limit: limitNum
+      }
+    });
   } catch (error) {
     console.error('Error fetching reviews:', error);
     return res.status(500).json({ message: 'Internal server error' });

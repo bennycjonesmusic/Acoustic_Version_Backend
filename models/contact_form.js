@@ -12,7 +12,7 @@ const contactFormSchema = new mongoose.Schema({
     type: {
 
         type: String,
-        enum: ['general', 'bug_report', 'feature_request', 'user_report', 'other']
+        enum: ['general', 'bug_report', 'feature_request', 'user_report', 'other', 'commission_dispute']
     },
     reporter: {
         type: mongoose.Schema.Types.ObjectId,
