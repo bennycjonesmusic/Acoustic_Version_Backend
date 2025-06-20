@@ -121,6 +121,20 @@ cron.schedule(payoutSchedule, async () => {
   }
 });
 
+// Cron job to reconcile Stripe payments (commission and purchased tracks fallback)
+const reconcileSchedule = process.env.NODE_ENV === 'production' ? '*/10 * * * *' : '*/2 * * * *';
+console.log(`[CRON] Setting up Stripe reconciliation cron job with schedule: ${reconcileSchedule} (${process.env.NODE_ENV === 'production' ? 'every 10 minutes' : 'every 2 minutes'})`);
+cron.schedule(reconcileSchedule, async () => {
+  try {
+    console.log(`Running ${process.env.NODE_ENV === 'production' ? 'every 10 minutes' : 'every 2 minutes'} cron job to reconcile Stripe payments`);
+    const { reconcileStripePayments } = await import('./utils/cron_stripe_reconcile.js');
+    await reconcileStripePayments();
+    console.log('Stripe reconciliation cron job completed');
+  } catch (error) {
+    console.error('Error running Stripe reconciliation cron job:', error);
+  }
+});
+
 // Run deleteUnusedAvatars immediately on server start
 (async () => {
   try {

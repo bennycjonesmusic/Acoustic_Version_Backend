@@ -2,6 +2,7 @@ import fs from 'fs'; // for reading & deleting temp files
 import { S3Client, ListObjectsV2Command, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage'; // for streaming uploads to S3
 import BackingTrack from '../models/backing_track.js';
+import CommissionRequest from '../models/CommissionRequest.js';
 import User from '../models/User.js'; // 
 import { parseKeySignature } from '../utils/parseKeySignature.js';
 import { uploadTrackSchema, editTrackSchema, reviewSchema, commentSchema } from './validationSchemas.js';
@@ -11,6 +12,7 @@ import { notifyFollowersOfNewTrack, createFirstUploadCongratulationsNotification
 import { getAudioPreview } from '../utils/audioPreview.js';
 import path from 'path';
 import { sanitizeFileName } from '../utils/regexSanitizer.js';
+
 
 /**
  * @typedef {Object} BackingTrack
@@ -638,14 +640,17 @@ export const downloadTrack = async (req, res) => {
   try {
     const trackId = req.params.id;
     console.log('[downloadTrack] Requested by user:', req.userId, 'for track:', trackId);
-    
     // Validate track ID
     if (!trackId || trackId === 'undefined' || !/^[a-fA-F0-9]{24}$/.test(trackId)) {
       console.warn('[downloadTrack] Invalid track ID:', trackId);
       return res.status(400).json({ message: "A valid Track ID is required." });
     }
-    
-    const track = await BackingTrack.findById(trackId);
+    let track = await BackingTrack.findById(trackId);
+    let isCommission = false;
+    if (!track) {
+      track = await CommissionRequest.findById(trackId);
+      isCommission = !!track;
+    }
     if (!track) {
       console.warn('[downloadTrack] Track not found:', trackId);
       return res.status(404).json({ message: "Track not found." });
@@ -655,14 +660,14 @@ export const downloadTrack = async (req, res) => {
     if (!user) {
       console.warn('[downloadTrack] User not found:', userId);
       return res.status(404).json({ message: "User not found." });
-    }    const hasBought = user.purchasedTracks.some(pt => (pt.track?.toString?.() || pt.track) === track._id.toString());
+    }
+    const hasBought = user.purchasedTracks.some(pt => (pt.track?.toString?.() || pt.track) === track._id.toString());
     const hasUploaded = user.uploadedTracks.some(id => id.equals(track._id));
     console.log('[downloadTrack] hasBought:', hasBought, 'hasUploaded:', hasUploaded);
     if (!hasBought && !hasUploaded) {
       console.warn('[downloadTrack] Forbidden: user', userId, 'has not bought or uploaded track', track._id.toString());
       return res.status(403).json({ message: "You are not allowed to download this track. Please purchase" });
     }
-
     // Update user's download tracking for purchased tracks
     if (hasBought) {
       const purchaseRecord = user.purchasedTracks.find(pt => (pt.track?.toString?.() || pt.track) === track._id.toString());
@@ -679,17 +684,50 @@ export const downloadTrack = async (req, res) => {
         secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
       },
     });
+    let s3Key, downloadFilename;
+    if (isCommission) {
+      // Extract S3 key and filename from finishedTrackUrl
+      if (!track.finishedTrackUrl) {
+        return res.status(404).json({ message: 'No finished track available for this commission.' });
+      }
+      try {
+        const url = new URL(track.finishedTrackUrl);
+        s3Key = url.pathname.startsWith('/') ? url.pathname.slice(1) : url.pathname;
+        // Use the last part of the path as the filename
+        downloadFilename = s3Key.split('/').pop();
+        // If the filename is generic (e.g., commission-track.mp3), use name, originalFilename, or title
+        if (downloadFilename && /^commission-track\.[a-z0-9]+$/i.test(downloadFilename)) {
+          let extension = downloadFilename.split('.').pop();
+          let baseName = (track.name && track.name.replace(/\.[^/.]+$/, ''))
+            || (track.originalFilename && track.originalFilename.replace(/\.[^/.]+$/, ''))
+            || track.title
+            || 'commission-track';
+          // Sanitize baseName
+          baseName = baseName.replace(/[^a-zA-Z0-9-_ ]/g, '').replace(/\s+/g, '_');
+          downloadFilename = `${baseName}.${extension}`;
+        }
+      } catch (e) {
+        return res.status(500).json({ message: 'Invalid finishedTrackUrl for commission.' });
+      }
+    } else {
+      s3Key = track.s3Key;
+      // Use the last part of the s3Key as the filename, fallback to track.title
+      downloadFilename = (s3Key && s3Key.split('/').pop()) || track.title || trackId;
+    }
+    if (!s3Key) {
+      return res.status(500).json({ message: 'No S3 key found for this track.' });
+    }
     const createParameters = {
       Bucket: process.env.AWS_BUCKET_NAME,
-      Key: track.s3Key,
+      Key: s3Key,
     };
     const command = new GetObjectCommand(createParameters);
     const data = await s3Client.send(command);
-    track.downloadCount += 1;
+    track.downloadCount = (track.downloadCount || 0) + 1;
     await track.save();
-
     res.setHeader('Content-Type', data.ContentType);
-    res.setHeader('Content-Disposition', `attachment; filename="${track.title}"`);
+    // Use the extracted filename (with extension)
+    res.setHeader('Content-Disposition', `attachment; filename="${downloadFilename}"`);
     data.Body.pipe(res);
     return;
   } catch (error) {

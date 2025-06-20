@@ -1,7 +1,7 @@
-import CommissionRequest from "../models/CommissionRequest.js";
 import stripe from 'stripe';
 const stripeClient = stripe(process.env.STRIPE_SECRET_KEY);
 import BackingTrack from '../models/backing_track.js';
+import CommissionRequest from '../models/CommissionRequest.js';
 import User from '../models/User.js';
 import { sendCommissionPreviewEmail } from '../utils/updateFollowers.js';
 import { getAudioPreview } from '../utils/audioPreview.js';
@@ -15,6 +15,11 @@ import { S3Client } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
 import path from 'path';
 import fs from 'fs';
+import mongoose from 'mongoose';
+import { configDotenv } from 'dotenv';
+import http from 'http';
+
+configDotenv();
 
 // Helper function to calculate expiry date based on delivery time string
 const calculateExpiryDate = (createdAt, deliveryTimeString) => {
@@ -42,6 +47,11 @@ const calculateExpiryDate = (createdAt, deliveryTimeString) => {
     }
     
     return new Date(created.getTime() + milliseconds);
+};
+
+// Health check endpoint for Stripe webhook
+export const stripeWebhookHealth = (req, res) => {
+    return res.status(200).json({ status: 'ok' });
 };
 
 //in wrong place
@@ -105,6 +115,17 @@ export const refundTrackPurchase = async (req, res) => {
 
 export const createCommissionRequest = async (req, res) => {
     try {
+        // Health check for webhook before proceeding
+        const webhookHealthUrl = 'http://localhost:3000/webhook/stripe/health';
+        const healthCheck = await new Promise((resolve) => {
+            http.get(webhookHealthUrl, (resp) => {
+                resolve(resp.statusCode === 200);
+            }).on('error', () => resolve(false));
+        });
+        if (!healthCheck) {
+            return res.status(503).json({ error: 'Stripe webhook is not running. Please try again later.' });
+        }
+
         const { artist: artistId, requirements, ...rest } = req.body;
         const customerId = req.userId;
         console.log('[createCommissionRequest] artistId:', artistId, 'customerId:', customerId, 'requirements:', requirements, 'rest:', rest);        // Fetch artist to get their commissionPrice
@@ -138,6 +159,17 @@ export const createCommissionRequest = async (req, res) => {
             ...rest
         });
         console.log('[createCommissionRequest] created commission:', commission);
+
+        // Notify artist immediately when commission is created
+        try {
+            await createCommissionRequestNotification(
+                artistId,
+                customerId,
+                commission._id
+            );
+        } catch (notifError) {
+            console.error('Error creating commission request notification:', notifError);
+        }
 
         const session = await stripeClient.checkout.sessions.create({
             payment_method_types: ['card'],
@@ -214,12 +246,6 @@ export const approveCommissionAndPayout = async (req, res) => {
         commission.status = 'approved';
         await commission.save();
         
-        const paymentIntent = await stripeClient.paymentIntents.retrieve(commission.stripePaymentIntentId);
-        if (paymentIntent.status !== 'succeeded') {
-            return res.status(200).json({ success: true, message: 'Commission approved. Payout will be processed once payment is confirmed.' });
-        }
-
-        // Payment already succeeded, queue immediately for payout
         const artist = commission.artist;
         if (!artist.stripeAccountId) {
             return res.status(400).json({ error: 'Artist has no Stripe account' });
@@ -245,6 +271,7 @@ export const approveCommissionAndPayout = async (req, res) => {
             }
         };
 
+    console.log(`Money owed as follows:`, moneyOwedEntry);
         // Check if this commission is already in money owed to prevent duplicates
         const existingEntry = artist.moneyOwed.find(entry => 
             entry.commissionId && entry.commissionId === commission._id.toString()
@@ -856,22 +883,30 @@ export const getCommissionPreviewForClient = async (req, res) => {
 export const getFinishedCommission = async (req, res) => {
     const { commissionId } = req.query;
     const userId = req.userId;
+    console.log('[getFinishedCommission] commissionId:', commissionId); // Log commissionId for debugging
     try {
         const commission = await CommissionRequest.findById(commissionId);
         const artist = await User.findById(commission.artist); 
         if (!commission) return res.status(404).json({ error: 'Commission not found' });
+        console.log('[getFinishedCommission] commission.artist:', commission.artist);
         if (commission.customer.toString() !== userId && !(req.user && req.user.role === 'admin')) {
             return res.status(403).json({ error: 'Not authorized' });
-        }        if (commission.status !== 'completed') {
-            return res.status(400).json({ error: 'Commission not completed yet' });
+        }
+        if (commission.status !== 'completed' && commission.status !== 'approved') {
+            return res.status(400).json({ error: 'Commission not completed or approved yet' });
         }
         if (!commission.finishedTrackUrl) return res.status(404).json({ error: 'No finished track available' });
         // Add to purchasedTracks if not already present
         const user = await User.findById(userId);
-        const alreadyPurchased = user.purchasedTracks.some(pt => pt.track?.toString() === commissionId);
-        if (!alreadyPurchased) {
+        let commissionPurchase = user.purchasedTracks.find(pt => pt.track?.toString() === commissionId);
+        if (commissionPurchase && (!commissionPurchase.track || commissionPurchase.track === null)) {
+            commissionPurchase.track = commissionId;
+            commissionPurchase.commission = commission._id; // Set commission ref if missing
+            await user.save();
+        } else if (!commissionPurchase) {
             user.purchasedTracks.push({
-                track: commissionId, // Use commissionId as a marker
+                track: commissionId, // Always use commissionId as BackingTrack ref
+                commission: commission._id, // Set commission ref
                 paymentIntentId: commission.stripePaymentIntentId || 'commission',
                 purchasedAt: new Date(),
                 price: commission.price || 0,
@@ -993,9 +1028,7 @@ export const createTestExpiredCommission = async (req, res) => {
             requirements: 'Test commission for refund testing',
             price: 25.00,
             status: 'accepted', // In progress status so it can be expired
-            stripePaymentIntentId: paymentIntentId, // Optional - if you want to test with real payment
-            createdAt: expiredDate,
-            updatedAt: expiredDate
+            stripePaymentIntentId: paymentIntentId // Optional - if you want to test with real payment
         });
         
         await testCommission.save();

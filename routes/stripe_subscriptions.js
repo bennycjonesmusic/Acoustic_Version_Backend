@@ -2,6 +2,7 @@ import express from 'express';
 import Stripe from 'stripe';
 import authMiddleware from '../middleware/customer_auth.js';
 import User from '../models/User.js';
+import http from 'http';
 
 const stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY);
 const router = express.Router();
@@ -12,9 +13,34 @@ const SUBSCRIPTION_PRICES = {
   enterprise: process.env.STRIPE_ENTERPRISE_PRICE_ID
 };
 
+// Helper function to check webhook health
+async function checkStripeWebhookHealth() {
+  const webhookHealthUrl = 'http://localhost:3000/webhook/stripe/health';
+  return await new Promise((resolve) => {
+    http.get(webhookHealthUrl, (resp) => {
+      resolve(resp.statusCode === 200);
+    }).on('error', () => resolve(false));
+  });
+}
+
+// Health check for Stripe webhook
+// const checkStripeWebhookHealth = async () => {
+//   try {
+//     const response = await stripeClient.webhookEndpoints.list();
+//     return response.data.length > 0;
+//   } catch (error) {
+//     console.error('Error checking Stripe webhook health:', error);
+//     return false;
+//   }
+// };
+
 // Create Stripe Checkout Session for subscription upgrade
 router.post('/create-subscription-session', authMiddleware, async (req, res) => {
   try {
+    const healthCheck = await checkStripeWebhookHealth();
+    if (!healthCheck) {
+      return res.status(503).json({ error: 'Stripe webhook is not running. Please try again later.' });
+    }
     const { tier } = req.body;
     if (!['pro', 'enterprise'].includes(tier)) {
       return res.status(400).json({ error: 'Invalid subscription tier' });

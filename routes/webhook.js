@@ -6,6 +6,7 @@ import { sendPurchaseReceiptEmail, sendSaleNotificationEmail } from '../utils/em
 import { createCommissionRequestNotification, createTrackPurchaseNotification } from '../utils/notificationHelpers.js';
 import fs from 'fs';
 import dotenv from 'dotenv';
+import { stripeWebhookHealth } from '../controllers/commissionControl.js';
 
 dotenv.config();
 
@@ -394,6 +395,8 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
 
   res.status(200).send('Received');
 });
+
+router.get('/health', stripeWebhookHealth);
 
 export default router;
 

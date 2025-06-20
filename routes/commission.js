@@ -1,4 +1,5 @@
 import express from 'express';
+import http from 'http';
 import { 
   createCommissionRequest, 
   approveCommissionAndPayout, 
@@ -24,8 +25,32 @@ import authMiddleware from '../middleware/customer_auth.js';
 import artistOrAdminAuthMiddleware from '../middleware/artist_auth.js';
 import isAdmin from '../middleware/Admin.js';
 import upload from '../middleware/song_upload.js';
+import { configDotenv } from 'dotenv';
+
+configDotenv();
 
 const router = express.Router();
+
+// Helper function to check webhook health
+async function checkStripeWebhookHealth() {
+  const webhookHealthUrl = 'http://localhost:3000/webhook/stripe/health';
+  return await new Promise((resolve, reject) => {
+    const req = http.get(webhookHealthUrl, (resp) => {
+      if (resp.statusCode === 200) {
+        resolve(true);
+      } else {
+        reject(new Error('Stripe webhook health check failed: status ' + resp.statusCode));
+      }
+    });
+    req.on('error', (err) => {
+      reject(new Error('Stripe webhook health check error: ' + err.message));
+    });
+    req.setTimeout(2000, () => {
+      req.abort();
+      reject(new Error('Stripe webhook health check timed out'));
+    });
+  });
+}
 
 // Create a new commission request (customer only)
 router.post('/request', authMiddleware, createCommissionRequest);
@@ -114,6 +139,13 @@ router.post('/pay', authMiddleware, async (req, res) => {
     
     const stripeModule = await import('stripe');
     const stripeClient = stripeModule.default(process.env.STRIPE_SECRET_KEY);
+    
+    try {
+        await checkStripeWebhookHealth();
+    } catch (err) {
+        return res.status(503).json({ error: err.message || 'Stripe webhook is not running. Please try again later.' });
+    }
+    
     const session = await stripeClient.checkout.sessions.create({
       payment_method_types: ['card'],
       line_items: [
@@ -129,8 +161,8 @@ router.post('/pay', authMiddleware, async (req, res) => {
           quantity: 1,
         },
       ],
-      mode: 'payment',      success_url: `${process.env.CLIENT_URL || 'http://localhost:3000'}/commission/success/${commission._id}`,
-      cancel_url: `${process.env.CLIENT_URL || 'http://localhost:3000'}/commission/cancel/${commission._id}`,
+      mode: 'payment',      success_url: `${process.env.CLIENT_URL || 'http://localhost:3002'}/commission/success/${commission._id}`,
+      cancel_url: `${process.env.CLIENT_URL || 'http://localhost:3002'}/commission/cancel/${commission._id}`,
       metadata: {
         commissionId: commission._id.toString(),
         customerId: commission.customer._id.toString(),

@@ -3,6 +3,7 @@ import stripe from 'stripe';
 import authMiddleware from '../middleware/customer_auth.js';
 import User from '../models/User.js';
 import BackingTrack from '../models/backing_track.js';
+import http from 'http';
 
 
 const stripeClient = stripe(process.env.STRIPE_SECRET_KEY);
@@ -14,6 +15,16 @@ console.log('[stripe_payment.js] Router loaded');
 // Helper: Validate MongoDB ObjectId
 function isValidObjectId(id) {
     return typeof id === 'string' && id.match(/^[a-f\d]{24}$/i);
+}
+
+// Helper function to check webhook health
+async function checkStripeWebhookHealth() {
+  const webhookHealthUrl = 'http://localhost:3000/webhook/stripe/health';
+  return await new Promise((resolve) => {
+    http.get(webhookHealthUrl, (resp) => {
+      resolve(resp.statusCode === 200);
+    }).on('error', () => resolve(false));
+  });
 }
 
 //create account link for Stripe onboarding.
@@ -132,7 +143,14 @@ router.post('/create-cart-checkout-session', authMiddleware, async (req, res) =>
 
         console.log('[CART CHECKOUT] Line items created:', line_items.length);
         console.log('[CART CHECKOUT] Total platform fee:', totalPlatformFee);
-        console.log('[CART CHECKOUT] Environment check - CLIENT_URL:', process.env.CLIENT_URL);        const session = await stripeClient.checkout.sessions.create({
+        console.log('[CART CHECKOUT] Environment check - CLIENT_URL:', process.env.CLIENT_URL);        const healthCheck = await checkStripeWebhookHealth();
+        if (!healthCheck) {
+            // Log a warning for admin, but do NOT block the user
+            console.warn('[ADMIN WARNING] Stripe webhook health check failed. Webhook may be down.');
+            // Optionally: send an email or notification to admin here
+        }
+
+        const session = await stripeClient.checkout.sessions.create({
             payment_method_types: ['card'],
             line_items: line_items,
             mode: 'payment',
@@ -229,6 +247,12 @@ router.post('/create-checkout-session', authMiddleware, async (req, res) => {
         const platformFee = customerPrice - artistPrice;
         if (req.userId === track.user.toString()) {
             return res.status(400).json({ error: 'You cannot purchase your own track.' });
+        }
+        const healthCheck = await checkStripeWebhookHealth();
+        if (!healthCheck) {
+            // Log a warning for admin, but do NOT block the user
+            console.warn('[ADMIN WARNING] Stripe webhook health check failed. Webhook may be down.');
+            // Optionally: send an email or notification to admin here
         }
         const session = await stripeClient.checkout.sessions.create({
             payment_method_types: ['card'],

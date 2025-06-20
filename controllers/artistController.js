@@ -134,16 +134,26 @@ export const addArtistReview = async (req, res) => {
     if (artist._id.equals(req.userId)) {
       return res.status(400).json({ message: 'You cannot review yourself.' });
     }    // Only allow reviews from users who have bought a track or commissioned a track from this artist
-    const buyer = await User.findById(req.userId).populate({
-      path: 'purchasedTracks.track',
-      select: 'user artist' // Only need ownership fields for verification
-    });
+    const buyer = await User.findById(req.userId).populate([
+      {
+        path: 'purchasedTracks.track',
+        select: 'user artist' // Only need ownership fields for verification
+      },
+      {
+        path: 'purchasedTracks.commission',
+        select: 'artist' // Only need artist for commission verification
+      }
+    ]);
+    // Log the structure of purchasedTracks for debugging
+    console.log('[addArtistReview] buyer.purchasedTracks:', JSON.stringify(buyer.purchasedTracks, null, 2));
     const hasPurchased = buyer.purchasedTracks.some(pt => {
-      if (!pt.track || pt.refunded) return false;
+      if (pt.refunded) return false;
       // Regular track
-      if (pt.track.user && pt.track.user.equals(artist._id)) return true;
-      // Commission
-      if (pt.track.artist && pt.track.artist.equals(artist._id)) return true;
+      if (pt.track && pt.track.user && pt.track.user.equals(artist._id)) return true;
+      // Commission via BackingTrack
+      if (pt.track && pt.track.artist && pt.track.artist.equals(artist._id)) return true;
+      // Commission via commission field
+      if (pt.commission && pt.commission.artist && pt.commission.artist.equals(artist._id)) return true;
       return false;
     });
     if (!hasPurchased) {
@@ -159,7 +169,8 @@ export const addArtistReview = async (req, res) => {
       user: req.userId,
       text: review,
       createdAt: new Date()
-    });    artist.numOfReviews = artist.reviews.length;
+    });
+    artist.numOfReviews = artist.reviews.length;
     await artist.save();
     
     // Populate user data for the response

@@ -33,8 +33,10 @@ stripeOnboardingComplete: {
   uploadedTracks: [{
     type: mongoose.Schema.Types.ObjectId, 
     ref: 'BackingTrack'
-  }],  purchasedTracks: [{
-    track: { type: mongoose.Schema.Types.ObjectId, ref: 'BackingTrack', required: true },
+  }],
+  purchasedTracks: [{
+    track: { type: mongoose.Schema.Types.ObjectId, ref: 'BackingTrack' },
+    commission: { type: mongoose.Schema.Types.ObjectId, ref: 'CommissionRequest', default: null }, // <-- new field
     paymentIntentId: { type: String, required: true },
     purchasedAt: { type: Date, default: Date.now },
     price: { type: Number }, // store price at time of purchase

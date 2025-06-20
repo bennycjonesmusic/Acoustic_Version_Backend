@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 
 const commissionRequestSchema = new mongoose.Schema({
+  name: { type: String },
   customer: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   artist: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   requirements: { type: String, required: true },
