@@ -12,6 +12,7 @@ import { notifyFollowersOfNewTrack, createFirstUploadCongratulationsNotification
 import { getAudioPreview } from '../utils/audioPreview.js';
 import path from 'path';
 import { sanitizeFileName } from '../utils/regexSanitizer.js';
+import mime from 'mime-types';
 
 
 /**
@@ -199,7 +200,11 @@ export const uploadTrack = async (req, res) => {
             Body: fs.createReadStream(trimmedFilePath), // Use trimmed file instead of original
             StorageClass: 'STANDARD',
             ContentType: req.file.mimetype, // Use original file's MIME type (e.g., audio/wav, audio/mpeg, etc.)
-            ACL: 'private' // Ensure full song is private
+            ACL: 'private', // Ensure full song is private
+            Metadata: {
+                'original-mime-type': req.file.mimetype || '',
+                'original-extension': path.extname(req.file.originalname) || ''
+            }
         };
         const data = await new Upload({ client: s3Client, params: uploadParams }).done();
         fs.unlinkSync(tempFilePath);
@@ -780,18 +785,71 @@ export const downloadTrack = async (req, res) => {
       return res.status(500).json({ message: 'No S3 key found for this track.' });
     }
 
-    const createParameters = {
-      Bucket: process.env.AWS_BUCKET_NAME,
-      Key: s3Key,
-    };
-    const command = new GetObjectCommand(createParameters);
-    const data = await s3Client.send(command);
+    // Fetch S3 object once, before any ContentType/Body logic
+    let data;
+    {
+      const createParameters = {
+        Bucket: process.env.AWS_BUCKET_NAME,
+        Key: s3Key,
+      };
+      const command = new GetObjectCommand(createParameters);
+      data = await s3Client.send(command);
+    }
+
+    // --- NEW: If S3 ContentType is generic (application/octet-stream or file), apply fallback extension logic ---
+    if (data.ContentType && ["application/octet-stream", "file"].includes(data.ContentType.toLowerCase())) {
+      const fileSize = (data.ContentLength || data.Body?.length || 0);
+      if (fileSize > 10 * 1024 * 1024) {
+        downloadFilename = 'File.wav';
+      } else {
+        downloadFilename = 'File.mp3';
+      }
+      const contentType = mime.getType(downloadFilename) || 'application/octet-stream';
+      const encodedName = encodeURIComponent(downloadFilename);
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Content-Disposition', `attachment; filename="${encodedName}"; filename*=UTF-8''${encodedName}`);
+      data.Body.pipe(res);
+      return;
+    }
+    // --- END NEW BLOCK ---
+
+    // Use S3 metadata for original extension if available (non-commission only)
+    let originalExtension = '';
+    if (!isCommission && data.Metadata && typeof data.Metadata['original-extension'] === 'string') {
+      const ext = data.Metadata['original-extension'].trim();
+      // Validate: must start with . and be a reasonable audio extension
+      if (/^\.[a-z0-9]{2,5}$/i.test(ext) && [
+        '.wav', '.mp3', '.flac', '.aac', '.ogg', '.m4a', '.aiff', '.wma'
+      ].includes(ext.toLowerCase())) {
+        originalExtension = ext;
+      }
+    }
 
     track.downloadCount = (track.downloadCount || 0) + 1;
     await track.save();
 
-    res.setHeader('Content-Type', data.ContentType);
-    res.setHeader('Content-Disposition', `attachment; filename="${downloadFilename}"`);
+    // If we have a valid original extension, update the download filename (non-commission only)
+    if (!isCommission && originalExtension) {
+      // Remove any existing extension
+      downloadFilename = downloadFilename.replace(/\.[a-zA-Z0-9]+$/, '');
+      downloadFilename = `${downloadFilename}${originalExtension}`;
+    } else if (!isCommission && (!originalExtension || !/^\.[a-z0-9]{2,5}$/i.test(originalExtension))) {
+      // Fallback: If no extension at all, guess from file size
+      const fileSize = (data.ContentLength || data.Body?.length || 0);
+      if (!/\.[a-zA-Z0-9]+$/.test(downloadFilename)) {
+        if (fileSize > 10 * 1024 * 1024) { // >10MB
+          downloadFilename = `${downloadFilename}.wav`;
+        } else {
+          downloadFilename = `${downloadFilename}.mp3`;
+        }
+      }
+    }
+
+    // Ensure correct MIME type and filename encoding
+    const contentType = data.ContentType || mime.getType(downloadFilename) || 'application/octet-stream';
+    const encodedName = encodeURIComponent(downloadFilename);
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${encodedName}"; filename*=UTF-8''${encodedName}`);
     data.Body.pipe(res);
     return;
 

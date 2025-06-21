@@ -471,6 +471,10 @@ export const uploadFinishedTrack = async (req, res) => {
                     Body: fs.createReadStream(tempFinishedPath),
                     ACL: 'private',
                     ContentType: req.file.mimetype,
+                    Metadata: {
+                        'original-mime-type': req.file.mimetype || '',
+                        'original-extension': ext || ''
+                    }
                 },
             }).done();
         } catch (s3Err) {
@@ -499,7 +503,9 @@ export const uploadFinishedTrack = async (req, res) => {
                     'Content-Type': 'audio/mpeg',
                     'Access-Control-Allow-Origin': '*',
                     'Access-Control-Allow-Methods': 'GET, HEAD',
-                    'Access-Control-Allow-Headers': 'Range, Content-Range'
+                    'Access-Control-Allow-Headers': 'Range, Content-Range',
+                    'original-mime-type': req.file.mimetype || '',
+                    'original-extension': ext || ''
                 }
             };
             const previewData = await new Upload({ client: s3Client, params: previewUploadParams }).done();
