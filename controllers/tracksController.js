@@ -488,7 +488,7 @@ export const getUploadedTracks = async (req, res) => {
         const skip = (pageNum - 1) * limitNum;        // Set up sorting
         let sort = {};
         if (orderBy === "popularity") sort = { purchaseCount: -1 };
-        if (orderBy === "date-uploaded") sort = { createdAt: -1 };
+        if (orderBy === "date-uploaded" ) sort = { createdAt: -1 };
         if (orderBy === "date-uploaded/ascending") sort = { createdAt: 1 };
         if (orderBy === "rating") sort = { averageRating: -1 };
         if (orderBy === "price") sort = { price: 1 };
@@ -640,35 +640,42 @@ export const downloadTrack = async (req, res) => {
   try {
     const trackId = req.params.id;
     console.log('[downloadTrack] Requested by user:', req.userId, 'for track:', trackId);
+
     // Validate track ID
     if (!trackId || trackId === 'undefined' || !/^[a-fA-F0-9]{24}$/.test(trackId)) {
       console.warn('[downloadTrack] Invalid track ID:', trackId);
       return res.status(400).json({ message: "A valid Track ID is required." });
     }
+
     let track = await BackingTrack.findById(trackId);
     let isCommission = false;
     if (!track) {
       track = await CommissionRequest.findById(trackId);
       isCommission = !!track;
     }
+
     if (!track) {
       console.warn('[downloadTrack] Track not found:', trackId);
       return res.status(404).json({ message: "Track not found." });
     }
+
     const userId = req.userId;
-    const user = await User.findById(userId); //find the user wanting to download track
+    const user = await User.findById(userId);
     if (!user) {
       console.warn('[downloadTrack] User not found:', userId);
       return res.status(404).json({ message: "User not found." });
     }
+
     const hasBought = user.purchasedTracks.some(pt => (pt.track?.toString?.() || pt.track) === track._id.toString());
     const hasUploaded = user.uploadedTracks.some(id => id.equals(track._id));
     console.log('[downloadTrack] hasBought:', hasBought, 'hasUploaded:', hasUploaded);
+
     if (!hasBought && !hasUploaded) {
       console.warn('[downloadTrack] Forbidden: user', userId, 'has not bought or uploaded track', track._id.toString());
       return res.status(403).json({ message: "You are not allowed to download this track. Please purchase" });
     }
-    // Update user's download tracking for purchased tracks
+
+    // Update user's download tracking
     if (hasBought) {
       const purchaseRecord = user.purchasedTracks.find(pt => (pt.track?.toString?.() || pt.track) === track._id.toString());
       if (purchaseRecord) {
@@ -677,6 +684,7 @@ export const downloadTrack = async (req, res) => {
         await user.save();
       }
     }
+
     const s3Client = new S3Client({
       region: process.env.AWS_REGION,
       credentials: {
@@ -684,130 +692,115 @@ export const downloadTrack = async (req, res) => {
         secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
       },
     });
+
     let s3Key, downloadFilename;
+
+    function getAudioExtension(filename, mimetype) {
+      const extFromName = (filename || '').split('.').pop()?.toLowerCase();
+      if (["wav", "mp3", "flac", "aac", "ogg", "m4a", "aiff", "wma"].includes(extFromName)) {
+        return `.${extFromName}`;
+      }
+      if (mimetype) {
+        if (mimetype.includes('wav')) return '.wav';
+        if (mimetype.includes('mpeg') || mimetype.includes('mp3')) return '.mp3';
+        if (mimetype.includes('flac')) return '.flac';
+        if (mimetype.includes('aac')) return '.aac';
+        if (mimetype.includes('ogg')) return '.ogg';
+        if (mimetype.includes('m4a')) return '.m4a';
+        if (mimetype.includes('aiff')) return '.aiff';
+        if (mimetype.includes('wma')) return '.wma';
+      }
+      return ''; // fallback: don't force mp3
+    }
+
     if (isCommission) {
-      // Extract S3 key and filename from finishedTrackUrl
       if (!track.finishedTrackUrl) {
         return res.status(404).json({ message: 'No finished track available for this commission.' });
       }
+
       try {
         const url = new URL(track.finishedTrackUrl);
         s3Key = url.pathname.startsWith('/') ? url.pathname.slice(1) : url.pathname;
-        // Use the last part of the path as the filename
         downloadFilename = s3Key.split('/').pop();
-        // If the filename is generic (e.g., commission-track.mp3), use name, originalFilename, or title
+        let extension = getAudioExtension(downloadFilename, track.mimetype || '');
+
         if (downloadFilename && /^commission-track\.[a-z0-9]+$/i.test(downloadFilename)) {
-          let extension = downloadFilename.split('.').pop();
           let baseName = (track.name && track.name.replace(/\.[^/.]+$/, ''))
             || (track.originalFilename && track.originalFilename.replace(/\.[^/.]+$/, ''))
             || track.title
             || 'commission-track';
-          // Sanitize baseName
           baseName = baseName.replace(/[^a-zA-Z0-9-_ ]/g, '').replace(/\s+/g, '_');
-          downloadFilename = `${baseName}.${extension}`;
+
+          if (!baseName.toLowerCase().endsWith(extension)) {
+            downloadFilename = `${baseName}${extension}`;
+          } else {
+            downloadFilename = baseName;
+          }
+        } else {
+          let base = downloadFilename ? downloadFilename.replace(/\.[a-zA-Z0-9]+$/, '') : 'commission-track';
+          if (!base.toLowerCase().endsWith(extension)) {
+            downloadFilename = `${base}${extension}`;
+          } else {
+            downloadFilename = base;
+          }
         }
       } catch (e) {
         return res.status(500).json({ message: 'Invalid finishedTrackUrl for commission.' });
       }
+
     } else {
       s3Key = track.s3Key;
-      // Use the last part of the s3Key as the filename, fallback to track.title
-      downloadFilename = (s3Key && s3Key.split('/').pop()) || track.title || trackId;
+      let s3FileName = s3Key ? s3Key.split('/').pop() : '';
+      let baseFileName = s3FileName && s3FileName.includes('-') ? s3FileName.substring(s3FileName.indexOf('-') + 1) : s3FileName;
+      let sanitizedFileName = baseFileName ? baseFileName.replace(/[^a-zA-Z0-9-_. ]/g, '').replace(/\s+/g, '_') : '';
+      let extension = getAudioExtension(s3FileName, track.mimetype || '');
+
+      if (!sanitizedFileName) {
+        let baseName = track.title || 'track';
+        baseName = baseName.replace(/[^a-zA-Z0-9-_ ]/g, '').replace(/\s+/g, '_');
+        sanitizedFileName = baseName;
+      } else {
+        sanitizedFileName = sanitizedFileName.replace(/\.[a-zA-Z0-9]+$/, '');
+      }
+
+      if (!sanitizedFileName.toLowerCase().endsWith(extension)) {
+        downloadFilename = `${sanitizedFileName}${extension}`;
+      } else {
+        downloadFilename = sanitizedFileName;
+      }
     }
+
+    if (!downloadFilename || typeof downloadFilename !== 'string' || downloadFilename.trim() === '') {
+      downloadFilename = 'track.mp3';
+    }
+
+    console.log('[downloadTrack] s3Key:', s3Key, 'downloadFilename:', downloadFilename);
+
     if (!s3Key) {
       return res.status(500).json({ message: 'No S3 key found for this track.' });
     }
+
     const createParameters = {
       Bucket: process.env.AWS_BUCKET_NAME,
       Key: s3Key,
     };
     const command = new GetObjectCommand(createParameters);
     const data = await s3Client.send(command);
+
     track.downloadCount = (track.downloadCount || 0) + 1;
     await track.save();
+
     res.setHeader('Content-Type', data.ContentType);
-    // Use the extracted filename (with extension)
     res.setHeader('Content-Disposition', `attachment; filename="${downloadFilename}"`);
     data.Body.pipe(res);
     return;
+
   } catch (error) {
     console.error('[downloadTrack] Error downloading track:', error, 'user:', req.userId, 'track:', req.params.id);
     return res.status(500).json({ message: 'Internal server error' });
   }
 };
 
-export const commentTrack = async (req, res) => {
-  try {
-    const { comment } = req.body;
-    const user = await User.findById(req.userId);
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-    const track = await BackingTrack.findById(req.params.id);
-    if (!track) {
-      return res.status(404).json({ message: 'Track not found' });
-    }
-    // Only allow users who have bought the track to comment
-    if (!user.purchasedTracks.some(pt => (pt.track?.toString?.() || pt.track) === track._id.toString())) {
-      return res.status(400).json({ message: 'You can only comment on tracks you have purchased.' });
-    }
-    // Validate comment input
-    const { error } = commentSchema.validate({ comment });
-    if (error) {
-      return res.status(400).json({ message: error.details[0].message });
-    }
-    // Profanity filter
-    const profanity = new Filter.Filter();
-    if (profanity.isProfane(comment)) {
-      return res.status(400).json({ message: 'Please avoid using inappropriate language.' });
-    }    // Add comment to track
-    track.comments.push({
-      user: user._id || user.id,
-      text: comment,
-      createdAt: new Date()
-    });
-    await track.save();
-    return res.status(200).json({ message: 'Comment added successfully', comments: track.comments });
-  } catch (error) {
-    console.error('Error adding comment:', error);
-    return res.status(500).json({ message: 'Failed to add comment', error: error.message });
-  }
-};
-
-export const deleteComment = async (req, res) => {
-  try {
-    const { commentId } = req.params;
-    const user = await User.findById(req.userId);
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-    // Find the track containing the comment
-    const track = await BackingTrack.findOne({ 'comments._id': commentId });
-    if (!track) {
-      return res.status(404).json({ message: 'Comment or track not found' });
-    }
-    // Find the comment
-    const comment = track.comments.id(commentId);
-    if (!comment) {
-      return res.status(404).json({ message: 'Comment not found' });
-    }
-    // Only the user who made the comment can delete it
-    if (comment.user.toString() !== req.userId) {
-      return res.status(403).json({ message: 'You are not authorized to delete this comment.' });
-    }
-    // Remove the comment using splice instead of .remove()
-    const commentIndex = track.comments.findIndex(c => c._id.toString() === commentId);
-    if (commentIndex === -1) {
-      return res.status(404).json({ message: 'Comment not found' });
-    }
-    track.comments.splice(commentIndex, 1);
-    await track.save();
-    return res.status(200).json({ message: 'Comment deleted successfully', comments: track.comments });
-  } catch (error) {
-    console.error('Error deleting comment:', error);
-    return res.status(500).json({ message: 'Failed to delete comment', error: error.message });
-  }
-};
 
 // Get all tracks uploaded by a specific user (by userId param)
 export const getUploadedTracksByUserId = async (req, res) => {
@@ -827,7 +820,7 @@ export const getUploadedTracksByUserId = async (req, res) => {
         // Set up sorting
         let sort = {};
         if (orderBy === "popularity") sort = { purchaseCount: -1 };
-        if (orderBy === "date-uploaded") sort = { createdAt: -1 };
+        if (orderBy === "date-uploaded" ) sort = { createdAt: -1 };
         if (orderBy === "date-uploaded/ascending") sort = { createdAt: 1 };
         if (orderBy === "rating") sort = { averageRating: -1 };
         if (orderBy === "price") sort = { price: 1 };
@@ -982,3 +975,89 @@ export async function editTrack(req, res) {
         return res.status(500).json({ message: 'Internal server error' });
     }
 }
+
+/**
+ * Comment on a track
+ * @param {Express.Request & {userId: string, params: {id: string}, body: { comment: string }}} req - Express request with auth and comment data
+ * @param {Express.Response} res - Express response
+ * @returns {Promise<APIResponse>} Promise resolving to API response with updated track comments
+ */
+export const commentTrack = async (req, res) => {
+  try {
+    const { comment } = req.body;
+    const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    const track = await BackingTrack.findById(req.params.id);
+    if (!track) {
+      return res.status(404).json({ message: 'Track not found' });
+    }
+    // Only allow users who have bought the track to comment
+    if (!user.purchasedTracks.some(pt => (pt.track?.toString?.() || pt.track) === track._id.toString())) {
+      return res.status(400).json({ message: 'You can only comment on tracks you have purchased.' });
+    }
+    // Validate comment input
+    const { error } = commentSchema.validate({ comment });
+    if (error) {
+      return res.status(400).json({ message: error.details[0].message });
+    }
+    // Profanity filter
+    const profanity = new Filter.Filter();
+    if (profanity.isProfane(comment)) {
+      return res.status(400).json({ message: 'Please avoid using inappropriate language.' });
+    }
+    // Add comment to track
+    track.comments.push({
+      user: user._id || user.id,
+      text: comment,
+      createdAt: new Date()
+    });
+    await track.save();
+    return res.status(200).json({ message: 'Comment added successfully', comments: track.comments });
+  } catch (error) {
+    console.error('Error adding comment:', error);
+    return res.status(500).json({ message: 'Failed to add comment', error: error.message });
+  }
+};
+
+/**
+ * Delete a comment from a track
+ * @param {Express.Request & {userId: string, params: {id: string, commentId: string}}} req - Express request with auth and comment ID
+ * @param {Express.Response} res - Express response
+ * @returns {Promise<APIResponse>} Promise resolving to API response with updated track comments
+ */
+export const deleteComment = async (req, res) => {
+  try {
+    const { commentId } = req.params;
+    const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    // Find the track containing the comment
+    const track = await BackingTrack.findOne({ 'comments._id': commentId });
+    if (!track) {
+      return res.status(404).json({ message: 'Comment or track not found' });
+    }
+    // Find the comment
+    const comment = track.comments.id(commentId);
+    if (!comment) {
+      return res.status(404).json({ message: 'Comment not found' });
+    }
+    // Only the user who made the comment can delete it
+    if (comment.user.toString() !== req.userId) {
+      return res.status(403).json({ message: 'You are not authorized to delete this comment.' });
+    }
+    // Remove the comment using splice instead of .remove()
+    const commentIndex = track.comments.findIndex(c => c._id.toString() === commentId);
+    if (commentIndex === -1) {
+      return res.status(404).json({ message: 'Comment not found' });
+    }
+    track.comments.splice(commentIndex, 1);
+    await track.save();
+    return res.status(200).json({ message: 'Comment deleted successfully', comments: track.comments });
+  } catch (error) {
+    console.error('Error deleting comment:', error);
+    return res.status(500).json({ message: 'Failed to delete comment', error: error.message });
+  }
+};
