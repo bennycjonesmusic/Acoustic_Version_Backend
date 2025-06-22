@@ -168,6 +168,9 @@ export const deleteNotification = async (req, res) => {
 export const deleteAllNotifications = async (req, res) => {
     try {
         const userId = req.userId;
+        // Log the token from the Authorization header for debugging
+        const authHeader = req.headers['authorization'] || req.headers['Authorization'];
+        console.log('🔑 deleteAllNotifications: Authorization header:', authHeader);
         
         const result = await Notification.deleteMany({ userId });
         
