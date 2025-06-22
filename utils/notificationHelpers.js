@@ -326,3 +326,13 @@ export const createFirstUploadCongratulationsNotification = async (userId) => {
         }
     });
 };
+
+export const createCommissionInProgressNotification = async (artistId, commissionId) => {
+    return await Notification.createNotification({
+        userId: artistId,
+        type: 'commission_in_progress',
+        title: 'Commission In Progress',
+        message: 'Customer has paid the platform and the commission process has begun. Please proceed with recording and uploading your track.',
+        relatedCommission: commissionId
+    });
+};
