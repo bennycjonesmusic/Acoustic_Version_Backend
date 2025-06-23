@@ -243,8 +243,8 @@ export const approveCommissionAndPayout = async (req, res) => {
         }
         
         // Always set to approved - let webhook handle queueing when payment confirms
-        commission.status = 'approved';
-        await commission.save();
+        //commission.status = 'approved';
+        //await commission.save();
         
         const artist = commission.artist;
         if (!artist.stripeAccountId) {
@@ -319,7 +319,7 @@ export const processExpiredCommissionsStandalone = async () => {
         
         // Find all commissions that are in progress and populate artist data
         const commissions = await CommissionRequest.find({
-            status: { $in: ['requested', 'accepted', 'in_progress'] }
+            status: { $in: ['accepted', 'in_progress'] }
         }).populate('artist', 'maxTimeTakenForCommission username email');
         
         console.log(`[CRON] Found ${commissions.length} active commissions to check for expiry`);
@@ -588,7 +588,11 @@ export const confirmOrDenyCommission = async (req, res) => {
             commission.status = 'approved';
             await commission.save();
             console.log('[confirmOrDenyCommission] Commission approved:', commissionId);
-            return res.status(200).json({ success: true, message: 'Commission approved. Artist will be paid out.' });        } else if (action === 'request_changes' || action === 'deny') {
+            // Automatically call approveCommissionAndPayout after approval
+            req.body.commissionId = commissionId;
+            await approveCommissionAndPayout(req, res);
+            return; // approveCommissionAndPayout will handle the response
+        } else if (action === 'request_changes' || action === 'deny') {
             // Check if revisions are still allowed
             const currentRevisions = commission.revisionCount || 0;
             const maxRevisions = commission.maxRevisions || 2;
