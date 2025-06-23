@@ -949,7 +949,7 @@ export async function editTrack(req, res) {
         }
         
         // Extract validated fields from value
-        const { description, title, originalArtist, instructions, youtubeGuideUrl, guideTrackUrl, licenseStatus, licensedFrom, price, backingTrackType, genre, vocalRange } = value;
+        const { description, title, originalArtist, instructions, youtubeGuideUrl, guideTrackUrl, licenseStatus, licensedFrom, price, backingTrackType, genre, vocalRange, keySignature } = value;
         
         // Validate and parse price if present
         let parsedPrice = track.price; // Default to existing price
@@ -976,6 +976,30 @@ export async function editTrack(req, res) {
             }
         }
 
+        // --- Key signature logic (copied from uploadTrack) ---
+        let keyData = {};
+        if (keySignature && keySignature.trim()) {
+            try {
+                const { key, isFlat, isSharp } = parseKeySignature(keySignature);
+                keyData = {
+                    key,
+                    isFlat,
+                    isSharp,
+                    isMajor: !keySignature.toLowerCase().includes('m'),
+                    isMinor: keySignature.toLowerCase().includes('m')
+                };
+            } catch (error) {
+                return res.status(400).json({ 
+                    message: `Invalid key signature: ${error.message}` 
+                });
+            }
+        } else {
+            // If keySignature is explicitly set to empty, clear key fields
+            if (Object.prototype.hasOwnProperty.call(value, 'keySignature')) {
+                keyData = { key: undefined, isFlat: undefined, isSharp: undefined, isMajor: undefined, isMinor: undefined };
+            }
+        }
+        // --- End key signature logic ---
 
         // Create object with field names and values for easier iteration
         // Only include fields that were actually in the validated 'value' object
@@ -992,6 +1016,11 @@ export async function editTrack(req, res) {
         if (backingTrackType !== undefined) fieldsToUpdate.backingTrackType = backingTrackType;
         if (genre !== undefined) fieldsToUpdate.genre = genre;
         if (vocalRange !== undefined) fieldsToUpdate.vocalRange = vocalRange;
+        if (keySignature !== undefined) fieldsToUpdate.keySignature = keySignature;
+        // Add normalized key fields if present
+        if (Object.keys(keyData).length > 0) {
+            Object.assign(fieldsToUpdate, keyData);
+        }
         
         // Check profanity and update fields
         for (const [fieldName, fieldValue] of Object.entries(fieldsToUpdate)) {
@@ -1024,6 +1053,12 @@ export async function editTrack(req, res) {
                 backingTrackType: track.backingTrackType,
                 genre: track.genre,
                 vocalRange: track.vocalRange,
+                keySignature: track.keySignature,
+                key: track.key,
+                isFlat: track.isFlat,
+                isSharp: track.isSharp,
+                isMajor: track.isMajor,
+                isMinor: track.isMinor,
                 updatedAt: track.updatedAt
             }
         });
