@@ -90,6 +90,7 @@ stripeOnboardingComplete: {
     reference: { type: String, required: true }, // Description of what this payment is for
     createdAt: { type: Date, default: Date.now },
     source: { type: String, required: true }, // 'cart_purchase', 'commission', etc.
+    commissionId: { type: String, required: false }, // Optional, only for commission payouts
     metadata: { type: Object, default: {} } // Additional data (trackIds, customerEmail, etc.)
   }],
   averageTrackRating: {

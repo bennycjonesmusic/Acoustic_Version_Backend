@@ -92,9 +92,10 @@ async function processPayouts() {
         totalProcessed++;
 
         try {
+          let commission = null;
           // If this is a commission payout, ensure commission is cron_pending before paying out
           if (owed.source === 'commission' && owed.commissionId) {
-            const commission = await CommissionRequest.findById(owed.commissionId);
+            commission = await CommissionRequest.findById(owed.commissionId);
             if (!commission) {
               console.error(`[CRON PAYOUT] ⚠️  Commission ${owed.commissionId} not found, payout skipped`);
               totalFailed++;
@@ -149,15 +150,33 @@ async function processPayouts() {
           console.log(`[CRON PAYOUT] Transfer ID: ${transfer.id}`);
 
           // If this was a commission payout, update the commission status
-          if (owed.source === 'commission' && owed.commissionId) {
+          if (commission) {
             try {
-              const commission = await CommissionRequest.findById(owed.commissionId);
-              if (commission && commission.status === 'cron_pending') {
-                commission.status = 'completed';
-                commission.stripeTransferId = transfer.id;
-                await commission.save();
-                console.log(`[CRON PAYOUT] ✅ Updated commission ${owed.commissionId} status to 'completed'`);
+              commission.status = 'completed';
+              commission.stripeTransferId = transfer.id;
+              
+              const artist = await User.findById(commission.artist);
+              const user = await User.findById(commission.customer);
+              let commissionPurchase = user.purchasedTracks.find(pt => pt.track?.toString() === commission._id.toString());
+              if (commissionPurchase && (!commissionPurchase.track || commissionPurchase.track === null)) {
+                  commissionPurchase.track = commission._id;
+                  commissionPurchase.commission = commission._id; // Set commission ref if missing
+                  await user.save();
+              } else if (!commissionPurchase) {
+                  user.purchasedTracks.push({
+                      track: commission._id, // Always use commission._id as BackingTrack ref
+                      commission: commission._id, // Set commission ref
+                      paymentIntentId: commission.stripePaymentIntentId || 'commission',
+                      purchasedAt: new Date(),
+                      price: commission.price || 0,
+                      refunded: false
+                  });
+                  await user.save();
               }
+              artist.numOfCommissions = (artist.numOfCommissions || 0) + 1; 
+              await artist.save();// Increment artist's commission count
+              await commission.save();
+              console.log(`[CRON PAYOUT] ✅ Updated commission ${owed.commissionId} status to 'completed'`);
             } catch (commissionError) {
               console.error(`[CRON PAYOUT] ⚠️  Failed to update commission ${owed.commissionId} status:`, commissionError.message);
               // Don't fail the entire payout for this - the money was transferred successfully
