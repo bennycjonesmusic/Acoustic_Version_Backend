@@ -20,7 +20,21 @@ export const createContactFormEntry = async (req, res) => {
     }
 
     const { email, description, type } = req.body;
-    
+
+    // Use latest email logic: if email is missing and user is authenticated, use user's email
+    let finalEmail = email;
+    if ((!finalEmail || finalEmail.trim() === '') && req.userId) {
+      const user = await User.findById(req.userId);
+      finalEmail = user ? user.email : null;
+      if (user && user.email) {
+        finalEmail = user.email;
+      }
+    }
+    // If still no email, return error
+    if (!finalEmail || finalEmail.trim() === '') {
+      return res.status(400).json({ message: 'Email is required. Please provide your email or log in.' });
+    }
+
     // Sanitize description
     const filter = new Filter.Filter();
     const cleanDescription = filter.clean(description);
@@ -38,7 +52,7 @@ export const createContactFormEntry = async (req, res) => {
     }
 
     const newEntry = new contactForm({
-      email,
+      email: finalEmail,
       description: cleanDescription,
       type,
       reporter

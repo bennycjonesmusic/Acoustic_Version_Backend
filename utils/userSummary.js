@@ -11,7 +11,9 @@ export function toUserSummary(users) {
     artistExample: user.artistExamples && user.artistExamples.length > 0 ? user.artistExamples[0].url : null,
     maxTimeTakenForCommission: user.maxTimeTakenForCommission,
     averageCommissionCompletionTime: user.averageCommissionCompletionTime,
+    averageCommissionCompletionTimeHours: user.averageCommissionCompletionTimeHours, // <-- Ensure this is included
     numOfCommissions: user.numOfCommissions,
-    artistInstrument: user.artistInstrument
+    artistInstrument: user.artistInstrument,
+    numOfRatings: user.numOfRatings // Add total ratings to summary for frontend
   }));
 }

@@ -190,6 +190,15 @@ export const getUserDetails = async (req, res) => {
             ...countMatchCondition
         });
 
+        // Populate only the first 2 reviews' user fields for preview in artist dialog
+        if (user.reviews && user.reviews.length > 0) {
+            await user.populate({
+                path: 'reviews.user',
+                select: 'username avatar',
+                options: { limit: 2 }
+            });
+        }
+
         const userJson = user.toJSON({
             viewerRole: req.user?.role || 'public',
             viewerId: req.userId || null

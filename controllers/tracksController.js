@@ -100,6 +100,9 @@ try{
         });
     }    track.calculateAverageRating();
     await track.save();
+
+    //track.user.numOfRatings += track.ratings.length;
+    
     
     // Create rating notification for the artist (only for new ratings, not updates)
     if (!existingRating) {
@@ -121,6 +124,10 @@ try{
     const artist = await User.findById(track.user);
     if (artist && (artist.role === 'artist' || artist.role === 'admin')) {
       await artist.calculateAverageTrackRating();
+      await artist.calculateNumOfRatings();
+      await artist.save();
+      
+
     }
     return res.status(200).json({message: "Rating submitted successfully", track});
 }catch(error) {

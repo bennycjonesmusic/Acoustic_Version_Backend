@@ -50,8 +50,12 @@ stripeOnboardingComplete: {
     default : 0,
   
   },
+  numOfRatings: {
+    type: Number,
+    default: 0
+  },
   following: [{
-    type: mongoose.Schema.Types.ObjectId, 
+    type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   }],
   followers: [{
@@ -154,7 +158,13 @@ stripeOnboardingComplete: {
     type: Number,
     default: 0,
     description: 'Average time in days to complete commissions for this artist.'
-  },  lastOnline: {
+  },
+  averageCommissionCompletionTimeHours: {
+    type: Number,
+    default: 0,
+    description: 'Average time in hours to complete commissions for this artist (if < 1 day).'
+  },
+  lastOnline: {
     type: Date,
     default: null,
     description: 'Timestamp of the user\'s last activity.'
@@ -240,21 +250,33 @@ userSchema.methods.calculateAverageCommissionCompletionTime = async function() {
     if (completedCommissions.length === 0) {
       // No completed commissions, reset to 0
       this.averageCommissionCompletionTime = 0;
+      this.averageCommissionCompletionTimeHours = 0;
       this.numOfCommissions = 0;
     } else {
-      // Calculate completion times in days
+      // Calculate completion times in days and hours
       const completionTimes = completedCommissions.map(commission => {
         const createdAt = new Date(commission.createdAt);
         const completedAt = new Date(commission.completedAt);
         const diffMs = completedAt - createdAt;
         const diffDays = diffMs / (1000 * 60 * 60 * 24); // Convert ms to days
-        return diffDays;
+        const diffHours = diffMs / (1000 * 60 * 60); // Convert ms to hours
+        return { diffDays, diffHours };
       });
 
-      // Calculate average completion time
-      const totalTime = completionTimes.reduce((sum, time) => sum + time, 0);
-      this.averageCommissionCompletionTime = Math.round((totalTime / completionTimes.length) * 100) / 100; // Round to 2 decimal places
+      // Calculate average completion time in days and hours
+      const totalDays = completionTimes.reduce((sum, t) => sum + t.diffDays, 0);
+      const totalHours = completionTimes.reduce((sum, t) => sum + t.diffHours, 0);
+      const avgDays = totalDays / completionTimes.length;
+      const avgHours = totalHours / completionTimes.length;
       this.numOfCommissions = completedCommissions.length;
+      // If less than 1 day, store hours, else store days
+      if (avgDays < 1) {
+        this.averageCommissionCompletionTime = 0; // for backward compatibility
+        this.averageCommissionCompletionTimeHours = Math.round(avgHours * 100) / 100; // 2 decimal places
+      } else {
+        this.averageCommissionCompletionTime = Math.round(avgDays * 100) / 100;
+        this.averageCommissionCompletionTimeHours = 0;
+      }
     }
 
     await this.save();
@@ -263,6 +285,26 @@ userSchema.methods.calculateAverageCommissionCompletionTime = async function() {
     console.error('Error calculating average commission completion time:', error);
     throw error;
   }
+};
+
+// Method to calculate number of ratings across all uploaded tracks
+userSchema.methods.calculateNumOfRatings = async function() {
+  // Populate uploadedTracks with ratings array
+  await this.populate({
+    path: 'uploadedTracks',
+    select: 'ratings', // ratings should be an array on each track
+  });
+  const tracks = this.uploadedTracks || [];
+  // Sum the number of ratings for each track
+  const numRatings = tracks.reduce((sum, track) => {
+    if (Array.isArray(track.ratings)) {
+      return sum + track.ratings.length;
+    }
+    return sum;
+  }, 0);
+  this.numOfRatings = numRatings;
+  await this.save();
+  return numRatings;
 };
 
 //sanitize for security purposes
