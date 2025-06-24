@@ -24,7 +24,10 @@ const commissionRequestSchema = new mongoose.Schema({
   updatedAt: { type: Date, default: Date.now },
   completedAt: { type: Date }, // When the commission was marked as completed
   expiryDate: { type: Date, required: false }, // Optional deadline for delivery
-  cancellationReason: { type: String }, // Reason for cancellation, if cancelled
+  cancellationReason: { type: String },
+  guideTrackForSingerUrl: { type: String }, // URL for guide track for singer
+  singerRequestedGuideTrack: { type: Boolean, default: false }, // Whether the singer requested a track
+}, {
 });
 
 commissionRequestSchema.pre('save', function(next) {

@@ -126,7 +126,8 @@ export const createCommissionRequest = async (req, res) => {
             return res.status(503).json({ error: 'Stripe webhook is not running. Please try again later.' });
         }
 
-        const { artist: artistId, requirements, ...rest } = req.body;
+        const { artist: artistId, requirements, guideTrackUrl, singerRequestedGuideTrack, ...rest } = req.body;
+        const singerRequestedGuideTrackBool = singerRequestedGuideTrack === true;
         const customerId = req.userId;
         console.log('[createCommissionRequest] artistId:', artistId, 'customerId:', customerId, 'requirements:', requirements, 'rest:', rest);        // Fetch artist to get their commissionPrice
         const artist = await User.findById(artistId);
@@ -140,7 +141,7 @@ export const createCommissionRequest = async (req, res) => {
                 error: `Commission cannot be created: ${payoutValidation.reason}. The artist must complete their Stripe account setup first.` 
             });
         }
-          const artistPrice = Number(artist.commissionPrice) || 0;
+        const artistPrice = Number(artist.commissionPrice) || 0;
         const customerPrice = Number(artist.customerCommissionPrice) || 0;
         
         console.log('[createCommissionRequest] artist.commissionPrice:', artist.commissionPrice);
@@ -149,13 +150,14 @@ export const createCommissionRequest = async (req, res) => {
         if (!artistPrice || artistPrice <= 0) {
             return res.status(400).json({ error: 'No valid commission price set for this artist.' });
         }
-        
         const commission = await CommissionRequest.create({
             customer: customerId,
             artist: artistId,
             requirements,
             price: customerPrice, // Use the schema-calculated customer price
             status: 'pending_artist',
+            guideTrackUrl,
+            singerRequestedGuideTrack: singerRequestedGuideTrackBool,
             ...rest
         });
         console.log('[createCommissionRequest] created commission:', commission);
@@ -170,7 +172,6 @@ export const createCommissionRequest = async (req, res) => {
         } catch (notifError) {
             console.error('Error creating commission request notification:', notifError);
         }
-
         const session = await stripeClient.checkout.sessions.create({
             payment_method_types: ['card'],
             line_items: [
@@ -193,18 +194,17 @@ export const createCommissionRequest = async (req, res) => {
                 artistId: artistId,
             }
         });
-        console.log('[createCommissionRequest] stripe session:', session);
-        console.log('[createCommissionRequest] session metadata:', session.metadata);
         commission.stripeSessionId = session.id;
-        await commission.save();        // Respond with detailed price breakdown for transparency
-        console.log('[createCommissionRequest] Response price breakdown:', { artistPrice, customerPrice });
+        await commission.save();
         return res.status(200).json({
             sessionId: session.id,
             sessionUrl: session.url, // Add the Stripe Checkout URL for frontend/manual use
             commissionId: commission._id,
             artistPrice,
             customerPrice,
-            platformCommission: customerPrice - artistPrice
+            platformCommission: customerPrice - artistPrice,
+            guideTrackUrl: commission.guideTrackUrl ?? null,
+            singerRequestedGuideTrack: commission.singerRequestedGuideTrack ?? false
         });
     }
     catch(error){

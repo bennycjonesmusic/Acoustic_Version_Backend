@@ -21,6 +21,11 @@ import {
   getCommissionById
 } from '../controllers/commissionControl.js';
 import { downloadCommissionFile } from '../controllers/commissionDownloadController.js';
+import { 
+  setCommissionGuideTrackForSinger, 
+  downloadCommissionGuideTrack, 
+  deleteCommissionGuideTrack 
+} from '../controllers/commissionGuideController.js';
 import authMiddleware from '../middleware/customer_auth.js';
 import artistOrAdminAuthMiddleware from '../middleware/artist_auth.js';
 import isAdmin from '../middleware/Admin.js';
@@ -182,6 +187,11 @@ router.post('/pay', authMiddleware, async (req, res) => {
 
 // Get commission by ID (customer, artist, or admin)
 router.get('/:id', authMiddleware, getCommissionById);
+
+// Commission guide track routes
+router.post('/:id/guide-track', authMiddleware, upload.single('guideTrack'), setCommissionGuideTrackForSinger);
+router.get('/:id/guide-track/download', authMiddleware, downloadCommissionGuideTrack);
+router.delete('/:id/guide-track', authMiddleware, deleteCommissionGuideTrack);
 
 // Customer confirms or denies preview by commission ID
 router.post('/:id/confirm', authMiddleware, confirmOrDenyCommission);
