@@ -3,6 +3,7 @@ import path from 'path';
 import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
 import BackingTrack from '../models/backing_track.js';
+import CommissionRequest from '../models/CommissionRequest.js';
 import User from '../models/User.js';
 import { sanitizeFileName } from '../utils/regexSanitizer.js';
 import * as Filter from 'bad-words';
@@ -60,7 +61,7 @@ export const uploadGuideTrack = async (req, res) => {
         }
 
         // Find the track
-        const track = await BackingTrack.findById(trackId);
+        const track = await BackingTrack.findById(trackId) || await CommissionRequest.findById(trackId);
         if (!track) {
             return res.status(404).json({ message: "Track not found." });
         }
@@ -72,7 +73,15 @@ export const uploadGuideTrack = async (req, res) => {
         }
 
         // Check ownership - only track owner can upload guide tracks
-        if (track.user.toString() !== user._id.toString()) {
+        let ownerId;
+        if ('guideTrackForSingerUrl' in track && 'artist' in track) {
+            // CommissionRequest: owner is artist
+            ownerId = track.artist?.toString?.() || '';
+        } else {
+            // BackingTrack: owner is user
+            ownerId = track.user?.toString?.() || '';
+        }
+        if (ownerId !== user._id.toString()) {
             return res.status(403).json({ 
                 message: "You are not authorized to upload guide tracks for this track. Only the track owner can upload guide tracks." 
             });
@@ -131,9 +140,14 @@ export const uploadGuideTrack = async (req, res) => {
         // Clean up temp file
         fs.unlinkSync(tempFilePath);
 
-        // Update the track with the new guide track URL
-        track.guideTrackUrl = data.Location;
-        await track.save();
+        // Robustly update the correct guide track property based on schema
+        if ('guideTrackForSingerUrl' in track) {
+            track.guideTrackForSingerUrl = data.Location;
+            await track.save();
+        } else if ('guideTrackUrl' in track) {
+            track.guideTrackUrl = data.Location;
+            await track.save();
+        }
 
         console.log('Guide track uploaded successfully:', {
             trackId: track._id,
@@ -168,36 +182,25 @@ export const downloadGuideTrack = async (req, res) => {
         }
 
         // Find the track
-        const track = await BackingTrack.findById(trackId);
+        const track = await BackingTrack.findById(trackId) || await CommissionRequest.findById(trackId);
         if (!track) {
             return res.status(404).json({ message: "Track not found." });
         }
 
-        // Check if track has a guide track
-        if (!track.guideTrackUrl) {
+        // Check if track has a guide track (handle both BackingTrack and CommissionRequest)
+        let guideTrackUrl = null;
+        if ('guideTrackForSingerUrl' in track) {
+            guideTrackUrl = track.guideTrackForSingerUrl;
+        } else if ('guideTrackUrl' in track) {
+            guideTrackUrl = track.guideTrackUrl;
+        }
+
+        if (!guideTrackUrl) {
             return res.status(404).json({ message: "This track does not have a guide track." });
         }
 
-        // Find the user
-        const user = await User.findById(req.userId);
-        if (!user) {
-            return res.status(404).json({ message: "User not found." });
-        }
-
-        // Check access - user must have purchased the track or be the track owner
-        const hasPurchased = user.purchasedTracks.some(pt => 
-            (pt.track?.toString?.() || pt.track) === track._id.toString()
-        );
-        const isOwner = user.uploadedTracks.some(id => id.equals(track._id));
-
-        if (!hasPurchased && !isOwner) {
-            return res.status(403).json({ 
-                message: "You must purchase this track to access the guide track." 
-            });
-        }
-
         // Extract S3 key from guide track URL
-        const url = new URL(track.guideTrackUrl);
+        const url = new URL(guideTrackUrl);
         const keyMatch = url.pathname.match(/^\/?(.+)/);
         const s3Key = keyMatch ? keyMatch[1] : null;
 
@@ -259,7 +262,7 @@ export const deleteGuideTrack = async (req, res) => {
         }
 
         // Find the track
-        const track = await BackingTrack.findById(trackId);
+        const track = await BackingTrack.findById(trackId) || await CommissionRequest.findById(trackId);
         if (!track) {
             return res.status(404).json({ message: "Track not found." });
         }
@@ -271,20 +274,35 @@ export const deleteGuideTrack = async (req, res) => {
         }
 
         // Check ownership - only track owner can delete guide tracks
-        if (track.user.toString() !== user._id.toString()) {
+        let ownerId;
+        if ('guideTrackForSingerUrl' in track && 'artist' in track) {
+            // CommissionRequest: owner is artist
+            ownerId = track.artist?.toString?.() || '';
+        } else {
+            // BackingTrack: owner is user
+            ownerId = track.user?.toString?.() || '';
+        }
+        if (ownerId !== user._id.toString()) {
             return res.status(403).json({ 
                 message: "You are not authorized to delete guide tracks for this track. Only the track owner can delete guide tracks." 
             });
         }
 
-        // Check if track has a guide track
-        if (!track.guideTrackUrl) {
+        // Check if track has a guide track (handle both BackingTrack and CommissionRequest)
+        let guideTrackUrl = null;
+        if ('guideTrackForSingerUrl' in track) {
+            guideTrackUrl = track.guideTrackForSingerUrl;
+        } else if ('guideTrackUrl' in track) {
+            guideTrackUrl = track.guideTrackUrl;
+        }
+
+        if (!guideTrackUrl) {
             return res.status(404).json({ message: "This track does not have a guide track to delete." });
         }
 
         // Delete from S3
         try {
-            const url = new URL(track.guideTrackUrl);
+            const url = new URL(guideTrackUrl);
             const keyMatch = url.pathname.match(/^\/?(.+)/);
             const s3Key = keyMatch ? keyMatch[1] : null;
             
@@ -310,7 +328,11 @@ export const deleteGuideTrack = async (req, res) => {
         }
 
         // Remove guide track URL from the track
-        track.guideTrackUrl = '';
+        if ('guideTrackForSingerUrl' in track) {
+            track.guideTrackForSingerUrl = '';
+        } else if ('guideTrackUrl' in track) {
+            track.guideTrackUrl = '';
+        }
         await track.save();
 
         console.log('Guide track deleted successfully:', {

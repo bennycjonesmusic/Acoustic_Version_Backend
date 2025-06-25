@@ -127,7 +127,13 @@ export const createCommissionRequest = async (req, res) => {
         }
 
         const { artist: artistId, requirements, guideTrackUrl, singerRequestedGuideTrack, ...rest } = req.body;
-        const singerRequestedGuideTrackBool = singerRequestedGuideTrack === true;
+        // Robustly convert singerRequestedGuideTrack to boolean
+        const singerRequestedGuideTrackBool = (
+          singerRequestedGuideTrack === true ||
+          singerRequestedGuideTrack === 'true' ||
+          singerRequestedGuideTrack === 'True' ||
+          singerRequestedGuideTrack === 1
+        );
         const customerId = req.userId;
         console.log('[createCommissionRequest] artistId:', artistId, 'customerId:', customerId, 'requirements:', requirements, 'rest:', rest);        // Fetch artist to get their commissionPrice
         const artist = await User.findById(artistId);
@@ -305,7 +311,15 @@ export const approveCommissionAndPayout = async (req, res) => {
 export const processExpiredCommissions = async (req, res) => {
     try {
         const results = await processExpiredCommissionsStandalone();
-        return res.status(200).json({ processed: results });
+        // Ensure guideTrackUrl and singerRequestedGuideTrack are present in each result if commission object is returned
+        const resultsWithFields = results.map(r =>
+            r && typeof r === 'object' && r.commissionId ? {
+                ...r,
+                guideTrackUrl: r.guideTrackUrl ?? null,
+                singerRequestedGuideTrack: r.singerRequestedGuideTrack ?? false
+            } : r
+        );
+        return res.status(200).json({ processed: resultsWithFields });
     } catch (error) {
         console.error('Error processing expired commissions:', error);
         return res.status(500).json({ error: 'Internal server error' });
@@ -725,12 +739,10 @@ export const artistRespondToCommission = async (req, res) => {
 export const getArtistCommissions = async (req, res) => {
     try {
         const artistId = req.userId;
-        
         // Pagination parameters with validation
         const page = Math.max(1, parseInt(req.query.page) || 1);
         const limit = Math.max(1, Math.min(50, parseInt(req.query.limit) || 20));
         const orderBy = req.query.orderBy || 'date-requested';
-        
         // Build sort criteria based on orderBy parameter
         let sortCriteria;
         switch (orderBy) {
@@ -749,24 +761,58 @@ export const getArtistCommissions = async (req, res) => {
             default:
                 sortCriteria = { createdAt: -1 };
         }
-        
         const skip = (page - 1) * limit;
         const [commissions, total] = await Promise.all([
             CommissionRequest.find({ artist: artistId })
-                .populate('customer')
+                .populate('customer', 'username avatar _id')
+                .populate('artist', 'username avatar _id')
                 .sort(sortCriteria)
                 .skip(skip)
-                .limit(limit),
+                .limit(limit)
+                .lean(),
             CommissionRequest.countDocuments({ artist: artistId })
         ]);
-        
+        // Ensure only safe fields are returned
+        const commissionsWithFields = commissions.map(c => ({
+            _id: c._id,
+            name: c.name,
+            customer: c.customer ? {
+                _id: c.customer._id,
+                username: c.customer.username,
+                avatar: c.customer.avatar || ''
+            } : null,
+            artist: c.artist ? {
+                _id: c.artist._id,
+                username: c.artist.username,
+                avatar: c.artist.avatar || ''
+            } : null,
+            price: c.price,
+            status: c.status,
+            requirements: c.requirements,
+            stripeSessionId: c.stripeSessionId,
+            stripePaymentIntentId: c.stripePaymentIntentId,
+            stripeTransferId: c.stripeTransferId,
+            finishedTrackUrl: c.finishedTrackUrl,
+            previewTrackUrl: c.previewTrackUrl,
+            guideTrackUrl: c.guideTrackUrl ?? null,
+            revisionCount: c.revisionCount,
+            maxRevisions: c.maxRevisions,
+            revisionFeedback: c.revisionFeedback,
+            createdAt: c.createdAt,
+            updatedAt: c.updatedAt,
+            completedAt: c.completedAt,
+            expiryDate: c.expiryDate,
+            cancellationReason: c.cancellationReason,
+            guideTrackForSingerUrl: c.guideTrackForSingerUrl,
+            singerRequestedGuideTrack: c.singerRequestedGuideTrack ?? false,
+            // Add any other fields you want to expose here
+        }));
         // Calculate pagination metadata
         const totalPages = Math.ceil(total / limit);
         const hasNextPage = page < totalPages;
         const hasPrevPage = page > 1;
-        
         return res.status(200).json({
-            commissions,
+            commissions: commissionsWithFields,
             pagination: {
                 currentPage: page,
                 totalPages,
@@ -784,18 +830,16 @@ export const getArtistCommissions = async (req, res) => {
 
 // Get all commissions for the logged-in customer (secure)
 export const getCustomerCommissions = async (req, res) => {
-    try { //Now paginated for better performance
+    try {
         const customerId = req.userId;
         // Only allow the user themselves or admin
         if (!req.user || (req.user.id.toString() !== customerId && req.user.role !== 'admin')) {
             return res.status(403).json({ error: 'Not authorized' });
         }
-        
         // Pagination parameters with validation
         const page = Math.max(1, parseInt(req.query.page) || 1);
         const limit = Math.max(1, Math.min(50, parseInt(req.query.limit) || 20));
         const orderBy = req.query.orderBy || 'date-requested';
-        
         // Build sort criteria based on orderBy parameter
         let sortCriteria;
         switch (orderBy) {
@@ -814,24 +858,58 @@ export const getCustomerCommissions = async (req, res) => {
             default:
                 sortCriteria = { createdAt: -1 };
         }
-        
         const skip = (page - 1) * limit;
         const [commissions, total] = await Promise.all([
             CommissionRequest.find({ customer: customerId })
-                .populate('artist')
+                .populate('artist', 'username avatar _id')
+                .populate('customer', 'username avatar _id')
                 .sort(sortCriteria)
                 .skip(skip)
-                .limit(limit),
+                .limit(limit)
+                .lean(),
             CommissionRequest.countDocuments({ customer: customerId })
         ]);
-        
+        // Ensure only safe fields are returned
+        const commissionsWithFields = commissions.map(c => ({
+            _id: c._id,
+            name: c.name,
+            customer: c.customer ? {
+                _id: c.customer._id,
+                username: c.customer.username,
+                avatar: c.customer.avatar || ''
+            } : null,
+            artist: c.artist ? {
+                _id: c.artist._id,
+                username: c.artist.username,
+                avatar: c.artist.avatar || ''
+            } : null,
+            price: c.price,
+            status: c.status,
+            requirements: c.requirements,
+            stripeSessionId: c.stripeSessionId,
+            stripePaymentIntentId: c.stripePaymentIntentId,
+            stripeTransferId: c.stripeTransferId,
+            finishedTrackUrl: c.finishedTrackUrl,
+            previewTrackUrl: c.previewTrackUrl,
+            guideTrackUrl: c.guideTrackUrl ?? null,
+            revisionCount: c.revisionCount,
+            maxRevisions: c.maxRevisions,
+            revisionFeedback: c.revisionFeedback,
+            createdAt: c.createdAt,
+            updatedAt: c.updatedAt,
+            completedAt: c.completedAt,
+            expiryDate: c.expiryDate,
+            cancellationReason: c.cancellationReason,
+            guideTrackForSingerUrl: c.guideTrackForSingerUrl,
+            singerRequestedGuideTrack: c.singerRequestedGuideTrack ?? false,
+            // Add any other fields you want to expose here
+        }));
         // Calculate pagination metadata
         const totalPages = Math.ceil(total / limit);
         const hasNextPage = page < totalPages;
         const hasPrevPage = page > 1;
-        
         return res.status(200).json({
-            commissions,
+            commissions: commissionsWithFields,
             pagination: {
                 currentPage: page,
                 totalPages,
@@ -926,7 +1004,11 @@ export const getFinishedCommission = async (req, res) => {
             artist.numOfCommissions = (artist.numOfCommissions || 0) + 1; 
             await artist.save();// Increment artist's commission count
         }
-        return res.status(200).json({ finishedTrackUrl: commission.finishedTrackUrl });
+        return res.status(200).json({ 
+            finishedTrackUrl: commission.finishedTrackUrl,
+            guideTrackUrl: commission.guideTrackUrl ?? null,
+            singerRequestedGuideTrack: commission.singerRequestedGuideTrack ?? false
+        });
     } catch (err) {
         return res.status(500).json({ error: 'Internal server error', details: err.message || err });
     }
@@ -986,7 +1068,14 @@ export const getCommissionById = async (req, res) => {
     ) {
       return res.status(403).json({ error: 'Not authorized' });
     }
-    return res.status(200).json(commission);
+    // Ensure guideTrackUrl and singerRequestedGuideTrack are always present
+    const commissionObj = {
+      ...commission.toObject(),
+      guideTrackUrl: commission.guideTrackUrl ?? null,
+      guideTrackForSingerUrl: commission.guideTrackForSingerUrl ?? null,
+      singerRequestedGuideTrack: commission.singerRequestedGuideTrack ?? false
+    };
+    return res.status(200).json(commissionObj);
   } catch (err) {
     return res.status(500).json({ error: 'Internal server error', details: err.message || err });
   }
@@ -999,14 +1088,20 @@ export const testProcessExpiredCommissions = async (req, res) => {
         if (process.env.NODE_ENV === 'production' && !process.env.ENABLE_TEST_ROUTES) {
             return res.status(403).json({ error: 'Test routes not enabled in production' });
         }
-        
         console.log('[TEST] Manually triggering commission expiry processing...');
         const results = await processExpiredCommissionsStandalone();
-        
+        // Ensure guideTrackUrl and singerRequestedGuideTrack are present in each result if commission object is returned
+        const resultsWithFields = results.map(r =>
+            r && typeof r === 'object' && r.commissionId ? {
+                ...r,
+                guideTrackUrl: r.guideTrackUrl ?? null,
+                singerRequestedGuideTrack: r.singerRequestedGuideTrack ?? false
+            } : r
+        );
         return res.status(200).json({ 
             message: 'Commission expiry processing completed',
-            results: results,
-            processedCount: results.length
+            results: resultsWithFields,
+            processedCount: resultsWithFields.length
         });
     } catch (error) {
         console.error('[TEST] Error processing expired commissions:', error);
@@ -1021,17 +1116,13 @@ export const createTestExpiredCommission = async (req, res) => {
         if (process.env.NODE_ENV === 'production' && !process.env.ENABLE_TEST_ROUTES) {
             return res.status(403).json({ error: 'Test routes not enabled in production' });
         }
-        
         const { artistId, customerId, paymentIntentId } = req.body;
-        
         if (!artistId || !customerId) {
             return res.status(400).json({ error: 'artistId and customerId are required' });
         }
-        
         // Create a commission that's "expired" (created 30 days ago)
         const expiredDate = new Date();
         expiredDate.setDate(expiredDate.getDate() - 30); // 30 days ago
-        
         const testCommission = new CommissionRequest({
             customer: customerId,
             artist: artistId,
@@ -1040,21 +1131,21 @@ export const createTestExpiredCommission = async (req, res) => {
             status: 'accepted', // In progress status so it can be expired
             stripePaymentIntentId: paymentIntentId // Optional - if you want to test with real payment
         });
-        
         await testCommission.save();
-        
         console.log(`[TEST] Created test expired commission: ${testCommission._id}`);
-        
+        // Ensure guideTrackUrl and singerRequestedGuideTrack are present
+        const commissionObj = {
+            id: testCommission._id,
+            createdAt: testCommission.createdAt,
+            status: testCommission.status,
+            paymentIntentId: testCommission.stripePaymentIntentId,
+            guideTrackUrl: testCommission.guideTrackUrl ?? null,
+            singerRequestedGuideTrack: testCommission.singerRequestedGuideTrack ?? false
+        };
         return res.status(201).json({
             message: 'Test expired commission created',
-            commission: {
-                id: testCommission._id,
-                createdAt: testCommission.createdAt,
-                status: testCommission.status,
-                paymentIntentId: testCommission.stripePaymentIntentId
-            }
+            commission: commissionObj
         });
-        
     } catch (error) {
         console.error('[TEST] Error creating test commission:', error);
         return res.status(500).json({ error: 'Internal server error', details: error.message });
@@ -1119,10 +1210,11 @@ export const makeAllCommissionsExpired = async (req, res) => {
                 id: c._id,
                 artist: c.artist?.username,
                 deliveryTime: c.artist?.maxTimeTakenForCommission || '1 week',
-                status: c.status
+                status: c.status,
+                guideTrackUrl: c.guideTrackUrl ?? null,
+                singerRequestedGuideTrack: c.singerRequestedGuideTrack ?? false
             }))
         });
-        
     } catch (error) {
         console.error('[TEST] Error making commissions expired:', error);
         return res.status(500).json({ error: 'Internal server error', details: error.message });
