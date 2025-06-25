@@ -5,7 +5,6 @@ import { Upload } from '@aws-sdk/lib-storage';
 import BackingTrack from '../models/backing_track.js';
 import CommissionRequest from '../models/CommissionRequest.js';
 import User from '../models/User.js';
-import { sanitizeFileName } from '../utils/regexSanitizer.js';
 import * as Filter from 'bad-words';
 
 /**
@@ -87,8 +86,24 @@ export const uploadGuideTrack = async (req, res) => {
             });
         }
 
-        // Sanitize file name
-        const sanitizedFileName = sanitizeFileName(req.file.originalname);
+        // Try to import sanitizeFileName robustly (ESM compatible)
+        let sanitizeFileName = (name) => {
+            // fallback: remove unsafe chars, fallback to 'file.mp3' if empty
+            if (!name || typeof name !== 'string') return 'file.mp3';
+            return name.replace(/[^a-zA-Z0-9._-]/g, '_') || 'file.mp3';
+        };
+        try {
+            const sanitizerModule = await import('../utils/regexSanitizer.js');
+            if (typeof sanitizerModule.sanitizeFileName === 'function') {
+                sanitizeFileName = sanitizerModule.sanitizeFileName;
+            }
+        } catch (e) {
+            // fallback already set
+        }
+
+        // Sanitize file name robustly
+        const originalName = req.file && req.file.originalname ? req.file.originalname : 'file.mp3';
+        const sanitizedFileName = sanitizeFileName(originalName);
         
         // Create temporary file
         const tmp = await import('os');
@@ -106,7 +121,7 @@ export const uploadGuideTrack = async (req, res) => {
         });
 
         // If track already has a guide track, delete the old one from S3
-        if (track.guideTrackUrl) {
+        if (track.guideTrackUrl && ! track.customer) {
             try {
                 const url = new URL(track.guideTrackUrl);
                 const keyMatch = url.pathname.match(/^\/?(.+)/);
