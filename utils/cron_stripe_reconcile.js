@@ -37,21 +37,6 @@ async function reconcileStripePayments() {
             console.log(`[CRON RECONCILE] Updated commission ${commission._id} to in_progress`);
           }
         }
-        // Handle purchased tracks (if you store trackId in metadata)
-        if (metadata.trackId && metadata.customerId) {
-          const user = await User.findById(metadata.customerId);
-          if (user) {
-            user.purchasedTracks = user.purchasedTracks || [];
-            // Ensure no duplicates and only add if not present
-            if (!user.purchasedTracks.includes(metadata.trackId)) {
-              user.purchasedTracks.push(metadata.trackId);
-              await user.save();
-              console.log(`[CRON RECONCILE] Added track ${metadata.trackId} to user ${user.email}`);
-            } else {
-              console.log(`[CRON RECONCILE] Track ${metadata.trackId} already in purchasedTracks for user ${user.email}, skipping.`);
-            }
-          }
-        }
         processed++;
       }
       hasMore = sessions.has_more;

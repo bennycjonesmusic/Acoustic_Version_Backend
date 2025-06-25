@@ -736,25 +736,17 @@ export const downloadTrack = async (req, res) => {
         downloadFilename = s3Key.split('/').pop();
         let extension = getAudioExtension(downloadFilename, track.mimetype || '');
 
-        if (downloadFilename && /^commission-track\.[a-z0-9]+$/i.test(downloadFilename)) {
-          let baseName = (track.name && track.name.replace(/\.[^/.]+$/, ''))
-            || (track.originalFilename && track.originalFilename.replace(/\.[^/.]+$/, ''))
-            || track.title
-            || 'commission-track';
-          baseName = baseName.replace(/[^a-zA-Z0-9-_ ]/g, '').replace(/\s+/g, '_');
+        // Use commission name/title for filename if available
+        let baseName = (track.name && track.name.replace(/\.[^/.]+$/, ''))
+          || (track.originalFilename && track.originalFilename.replace(/\.[^/.]+$/, ''))
+          || track.title
+          || 'commission-track';
+        baseName = baseName.replace(/[^a-zA-Z0-9-_ ]/g, '').replace(/\s+/g, '_');
 
-          if (!baseName.toLowerCase().endsWith(extension)) {
-            downloadFilename = `${baseName}${extension}`;
-          } else {
-            downloadFilename = baseName;
-          }
+        if (!baseName.toLowerCase().endsWith(extension)) {
+          downloadFilename = `${baseName}${extension}`;
         } else {
-          let base = downloadFilename ? downloadFilename.replace(/\.[a-zA-Z0-9]+$/, '') : 'commission-track';
-          if (!base.toLowerCase().endsWith(extension)) {
-            downloadFilename = `${base}${extension}`;
-          } else {
-            downloadFilename = base;
-          }
+          downloadFilename = baseName;
         }
       } catch (e) {
         return res.status(500).json({ message: 'Invalid finishedTrackUrl for commission.' });

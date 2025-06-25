@@ -239,62 +239,14 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
             }
           } else {
             console.log('[WEBHOOK DEBUG] Commission status NOT set to in_progress (current status:', commission.status, ')');
-          }try {
+          }
+          try {
             await commission.save();
             console.log('[WEBHOOK DEBUG] Commission after update:', commission);
           } catch (saveErr) {
             console.error('[WEBHOOK DEBUG] Error saving commission:', saveErr);
           }
           
-          // Handle approved commissions that now have confirmed payment
-          if (commission.status === 'approved') {
-            try {
-              console.log('[WEBHOOK DEBUG] Processing approved commission for payout queue...');
-              
-              // Calculate artist payout amount
-              const artistPrice = Number(commission.artist.commissionPrice) || 0;
-              if (artistPrice > 0) {                // Add to money owed queue
-                const moneyOwedEntry = {
-                  amount: artistPrice,
-                  source: 'commission',
-                  reference: `Commission payout for commission ID: ${commission._id}`,
-                  commissionId: commission._id.toString(),
-                  createdAt: new Date(),
-                  metadata: {
-                    type: 'commission_payout',
-                    commissionId: commission._id.toString(),
-                    customerId: commission.customer._id.toString(),
-                    customerEmail: commission.customer.email,
-                    payoutReason: 'Commission payment confirmed via webhook'
-                  }
-                };
-
-                // Check if this commission is already in money owed to prevent duplicates
-                const existingEntry = commission.artist.moneyOwed.find(entry => 
-                  entry.commissionId && entry.commissionId === commission._id.toString()
-                );
-
-                if (!existingEntry) {
-                  commission.artist.moneyOwed.push(moneyOwedEntry);
-                  await commission.artist.save();
-                  
-                  // Set commission to cron_pending
-                  commission.status = 'cron_pending';
-                  await commission.save();
-                  
-                  console.log(`[WEBHOOK DEBUG] ✅ Added commission ${commission._id} to payout queue for £${artistPrice}`);
-                } else {
-                  console.log(`[WEBHOOK DEBUG] ⚠️  Commission ${commission._id} already in payout queue`);
-                }
-              } else {
-                console.error(`[WEBHOOK DEBUG] ❌ Invalid artist commission price: ${artistPrice}`);
-              }
-            } catch (payoutQueueError) {
-              console.error('[WEBHOOK DEBUG] ❌ Error adding commission to payout queue:', payoutQueueError);
-            }
-          }
-          
-          console.log(`[WEBHOOK DEBUG] Commission payment received for commission ${commissionId}, status is now ${commission.status}.`);
           // Send purchase receipt to client and notification to artist (commission)
           if (commission.customer && commission.customer.email && process.env.NODE_ENV !== 'test') {
             console.log('[WEBHOOK DEBUG] Sending purchase receipt email to customer:', commission.customer.email);

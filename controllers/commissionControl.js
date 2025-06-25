@@ -113,6 +113,7 @@ export const refundTrackPurchase = async (req, res) => {
     }
 };
 
+
 export const createCommissionRequest = async (req, res) => {
     try {
         // Health check for webhook before proceeding
@@ -139,6 +140,12 @@ export const createCommissionRequest = async (req, res) => {
         const artist = await User.findById(artistId);
         console.log('[createCommissionRequest] artist lookup result:', artist);
         if (!artist) return res.status(404).json({ error: 'Artist not found' });
+
+
+        if (artistId === customerId) {
+
+            return res.status(404).json({message: "You cannot commission yourself!"});
+        }
         
         // Validate artist's Stripe account before allowing commission creation
         const payoutValidation = validateUserForPayouts(artist);
@@ -725,6 +732,22 @@ export const artistRespondToCommission = async (req, res) => {
         } else if (action === 'reject') {
             commission.status = 'rejected_by_artist';
             await commission.save();
+            // Notify customer that commission was rejected
+            try {
+                const customerId = commission.customer._id || commission.customer.id || commission.customer;
+                const commissionId = commission._id || commission.id;
+                if (customerId && commissionId) {
+                    await createCommissionRejectedNotification(
+                        customerId,
+                        commission.artist.username,
+                        commissionId
+                    );
+                } else {
+                    console.error('Could not create commission rejected notification: missing customer or commission ID');
+                }
+            } catch (notifError) {
+                console.error('Error creating commission rejected notification:', notifError);
+            }
             return res.status(200).json({ success: true, message: 'Commission rejected.' });
         } else {
             return res.status(400).json({ error: 'Invalid action' });
@@ -940,7 +963,23 @@ export const approveOrDenyCommission = async (req, res) => {
         } else if (action === 'deny') {
             commission.status = 'rejected_by_artist';
             await commission.save();
-            return res.status(200).json({ success: true, message: 'Commission denied.' });
+            // Notify customer that commission was rejected
+            try {
+                const customerId = commission.customer._id || commission.customer.id || commission.customer;
+                const commissionId = commission._id || commission.id;
+                if (customerId && commissionId) {
+                    await createCommissionRejectedNotification(
+                        customerId,
+                        commission.artist.username,
+                        commissionId
+                    );
+                } else {
+                    console.error('Could not create commission rejected notification: missing customer or commission ID');
+                }
+            } catch (notifError) {
+                console.error('Error creating commission rejected notification:', notifError);
+            }
+            return res.status(200).json({ success: true, message: 'Commission rejected.' });
         } else {
             return res.status(400).json({ error: 'Invalid action' });
         }
@@ -966,6 +1005,30 @@ export const getCommissionPreviewForClient = async (req, res) => {
         return res.status(500).json({ error: 'Internal server error', details: err.message || err });
     }
 };
+
+export const terminateCommissionBeforePayment = async (req, res) => {
+    const { commissionId } = req.body;
+    const userId = req.userId;
+    try {
+        const commission = await CommissionRequest.findById(commissionId);
+        if (!commission) return res.status(404).json({ message: 'Commission not found' });
+
+        if(commission.status !== "requested") {
+            return res.status(400).json({ message: 'Commission can only be cancelled before payment' });
+        }
+        if (commission.customer.toString() !== userId && !(req.user && req.user.role === 'admin')) {
+            return res.status(403).json({ message: 'Not authorized to cancel this commission' });
+        }
+
+        await CommissionRequest.findByIdAndDelete(commissionId);
+        console.log(`[terminateCommissionBeforePayment] Commission ${commissionId} terminated by user ${userId}`);
+        return res.status(200).json({ message: 'Commission has been cancelled' });
+    } catch (error) {
+        console.error('Error terminating commission before payment:', error);
+        return res.status(500).json({ message: 'Error terminating commission' });
+    }
+
+}
 
 // Get finished commission and add to purchasedTracks (customer only, after payment)
 export const getFinishedCommission = async (req, res) => {

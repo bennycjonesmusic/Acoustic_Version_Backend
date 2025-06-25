@@ -31,6 +31,7 @@ import artistsRoutes from './routes/artists.js'; // Import artists routes
 import notificationsRoutes from './routes/notifications.js'; // Import notifications routes
 import swaggerUi from 'swagger-ui-express';
 import YAML from 'yamljs';
+import stripeReconcileRouter from './routes/stripe_reconcile.js'; // Import the new Stripe reconcile router
 
 // Handle uncaught exceptions and unhandled promise rejections
 process.on('uncaughtException', (err) => {
@@ -200,6 +201,9 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(helmet()); // Use helmet middleware to set secure HTTP headers
 app.use(compression()); // Enable gzip compression for all responses
+
+// Mount the stripe reconcile router at /stripe-reconcile
+app.use('/stripe-reconcile', stripeReconcileRouter);
 
 // Global rate limiter: 100 requests per 15 minutes per IP (disabled in test mode)
 const globalLimiter = process.env.NODE_ENV === 'test'

@@ -18,7 +18,8 @@ import {
   getCommissionPreviewForClient,
   getFinishedCommission,
   cancelCommission,
-  getCommissionById
+  getCommissionById,
+  terminateCommissionBeforePayment
 } from '../controllers/commissionControl.js';
 import { downloadCommissionFile } from '../controllers/commissionDownloadController.js';
 import { 
@@ -51,7 +52,7 @@ async function checkStripeWebhookHealth() {
       reject(new Error('Stripe webhook health check error: ' + err.message));
     });
     req.setTimeout(2000, () => {
-      req.abort();
+      req.destroy();
       reject(new Error('Stripe webhook health check timed out'));
     });
   });
@@ -195,5 +196,8 @@ router.delete('/:id/guide-track', authMiddleware, deleteCommissionGuideTrack);
 
 // Customer confirms or denies preview by commission ID
 router.post('/:id/confirm', authMiddleware, confirmOrDenyCommission);
+
+// Customer terminates a commission before payment (customer only)
+router.post('/terminate-before-payment', authMiddleware, terminateCommissionBeforePayment);
 
 export default router;
