@@ -298,7 +298,10 @@ export const uploadTrack = async (req, res) => {
             licenseStatus: req.body.licenseStatus,
             licensedFrom: req.body.licensedFrom,
             fileSize: req.file.size, // Store file size for storage tracking
-            ...keyData // Spread the parsed key signature data
+            ...keyData, // Spread the parsed key signature data
+            // Add isHigher and isLower as optional booleans
+            ...(typeof req.body.isHigher !== 'undefined' ? { isHigher: req.body.isHigher === true || req.body.isHigher === 'true' } : {}),
+            ...(typeof req.body.isLower !== 'undefined' ? { isLower: req.body.isLower === true || req.body.isLower === 'true' } : {})
         });
         await newTrack.save();
         // Update user's storageUsed        // Check if this is the artist's first upload (before adding the new track)
@@ -1003,7 +1006,8 @@ export async function editTrack(req, res) {
         // Create object with field names and values for easier iteration
         // Only include fields that were actually in the validated 'value' object
         const fieldsToUpdate = {};
-        if (description !== undefined) fieldsToUpdate.description = description;
+        // Only update description if it is not an empty string
+        if (description !== undefined && description !== "") fieldsToUpdate.description = description;
         if (title !== undefined) fieldsToUpdate.title = title;
         if (originalArtist !== undefined) fieldsToUpdate.originalArtist = originalArtist;
         if (instructions !== undefined) fieldsToUpdate.instructions = instructions;
@@ -1015,11 +1019,13 @@ export async function editTrack(req, res) {
         if (backingTrackType !== undefined) fieldsToUpdate.backingTrackType = backingTrackType;
         if (genre !== undefined) fieldsToUpdate.genre = genre;
         if (vocalRange !== undefined) fieldsToUpdate.vocalRange = vocalRange;
-        if (keySignature !== undefined) fieldsToUpdate.keySignature = keySignature;
         // Add normalized key fields if present
         if (Object.keys(keyData).length > 0) {
             Object.assign(fieldsToUpdate, keyData);
         }
+        // Add isHigher and isLower if present in request body
+        if (typeof req.body.isHigher !== 'undefined') fieldsToUpdate.isHigher = req.body.isHigher === true || req.body.isHigher === 'true';
+        if (typeof req.body.isLower !== 'undefined') fieldsToUpdate.isLower = req.body.isLower === true || req.body.isLower === 'true';
         
         // Check profanity and update fields
         for (const [fieldName, fieldValue] of Object.entries(fieldsToUpdate)) {
@@ -1058,6 +1064,8 @@ export async function editTrack(req, res) {
                 isSharp: track.isSharp,
                 isMajor: track.isMajor,
                 isMinor: track.isMinor,
+                isHigher: track.isHigher,
+                isLower: track.isLower,
                 updatedAt: track.updatedAt
             }
         });

@@ -582,6 +582,25 @@ export const queryTracks = async (req, res) => {
         filter.isPrivate = false; //show public tracks only
         filter.isDeleted = { $ne: true }; //exclude deleted tracks
 
+        // Filter by isHigher
+            
+         if (typeof req.query.isHigher !== 'undefined') {
+    if (req.query.isHigher !== 'true') {
+        return res.status(400).json({ error: "Invalid isHigher filter. Only true is supported." });
+    }
+    filter.$and = filter.$and || [];
+    filter.$and.push({ $or: [ { isHigher: true }, { isHigher: 'true' } ] });
+}
+// Filter by isLower (robust for legacy data)
+if (typeof req.query.isLower !== 'undefined') {
+    if (req.query.isLower !== 'true') {
+        return res.status(400).json({ error: "Invalid isLower filter. Only true is supported." });
+    }
+    filter.$and = filter.$and || [];
+    filter.$and.push({ $or: [ { isLower: true }, { isLower: 'true' } ] });
+}
+            
+
         let tracks;
         let totalTracks;
         // If a search query is present, do a text/regex search, then filter/sort

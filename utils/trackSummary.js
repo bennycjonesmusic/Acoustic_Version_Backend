@@ -25,7 +25,9 @@ export function toTrackSummary(tracks) {
       isFlat: track.isFlat,
       isSharp: track.isSharp,
       isMajor: track.isMajor,
-      isMinor: track.isMinor
+      isMinor: track.isMinor,
+      isHigher: track.isHigher,
+      isLower: track.isLower
     }));
     
   } catch (error) {
