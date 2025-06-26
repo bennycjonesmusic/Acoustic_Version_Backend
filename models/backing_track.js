@@ -221,17 +221,6 @@ const backingTrackSchema = new mongoose.Schema({
   },
 });
 
-  backingTrackSchema.virtual('isHigherString').get(function() {
-  if (this.isHigher === true || this.isHigher === 'true') return 'true';
-  if (this.isHigher === false || this.isHigher === 'false') return 'false';
-  return undefined;
-});
-backingTrackSchema.virtual('isLowerString').get(function() {
-  if (this.isLower === true || this.isLower === 'true') return 'true';
-  if (this.isLower === false || this.isLower === 'false') return 'false';
-  return undefined;
-});
-
 // Method to generate a shareable URL for this track
 backingTrackSchema.methods.getShareUrl = function () {
   // Adjust the base URL as needed for your deployment

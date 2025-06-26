@@ -511,6 +511,8 @@ export const queryUsers = async (req, res) => {
 
 export const queryTracks = async (req, res) => {
     try {
+        // Debug: Log incoming query params
+        console.log('[queryTracks] Incoming req.query:', req.query);
         const { orderBy, page = 1, limit = 10, keySig, "vocal-range": vocalRange, artistId, qualityValidated, query, type, backingTrackType, genre } = req.query;
         let sort = {};
         let filter = {};
@@ -583,24 +585,30 @@ export const queryTracks = async (req, res) => {
         filter.isDeleted = { $ne: true }; //exclude deleted tracks
 
         // Filter by isHigher
-            
-         if (typeof req.query.isHigher !== 'undefined') {
-    if (req.query.isHigher !== 'true') {
-        return res.status(400).json({ error: "Invalid isHigher filter. Only true is supported." });
-    }
-    filter.$and = filter.$and || [];
-    filter.$and.push({ $or: [ { isHigher: true }, { isHigher: 'true' } ] });
-}
-// Filter by isLower (robust for legacy data)
-if (typeof req.query.isLower !== 'undefined') {
-    if (req.query.isLower !== 'true') {
-        return res.status(400).json({ error: "Invalid isLower filter. Only true is supported." });
-    }
-    filter.$and = filter.$and || [];
-    filter.$and.push({ $or: [ { isLower: true }, { isLower: 'true' } ] });
-}
-            
-
+        if (typeof req.query.isHigher !== 'undefined') {
+            if (req.query.isHigher !== 'true' && req.query.isHigher !== 'false') {
+                return res.status(400).json({ error: "Invalid isHigher filter. Only 'true' or 'false' are supported." });
+            }
+            // Robust: match both boolean and string values in DB
+            if (req.query.isHigher === 'true') {
+                filter.isHigher = { $in: [true, 'true'] };
+            } else {
+                filter.isHigher = { $in: [false, 'false'] };
+            }
+        }
+        // Filter by isLower
+        if (typeof req.query.isLower !== 'undefined') {
+            if (req.query.isLower !== 'true' && req.query.isLower !== 'false') {
+                return res.status(400).json({ error: "Invalid isLower filter. Only 'true' or 'false' are supported." });
+            }
+            if (req.query.isLower === 'true') {
+                filter.isLower = { $in: [true, 'true'] };
+            } else {
+                filter.isLower = { $in: [false, 'false'] };
+            }
+        }
+        // Debug: Log constructed filter object
+        console.log('[queryTracks] Constructed filter:', filter);
         let tracks;
         let totalTracks;
         // If a search query is present, do a text/regex search, then filter/sort
@@ -608,15 +616,20 @@ if (typeof req.query.isLower !== 'undefined') {
             if (!isSafeRegexInput(query)) {
                 return res.status(400).json({ message: "Invalid search query" });
             }
-            // Try $text search first
-            const textFilter = { $text: { $search: query }, ...filter };
-            tracks = await BackingTrack.find(textFilter)
+            // Use $and to combine $text and other filters for correct boolean/text search (reverted to original logic)
+            let textAndFilter;
+            if (Object.keys(filter).length > 0) {
+                textAndFilter = { $and: [ { $text: { $search: query } }, filter ] };
+            } else {
+                textAndFilter = { $text: { $search: query } };
+            }
+            tracks = await BackingTrack.find(textAndFilter)
                 .sort(Object.keys(sort).length ? { ...sort, score: { $meta: 'textScore' } } : { score: { $meta: 'textScore' } })
                 .skip((pageNum - 1) * limitNum)
                 .limit(limitNum)
                 .select({ score: { $meta: 'textScore' } })
                 .populate('user', 'avatar username');
-            totalTracks = await BackingTrack.countDocuments(textFilter);
+            totalTracks = await BackingTrack.countDocuments(textAndFilter);
 
            
             if (!tracks.length) {
