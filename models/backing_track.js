@@ -219,6 +219,22 @@ const backingTrackSchema = new mongoose.Schema({
     required: true,
     description: 'Size of the uploaded file in bytes.'
   },
+  flags: [
+  {
+    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // who flagged it
+    reason: { type: String, required: true },                   // why it was flagged
+    createdAt: { type: Date, default: Date.now },               // when flagged
+    reviewed: { type: Boolean, default: false },                // has admin reviewed it?
+  }
+],
+flagCount: {
+  type: Number,
+  default: 0,
+},
+isFlagged: {
+  type: Boolean,
+  default: false,
+}
 });
 
 // Method to generate a shareable URL for this track
