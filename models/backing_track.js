@@ -222,7 +222,8 @@ const backingTrackSchema = new mongoose.Schema({
   flags: [
   {
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // who flagged it
-    reason: { type: String, required: true },                   // why it was flagged
+    type: { type: String, enum: ['copyright', 'dmca', 'other'], default: 'other' }, // flag type
+    reason: { type: String, required: function() { return this.type === 'other'; } }, // why it was flagged (required for 'other')
     createdAt: { type: Date, default: Date.now },               // when flagged
     reviewed: { type: Boolean, default: false },                // has admin reviewed it?
   }
@@ -234,7 +235,21 @@ flagCount: {
 isFlagged: {
   type: Boolean,
   default: false,
-}
+},
+analytics: {
+  totalHits: { type: Number, default: 0 },
+  uniqueHits: { type: Number, default: 0 },
+  conversions: { type: Number, default: 0 }, // e.g. purchases
+  // Optionally, you can add more fields for advanced analytics
+  },
+  bestMetadata: {
+    title: { type: String },
+    description: { type: String },
+    genre: { type: String },
+    tags: [{ type: String }],
+    performanceScore: { type: Number, default: 0 }, // e.g. conversions or hits
+    lastUpdated: { type: Date }
+  }
 });
 
 // Method to generate a shareable URL for this track
@@ -253,6 +268,19 @@ backingTrackSchema.methods.calculateAverageRating = function () {
   const total = this.ratings.reduce((sum, rating) => sum + rating.stars, 0); // Calculate total stars
   this.averageRating = total / this.ratings.length; // Calculate average
   this.numOfRatings = this.ratings.length;
+}
+
+// Method to update bestMetadata if new score is higher
+backingTrackSchema.methods.updateBestMetadataIfOutperformed = function(newMetadata, newScore) {
+  if (!this.bestMetadata || newScore > (this.bestMetadata.performanceScore || 0)) {
+    this.bestMetadata = {
+      ...newMetadata,
+      performanceScore: newScore,
+      lastUpdated: new Date()
+    };
+    return true; // updated
+  }
+  return false; // not updated
 }
 
 // Virtual for musical key

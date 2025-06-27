@@ -177,6 +177,12 @@ stripeOnboardingComplete: {
   numOfUploadedTracks: {
     type: Number,
     default: 0,
+  },
+  analytics: {
+    totalHits: { type: Number, default: 0 },
+    uniqueHits: { type: Number, default: 0 },
+    conversions: { type: Number, default: 0 }, // e.g. purchases, downloads, etc.
+    // Optionally, add more fields for advanced analytics
   }
 }, {
   timestamps: true, // 

@@ -32,6 +32,7 @@ import notificationsRoutes from './routes/notifications.js'; // Import notificat
 import swaggerUi from 'swagger-ui-express';
 import YAML from 'yamljs';
 import stripeReconcileRouter from './routes/stripe_reconcile.js'; // Import the new Stripe reconcile router
+import flagsRoutes from './routes/flags.js'; // Import flagging routes
 
 // Handle uncaught exceptions and unhandled promise rejections
 process.on('uncaughtException', (err) => {
@@ -229,6 +230,7 @@ app.use('/notifications', notificationsRoutes); // Add notifications routes
 app.use('/commission', commissionRoutes);
 // app.use('/', guideRoutes); // Commented out - using new guide routes in tracks.js
 app.use('/', tracksRoutes);
+app.use('/flags', flagsRoutes); // Register flagging routes
 app.get('/', (req, res) =>{
 
     res.send('Testing');
