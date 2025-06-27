@@ -53,6 +53,11 @@ export const registerSchema = Joi.object({
   role: isTestEnv
     ? Joi.string().valid('user', 'artist', 'admin').optional()
     : Joi.string().valid('user', 'artist').optional(),
+  commissionPrice: Joi.when('role', {
+    is: 'artist',
+    then: Joi.number().min(0).max(10000).required(),
+    otherwise: Joi.forbidden(),
+  }),
 });
 
 export const loginSchema = Joi.object({

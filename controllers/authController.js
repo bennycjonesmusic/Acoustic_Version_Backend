@@ -18,6 +18,12 @@ import { sanitizeFileName } from '../utils/regexSanitizer.js';
 
 //Create...
 export const register = async (req, res) => {
+    // Debug: log what is received for avatar upload
+    console.log('REGISTER DEBUG:', {
+      file: req.file,
+      bodyAvatar: req.body.avatar,
+      body: req.body
+    });
     // Validate input using Joi schema
     const { error } = registerSchema.validate(req.body);
     if (error) {
@@ -50,7 +56,7 @@ export const register = async (req, res) => {
             if (typeof about !== 'string' || about.length > 1000) {
                 return res.status(400).json({message: "About section must be a string and less than 1000 characters."});
             }            // Validate avatar (must be a valid image URL) if not uploaded and only if present
-            if (avatar !== undefined && !(req.file && req.file.buffer)) {
+            if (avatar !== undefined && !(req.file && req.file.location)) {
                 const urlPattern = /^(https?:\/\/)[^\s]+\.(jpg|jpeg|png|gif|webp)$/i;
                 if (typeof avatar !== 'string' || !urlPattern.test(avatar)) {
                     return res.status(400).json({ message: 'Avatar must be a valid image URL (jpg, jpeg, png, gif, webp).' });

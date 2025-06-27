@@ -509,3 +509,24 @@ export const getUploadedTracksByUser = async (req, res) => {
   }
 };
 
+
+export const getNumberOfUploadedTracks = async (req, res) => {
+try {
+
+  const user = await User.findById(req.userId);
+
+  if (!user) {
+
+    console.error('User not found:', userId);
+    return res.status(404).json({ message: 'User not found' });
+  }
+
+  return res.status(200).json({ count: user.uploadedTracks.length });
+} catch (error) {
+
+  console.error('Error getting number of uploaded tracks:', error);
+  return res.status(500).json({ message: 'Internal server error' });
+}
+
+}
+

@@ -29,7 +29,7 @@ import { addToCart, removeFromCart, getCart, cleanCart } from '../controllers/ca
 const router = express.Router();
 
 //deal with registration first. This will handle user registrations. Post ensures that the data is sent in the body of the request.
-router.post('/register', registerLimiter, register);;
+router.post('/register', registerLimiter, avatarUpload.single('avatar'), register);;
 
 //now let us deal with login. We will use post again, in order to send the data to the client.
 router.post('/login', login)
