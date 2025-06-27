@@ -134,6 +134,11 @@ const backingTrackSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  licenseDocumentUrl: { 
+  type: String,
+  required: false,
+  description: 'S3 URL or key for the license document file'   // This is optional and only required if licenseStatus is 'licensed'
+},
 
 
   licensedFrom: {

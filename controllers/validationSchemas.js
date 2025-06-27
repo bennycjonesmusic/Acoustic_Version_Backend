@@ -26,6 +26,7 @@ export const uploadTrackSchema = Joi.object({
   isHigher: Joi.boolean().optional(),
   isLower: Joi.boolean().optional(),
   // key: Joi.string().valid('A', 'B', 'C', 'D', 'E', 'F', 'G').optional(),
+  licenseDocumentUrl: Joi.string().uri().allow('').optional(),
 });
 
 export const editTrackSchema = Joi.object({

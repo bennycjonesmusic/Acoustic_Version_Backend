@@ -778,3 +778,35 @@ export const getTrack = async (req, res) => {
         return res.status(500).json({ message: 'Internal server error' });
     }
 };
+
+export const getLicenseInformation = async (req, res) => {
+    try {
+        // Check if the user is logged in
+ 
+
+        // Find the user by ID
+        const user = await User.findById(req.userId);
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+        // Check if the user has a licen
+        const track = await BackingTrack.findById(req.params.trackId);
+        if (!track) {
+            return res.status(404).json({ message: "Track not found" });
+        }
+        // Return the license information
+        return res.status(200).json({
+            licenseType: user.licenseType,
+            licenseExpiration: user.licenseExpiration,
+            userLicenseStatus: user.licenseStatus,
+            trackLicenseStatus: track.licenseStatus,
+            trackLicensedFrom: track.licensedFrom,
+            trackLicenseDocumentUrl: track.licenseDocumentUrl || null
+        });
+    } catch (error) {
+        console.error('Error getting license information:', error);
+        return res.status(500).json({ message: "Internal server error" });
+    }
+
+
+}

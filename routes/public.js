@@ -1,5 +1,5 @@
 import express from 'express';
-import { searchTracks, queryTracks, queryUsers, getTrack, getFeaturedTracks, getFeaturedArtists, searchUserByName, getUserDetails } from '../controllers/publicController.js';
+import { searchTracks, queryTracks, queryUsers, getTrack, getFeaturedTracks, getFeaturedArtists, searchUserByName, getUserDetails, getLicenseInformation } from '../controllers/publicController.js';
 import publicMiddleware from '../middleware/public_auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 
@@ -31,5 +31,8 @@ router.get('/users/search', publicMiddleware, searchUserByName);
 
 // Public get user details by id
 router.get('/users/:id', publicMiddleware, getUserDetails);
+
+// Public get license information for a track
+router.get('/tracks/:trackId/license-info', publicMiddleware, asyncHandler(getLicenseInformation));
 
 export default router;

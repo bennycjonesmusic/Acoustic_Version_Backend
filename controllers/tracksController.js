@@ -612,7 +612,6 @@ export const getPurchasedTracks = async (req, res) => {
             });        }
 
         // Apply pagination
-        const totalTracks = purchasedTracks.length;
         const paginatedTracks = purchasedTracks.slice(skip, skip + limitNum);        // Apply role-based transform to each track to include guideTrackUrl for customers
         const purchasedTrackIds = paginatedTracks.map(pt => pt.track?.id || pt.track?._id).filter(Boolean);
         
@@ -632,14 +631,14 @@ export const getPurchasedTracks = async (req, res) => {
         });
 
         // Calculate pagination metadata
-        const totalPages = Math.ceil(totalTracks / limitNum);
+        const totalPages = Math.ceil(purchasedTracks.length / limitNum);
 
         return res.status(200).json({ 
             tracks: tracksWithContext,
             pagination: {
                 currentPage: pageNum,
                 totalPages: totalPages,
-                totalTracks: totalTracks,
+                totalTracks: purchasedTracks.length,
                 hasNextPage: pageNum < totalPages,
                 hasPrevPage: pageNum > 1,
                 limit: limitNum
