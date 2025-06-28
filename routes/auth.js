@@ -20,6 +20,7 @@ import {
 } from '../controllers/authController.js';
 import { getArtistApprovalStatus, getArtistStripeStatus } from '../controllers/artistController.js';
 import { addToCart, removeFromCart, getCart, cleanCart } from '../controllers/cart.js';
+import { getUserBools } from '../controllers/authController.js';
 
 //i know there are routes in here that should be in other route.js files. However, I am learning as i go and this project has quickly developed in size.
 
@@ -86,6 +87,9 @@ router.post('/cart/clear', authMiddleware, async (req, res) => {
         return res.status(500).json({ message: "Internal server error" });
     }
 });
+
+// Get user commission bools (hasBoughtCommission)
+router.get('/user-bools', authMiddleware, getUserBools);
 
 export default router;
 

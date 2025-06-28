@@ -240,18 +240,25 @@ export const getFeaturedTracks = async (req, res) => {
     //check the ole cachearoo, make sure we don't hit the database TOO much
     const cached = cache.get('featuredTracks');
     if (cached) {
-
-
         console.log('[getFeaturedTracks] Returning cached data');
         return res.status(200).json(cached); //if we have cached data, return it. simples.
-    }    console.log('[getFeaturedTracks] ENTERED');
-    
+    }
+    console.log('[getFeaturedTracks] ENTERED');
+    // Only select fields needed for track summary
+    const trackSummaryFields = 'title averageRating numOfRatings user originalArtist customerPrice price previewUrl guideTrackUrl youtubeGuideUrl backingTrackType key isFlat isSharp isMajor isMinor isHigher isLower createdAt';
     // get popular and recent tracks
-    const popularTracks = await BackingTrack.find({ isPrivate: false, isDeleted: { $ne: true } }).sort({ purchaseCount: -1 }).limit(5).populate('user', 'avatar username');
+    const popularTracks = await BackingTrack.find({ isPrivate: false, isDeleted: { $ne: true } })
+        .sort({ purchaseCount: -1 })
+        .limit(5)
+        .select(trackSummaryFields)
+        .populate('user', 'avatar username');
     console.log('[getFeaturedTracks] popularTracks:', popularTracks.length);
-    const recentTracks = await BackingTrack.find({ isPrivate: false, isDeleted: { $ne: true } }).sort({ createdAt: -1 }).limit(3).populate('user', 'avatar username');
+    const recentTracks = await BackingTrack.find({ isPrivate: false, isDeleted: { $ne: true } })
+        .sort({ createdAt: -1 })
+        .limit(3)
+        .select(trackSummaryFields)
+        .populate('user', 'avatar username');
     console.log('[getFeaturedTracks] recentTracks:', recentTracks.length);
-
     // exclude popular and recent tracks from the random selection
     let excludeIds = [
         ...popularTracks.map(track => track._id),
@@ -259,49 +266,65 @@ export const getFeaturedTracks = async (req, res) => {
     ];
     excludeIds = excludeIds.filter(id => id && typeof id.equals === 'function');
     console.log('[getFeaturedTracks] excludeIds:', excludeIds.length);
-
     // If all tracks are excluded, skip aggregation
     const totalTracks = await BackingTrack.countDocuments({ isPrivate: false });
     console.log('[getFeaturedTracks] totalTracks:', totalTracks);    if (excludeIds.length >= totalTracks) {
         const featured = [...popularTracks, ...recentTracks];
         const filtered = featured.filter(Boolean);
-        
         // Debug: Check if user data is populated in early return
         console.log('[getFeaturedTracks] Early return - Sample track user data:', filtered[0]?.user);
-        
         const summary = toTrackSummary(filtered);
-        
         // Debug: Check summary output in early return
         console.log('[getFeaturedTracks] Early return - Sample summary user data:', summary[0]?.user);
-        
         cache.set('featuredTracks', summary);
         console.log('[getFeaturedTracks] returning early, filtered.length:', filtered.length);
         return res.status(200).json(summary);
-    }    // isPrivate:false must be inside $match
+    }
+    // isPrivate:false must be inside $match
     let randomTracks = [];
     randomTracks = await BackingTrack.aggregate([
         { $match: { _id: { $nin: excludeIds }, isPrivate: false } },
-        { $sample: { size: 2 } }
+        { $sample: { size: 2 } },
+        { $project: {
+            title: 1,
+            averageRating: 1,
+            numOfRatings: 1,
+            user: 1,
+            originalArtist: 1,
+            customerPrice: 1,
+            price: 1,
+            previewUrl: 1,
+            guideTrackUrl: 1,
+            youtubeGuideUrl: 1,
+            backingTrackType: 1,
+            key: 1,
+            isFlat: 1,
+            isSharp: 1,
+            isMajor: 1,
+            isMinor: 1,
+            isHigher: 1,
+            isLower: 1,
+            createdAt: 1
+        }}
     ]);
     console.log('[getFeaturedTracks] randomTracks:', randomTracks.length);
     const randomTrackIds = randomTracks.map(track => track._id).filter(id => id);
     console.log('[getFeaturedTracks] randomTrackIds:', randomTrackIds.length);
     let randomTracksPopulated = [];
     if (randomTrackIds.length > 0) {
-        randomTracksPopulated = await BackingTrack.find({ _id: { $in: randomTrackIds } }).populate('user', 'avatar username');
+        randomTracksPopulated = await BackingTrack.find({ _id: { $in: randomTrackIds } })
+            .select(trackSummaryFields)
+            .populate('user', 'avatar username');
         console.log('[getFeaturedTracks] randomTracksPopulated:', randomTracksPopulated.length);
-    }    // Merge all tracks
+    }
+    // Merge all tracks
     const featured = [...popularTracks, ...randomTracksPopulated, ...recentTracks];
     const filtered = featured.filter(Boolean);
-    
     // Debug: Check if user data is populated
     console.log('[getFeaturedTracks] Sample track user data:', filtered[0]?.user);
-    
     const summary = toTrackSummary(filtered);
-    
     // Debug: Check summary output
     console.log('[getFeaturedTracks] Sample summary user data:', summary[0]?.user);
-    
     cache.set('featuredTracks', summary);
     console.log('[getFeaturedTracks] final filtered.length:', filtered.length);
     return res.status(200).json(summary);
@@ -331,6 +354,7 @@ export const getFeaturedArtists = async (req, res) => {
         }
         console.log('[getFeaturedArtists] No cache found, fetching fresh data');        // First, try to find artists with tracks/commissions (quality filter)
         const commissionArtistIds = await CommissionRequest.distinct('artist');
+        const userSummaryFields = 'username avatar customerCommissionPrice averageTrackRating artistExamples maxTimeTakenForCommission averageCommissionCompletionTime averageCommissionCompletionTimeHours numOfCommissions artistInstrument numOfRatings';
         const featuredArtists = await User.find({
             role: { $in: ['artist', 'admin'] },
             profileStatus: 'approved',
@@ -339,11 +363,9 @@ export const getFeaturedArtists = async (req, res) => {
                 // Artists/admins with at least one commission as artist
                 { _id: { $in: commissionArtistIds } }
             ]
-        }).limit(7);
-        
+        }).select(userSummaryFields).limit(7);
         // Exclude those already found from random selection
         const excludeIds = featuredArtists.map(a => a._id);
-        
         const featureRandom = await User.aggregate([
             { $match: {
                 _id: { $nin: excludeIds },
@@ -354,11 +376,23 @@ export const getFeaturedArtists = async (req, res) => {
                     { _id: { $in: commissionArtistIds } }
                 ]
             } },
-            { $sample: { size: 3 } }
+            { $sample: { size: 3 } },
+            { $project: {
+                username: 1,
+                avatar: 1,
+                customerCommissionPrice: 1,
+                averageTrackRating: 1,
+                artistExamples: 1,
+                maxTimeTakenForCommission: 1,
+                averageCommissionCompletionTime: 1,
+                averageCommissionCompletionTimeHours: 1,
+                numOfCommissions: 1,
+                artistInstrument: 1,
+                numOfRatings: 1
+            }}
         ]);
-
         let featured = [...featuredArtists, ...featureRandom]; //Merge the arrays in a super array.
-          // If we don't have enough featured artists (less than 10), fill with any approved artists
+        // If we don't have enough featured artists (less than 10), fill with any approved artists
         const targetFeaturedCount = 10;
         if (featured.length < targetFeaturedCount) {
             console.log(`[getFeaturedArtists] Only found ${featured.length} artists with tracks/commissions, filling with any approved artists...`);
@@ -367,26 +401,22 @@ export const getFeaturedArtists = async (req, res) => {
                 _id: { $nin: alreadyIncludedIds },
                 role: { $in: ['artist', 'admin'] },
                 profileStatus: 'approved'
-            }).limit(targetFeaturedCount - featured.length);
-            
+            }).select(userSummaryFields).limit(targetFeaturedCount - featured.length);
             featured = [...featured, ...additionalArtists];
             console.log(`[getFeaturedArtists] Total featured artists after fallback: ${featured.length}`);
         }
         console.log('[getFeaturedArtists] Raw featured artists data:', featured[0]);
-        
         // Calculate average track rating for all featured artists
         console.log('[getFeaturedArtists] Calculating average track ratings for featured artists...');
         for (const artist of featured) {
             try {
                 await artist.calculateAverageTrackRating(); 
-            
                 await artist.save(); //ensures customercommission gets updated
                 console.log(`[getFeaturedArtists] Updated rating for ${artist.username}: ${artist.averageTrackRating}`);
             } catch (error) {
                 console.error(`[getFeaturedArtists] Error calculating rating for ${artist.username}:`, error);
             }
         }
-        
         const summary = toUserSummary(featured);
         console.log('[getFeaturedArtists] After toUserSummary:', summary[0]);        cache.set('featuredArtists', summary);
         return res.status(200).json(summary);
@@ -429,8 +459,8 @@ export const queryUsers = async (req, res) => {
         if (orderBy == "popularity") sort = { amountOfTracksSold: -1 };
         if (orderBy == "num-of-uploaded-tracks") sort = { numOfUploadedTracks: -1 };
         if (orderBy == "num-of-uploaded-tracks/ascending") sort = { numOfUploadedTracks: 1 };
-        if (orderBy == "Num of Followers") sort = { numOfFollowers: -1 };
-        if (orderBy == "Num of Followers/ascending") sort = { numOfFollowers: 1 };
+        if (orderBy == "Num of Followers") sort = { amountOfFollowers: -1 };
+        if (orderBy == "Num of Followers/ascending") sort = { amountOfFollowers: 1 };
         if (orderBy == "Num of Reviews") sort = { numOfReviews: -1 };
         if (orderBy == "Num of Reviews/ascending") sort = { numOfReviews: 1 };
         // Filter for users who were online within X days

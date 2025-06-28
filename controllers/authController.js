@@ -150,61 +150,54 @@ export const login = async (req, res) => {
         return res.status(400).json({ message: error.details[0].message });
     }
     try {
-        const { login, password } = req.body;        const user = await User.findOne({$or: [{email: login}, {username: login}]});
+        const { login, password } = req.body;
+        // Only select needed fields, including approval and ban status
+        const user = await User.findOne({$or: [{email: login}, {username: login}]})
+            .select('password role hasLoggedInBefore isBanned username hasBoughtCommission email profileStatus');
         if (!user) {
             return res.status(400).json({ message: "Invalid username or password" });
         }
         if (user.isBanned && user.isBanned()) {
             return res.status(403).json({ message: "Your account has been banned. Please contact support." });
-        }        const isMatch = await bcrypt.compare(password, user.password);
+        }
+        const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
             return res.status(400).json({ message: "Invalid username or password" });
-        }        // Set req.userId for downstream middleware
-        req.userId = user._id;        // Check if this is the user's first login and their role
+        }
+        req.userId = user._id;
         const isFirstLogin = !user.hasLoggedInBefore;
         const isNonArtist = user.role === 'user';
         const isArtist = user.role === 'artist';
-        
-        // Update lastOnline timestamp and mark as logged in
         user.lastOnline = new Date();
         if (isFirstLogin) {
             user.hasLoggedInBefore = true;
         }
-        await user.save();        // Create welcome notifications for first-time users
+        await user.save();
         if (isFirstLogin) {
-            console.log('[AUTH DEBUG] First time login detected for user:', user.username);
             try {
-                // Defensive coding: handle both _id and id fields
                 const userId = user._id || user.id;
-                console.log('[AUTH DEBUG] User ID for notification:', userId);
-                  if (userId) {
+                if (userId) {
                     if (isNonArtist) {
-                        console.log('[AUTH DEBUG] Creating welcome notification for regular user');
-                        const result = await createWelcomeNotification(userId);
-                        console.log('[AUTH DEBUG] Welcome notification result:', result);
-                        console.log(`Welcome notification created for user: ${user.username}`);
+                        await createWelcomeNotification(userId);
                     } else if (isArtist) {
-                        console.log('[AUTH DEBUG] Creating artist welcome notification');
-                        const result = await createArtistWelcomeNotification(userId);
-                        console.log('[AUTH DEBUG] Artist welcome notification result:', result);
-                        console.log(`Artist welcome notification created for artist: ${user.username}`);
+                        await createArtistWelcomeNotification(userId);
                     }
-                } else {
-                    console.error('Could not create welcome notification: missing user ID');
                 }
             } catch (notifError) {
                 console.error('Error creating welcome notification:', notifError);
-                // Don't fail the login if notification creation fails
             }
-        } else {
-            console.log('[AUTH DEBUG] Not first login, skipping notification for user:', user.username);
         }
-          // Call makeAdmin middleware inline
         await makeAdmin(req, res, async () => {
-            // Defensive coding: handle both _id and id fields
             const userId = user._id || user.id;
             const token = jwt.sign({ id: userId, email: user.email, role: user.role }, process.env.JWT_SECRET, { expiresIn: '2h' });
-            res.status(200).json({ token, message: "Logged in successfully!" });
+            // Include hasBoughtCommission, isBanned, and profileStatus in the response
+            res.status(200).json({
+                token,
+                hasBoughtCommission: !!user.hasBoughtCommission,
+                isBanned: !!user.isBanned,
+                profileStatus: user.profileStatus,
+                message: "Logged in successfully!"
+            });
         });
     } catch (error) {
         console.error('Error logging in:', error);
@@ -321,6 +314,22 @@ export const deleteAccount = async(req, res) => {
 
 
 }
+
+
+export const getUserBools = async (req, res) => {
+  try {
+    // Only select the hasBoughtCommission field
+    const user = await User.findById(req.userId).select('hasBoughtCommission');
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    // Return the boolean value (default to false if not set)
+    return res.status(200).json({ hasBoughtCommission: !!user.hasBoughtCommission });
+  } catch (error) {
+    console.error('Error in getUserBools:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
 
 
 export const changePassword = async(req, res) => { //export function to change password

@@ -175,6 +175,11 @@ export const createCommissionRequest = async (req, res) => {
         });
         console.log('[createCommissionRequest] created commission:', commission);
 
+        
+        const user = await User.findById(customerId);
+        user.hasBoughtCommission = true;
+        await user.save();
+
         // Notify artist immediately when commission is created
         try {
             await createCommissionRequestNotification(

@@ -62,6 +62,11 @@ stripeOnboardingComplete: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   }],
+  hasBoughtCommission: {
+
+    type: Boolean,
+    default: false, // Whether the user has ever purchased a commission from an artist
+  },
   amountOfFollowers: { type: Number, default: 0 },
   about: { type: String, default: '' },
   avatar: {
