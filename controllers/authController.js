@@ -187,13 +187,15 @@ export const login = async (req, res) => {
                 console.error('Error creating welcome notification:', notifError);
             }
         }
+        // Debug: log the user object after fetching
+        console.log('Fetched user in login:', user);
         await makeAdmin(req, res, async () => {
             const userId = user._id || user.id;
             const token = jwt.sign({ id: userId, email: user.email, role: user.role }, process.env.JWT_SECRET, { expiresIn: '2h' });
             // Include hasBoughtCommission, isBanned, and profileStatus in the response
             res.status(200).json({
                 token,
-                hasBoughtCommission: !!user.hasBoughtCommission,
+                hasBoughtCommission: user.hasBoughtCommission,
                 isBanned: !!user.isBanned,
                 profileStatus: user.profileStatus,
                 message: "Logged in successfully!"

@@ -405,6 +405,12 @@ export const getFeaturedArtists = async (req, res) => {
             featured = [...featured, ...additionalArtists];
             console.log(`[getFeaturedArtists] Total featured artists after fallback: ${featured.length}`);
         }
+        // Only fix customerCommissionPrice if it is 0
+        for (const artist of featured) {
+            if (!artist.customerCommissionPrice || artist.customerCommissionPrice === 0) {
+                artist.customerCommissionPrice = calculateCustomerCommissionPrice(artist.commissionPrice);
+            }
+        }
         console.log('[getFeaturedArtists] Raw featured artists data:', featured[0]);
         // Calculate average track rating for all featured artists
         console.log('[getFeaturedArtists] Calculating average track ratings for featured artists...');
@@ -523,7 +529,12 @@ export const queryUsers = async (req, res) => {
                 .limit(limitNum);
             totalUsers = await User.countDocuments(filter);
         }
-     
+        // Only fix customerCommissionPrice if it is 0
+        for (const user of users) {
+            if (!user.customerCommissionPrice || user.customerCommissionPrice === 0) {
+                user.customerCommissionPrice = calculateCustomerCommissionPrice(user.commissionPrice);
+            }
+        }
         const totalPages = Math.ceil(totalUsers / limitNum);
         const summaryUsers = toUserSummary(users);
         return res.status(200).json({
@@ -840,3 +851,14 @@ export const getLicenseInformation = async (req, res) => {
 
 
 }
+
+// Helper to always calculate customerCommissionPrice in-memory for summary endpoints
+function calculateCustomerCommissionPrice(commissionPrice) {
+  const platformCommissionRate = 0.12;
+  if (typeof commissionPrice === 'number' && commissionPrice > 0) {
+    return Math.round((commissionPrice + (commissionPrice * platformCommissionRate)) * 100) / 100;
+  }
+  return 0;
+}
+
+// --- PATCH: Fix customerCommissionPrice only if 0 for summary endpoints ---
