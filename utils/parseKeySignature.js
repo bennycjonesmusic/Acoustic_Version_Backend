@@ -24,7 +24,8 @@ if (keySig.endsWith('M')){
     key = key.slice(0, -1);
 }
 
-if (key.endsWith('B')){
+// Only treat as flat if key is more than one character and ends with 'B'
+if (key.length > 1 && key.endsWith('B')){
 
     isFlat = true; //if keysig has B at the end, it is flat (after uppercase conversion)
     key = key.slice(0, - 1); //eliminate B from keySig arg.

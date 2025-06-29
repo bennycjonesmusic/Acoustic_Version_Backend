@@ -146,10 +146,38 @@ export const uploadTrack = async (req, res) => {
     const Artist = await User.findById(req.userId);
     const profanity = new Filter.Filter();
 
-    // Check for duplicate title by same user
-    const existingTrack = await BackingTrack.findOne({ title: req.body.title, user: req.userId });
+    // Parse and normalize key signature for duplicate check
+    let keyData = {};
+    if (req.body.keySignature && req.body.keySignature.trim()) {
+        try {
+            const parsed = parseKeySignature(req.body.keySignature);
+            keyData = {
+                key: parsed.key,
+                isFlat: parsed.isFlat,
+                isSharp: parsed.isSharp,
+                isMajor: !req.body.keySignature.toLowerCase().includes('m'),
+                isMinor: req.body.keySignature.toLowerCase().includes('m')
+            };
+        } catch (error) {
+            return res.status(400).json({ message: `Invalid key signature: ${error.message}` });
+        }
+    }
+    // Check for duplicate title by same user and normalized key signature
+    const duplicateQuery = {
+        title: req.body.title,
+        user: req.userId,
+        // Only add key fields if they are defined (not undefined)
+        ...(keyData.key !== undefined ? { key: keyData.key } : {}),
+        ...(keyData.isFlat !== undefined ? { isFlat: keyData.isFlat } : {}),
+        ...(keyData.isSharp !== undefined ? { isSharp: keyData.isSharp } : {}),
+        ...(keyData.isMajor !== undefined ? { isMajor: keyData.isMajor } : {}),
+        ...(keyData.isMinor !== undefined ? { isMinor: keyData.isMinor } : {})
+    };
+    console.log('[UPLOAD] Duplicate check query:', duplicateQuery);
+    const existingTrack = await BackingTrack.findOne(duplicateQuery);
+    console.log('[UPLOAD] Duplicate check result:', existingTrack);
     if (existingTrack) {
-        return res.status(400).json({ message: "You already have a track with this title. Please choose a different title." });
+        return res.status(400).json({ message: "You already have a track with this title and key signature. Please choose a different title or key." });
     }
 
 
@@ -264,12 +292,11 @@ export const uploadTrack = async (req, res) => {
         let keyData = {};
         if (req.body.keySignature && req.body.keySignature.trim()) {
             try {
-                const { key, isFlat, isSharp } = parseKeySignature(req.body.keySignature);
+                const parsed = parseKeySignature(req.body.keySignature);
                 keyData = {
-                    key,
-                    isFlat,
-                    isSharp,
-                    // Determine major/minor from key signature pattern (basic logic)
+                    key: parsed.key,
+                    isFlat: parsed.isFlat,
+                    isSharp: parsed.isSharp,
                     isMajor: !req.body.keySignature.toLowerCase().includes('m'),
                     isMinor: req.body.keySignature.toLowerCase().includes('m')
                 };
@@ -981,11 +1008,11 @@ export async function editTrack(req, res) {
         let keyData = {};
         if (keySignature && keySignature.trim()) {
             try {
-                const { key, isFlat, isSharp } = parseKeySignature(keySignature);
+                const parsed = parseKeySignature(keySignature);
                 keyData = {
-                    key,
-                    isFlat,
-                    isSharp,
+                    key: parsed.key,
+                    isFlat: parsed.isFlat,
+                    isSharp: parsed.isSharp,
                     isMajor: !keySignature.toLowerCase().includes('m'),
                     isMinor: keySignature.toLowerCase().includes('m')
                 };
@@ -995,12 +1022,31 @@ export async function editTrack(req, res) {
                 });
             }
         } else {
-            // If keySignature is explicitly set to empty, clear key fields
             if (Object.prototype.hasOwnProperty.call(value, 'keySignature')) {
                 keyData = { key: undefined, isFlat: undefined, isSharp: undefined, isMajor: undefined, isMinor: undefined };
             }
         }
         // --- End key signature logic ---
+
+        // Duplicate check: prevent changing to a title+keySignature combo that already exists for this user (except for this track)
+        if (title && (keyData.key !== undefined)) {
+            const duplicateQuery = {
+                title: title,
+                user: req.userId,
+                ...(keyData.key !== undefined ? { key: keyData.key } : {}),
+                ...(keyData.isFlat !== undefined ? { isFlat: keyData.isFlat } : {}),
+                ...(keyData.isSharp !== undefined ? { isSharp: keyData.isSharp } : {}),
+                ...(keyData.isMajor !== undefined ? { isMajor: keyData.isMajor } : {}),
+                ...(keyData.isMinor !== undefined ? { isMinor: keyData.isMinor } : {}),
+                _id: { $ne: track._id }
+            };
+            console.log('[EDIT] Duplicate check query:', duplicateQuery);
+            const duplicate = await BackingTrack.findOne(duplicateQuery);
+            console.log('[EDIT] Duplicate check result:', duplicate);
+            if (duplicate) {
+                return res.status(400).json({ message: "You already have a track with this title and key signature. Please choose a different title or key." });
+            }
+        }
 
         // Create object with field names and values for easier iteration
         // Only include fields that were actually in the validated 'value' object
@@ -1079,7 +1125,7 @@ export async function editTrack(req, res) {
  * Comment on a track
  * @param {Express.Request & {userId: string, params: {id: string}, body: { comment: string }}} req - Express request with auth and comment data
  * @param {Express.Response} res - Express response
- * @returns {Promise<APIResponse>} Promise resolving to API response with updated track comments
+ * @returns {Promise<APIResponse>} Promise resolving to API response with updated track
  */
 export const commentTrack = async (req, res) => {
   try {
