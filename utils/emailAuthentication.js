@@ -20,7 +20,7 @@ export const sendVerificationEmail = async (email, token) => {
     to: email,
     subject: 'Please verify your email',
     html: `
-      <h2>Welcome!</h2>
+      <h2>Welcome to Acoustic-version, your home for custom acoustic backing tracks!</h2>
       <p>Click the link below to verify your email:</p>
       <a href="${verifyUrl}">${verifyUrl}</a>
       <p>This link will expire in 24 hours.</p>
