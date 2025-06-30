@@ -1,5 +1,6 @@
 import contactForm from "../models/contact_form.js";
 import User from "../models/User.js";
+import CommissionRequest from "../models/CommissionRequest.js";
 import { contactForumSchema } from "./validationSchemas.js";
 import * as Filter from 'bad-words'; 
 
@@ -9,25 +10,32 @@ import * as Filter from 'bad-words';
  * @access Public (with optional authentication)
  * @body {string} email - User's email address
  * @body {string} description - Message description (min 10, max 1000 chars)
- * @body {string} type - Contact type: general, bug_report, feature_request, user_report, other
+ * @body {string} type - Contact type: general, bug_report, feature_request, user_report, other, commission_dispute, copyright_complaint
  * @returns {Object} Success message and entry confirmation
  */
 export const createContactFormEntry = async (req, res) => {
   try {
+    const { email, description, type, commissionId } = req.body; // Destructure commissionId as optional
     const { error } = contactForumSchema.validate(req.body);
     if (error) {
       return res.status(400).json({ message: error.details[0].message });
     }
 
-    const { email, description, type } = req.body;
-
     // Use latest email logic: if email is missing and user is authenticated, use user's email
     let finalEmail = email;
-    if ((!finalEmail || finalEmail.trim() === '') && req.userId) {
-      const user = await User.findById(req.userId);
-      finalEmail = user ? user.email : null;
-      if (user && user.email) {
-        finalEmail = user.email;
+    let reporter = null;
+    let user = null;
+    if (req.userId) {
+      try {
+        user = await User.findById(req.userId).select('_id email');
+        const userIdVal = user ? (user._id || user.id) : null;
+        if ((!finalEmail || finalEmail.trim() === '') && user && user.email) {
+          finalEmail = user.email;
+        }
+        reporter = userIdVal ? userIdVal : null;
+      } catch (err) {
+        console.warn('Error finding user for contact form:', err);
+        // Continue without reporter - allow anonymous submissions
       }
     }
     // If still no email, return error
@@ -39,15 +47,16 @@ export const createContactFormEntry = async (req, res) => {
     const filter = new Filter.Filter();
     const cleanDescription = filter.clean(description);
 
-    // Find user if authenticated (from publicAuth middleware)
-    let reporter = null;
-    if (req.userId) {
+    // If commissionId is provided, try to find the commission
+    let commission = null;
+    if (commissionId) {
       try {
-        const user = await User.findById(req.userId);
-        reporter = user ? user._id : null;
+        commission = await CommissionRequest.findById(commissionId).select('customer artist disputedByCustomer disputedByArtist disputeCreatedBy');
+        if (!commission) {
+          return res.status(404).json({ message: 'Commission not found for provided commissionId.' });
+        }
       } catch (err) {
-        console.warn('Error finding user for contact form:', err);
-        // Continue without reporter - allow anonymous submissions
+        return res.status(400).json({ message: 'Invalid commissionId format.' });
       }
     }
 
@@ -55,11 +64,28 @@ export const createContactFormEntry = async (req, res) => {
       email: finalEmail,
       description: cleanDescription,
       type,
-      reporter
+      reporter,
+      ...(commissionId ? { commissionId } : {}) // Only add commissionId if provided
     });
 
     await newEntry.save();
-    
+
+    // If commission and user are present, set dispute reference
+    if (commission && req.userId) {
+      let updated = false;
+      if (commission.customer && commission.customer.toString() === req.userId) {
+        commission.disputedByCustomer = newEntry._id;
+        updated = true;
+      } else if (commission.artist && commission.artist.toString() === req.userId) {
+        commission.disputedByArtist = newEntry._id;
+        updated = true;
+      }
+      if (updated) {
+        commission.disputeCreatedBy = req.userId;
+        await commission.save();
+      }
+    }
+
     console.log('Contact form entry created:', { 
       id: newEntry._id, 
       type: newEntry.type, 
@@ -87,7 +113,7 @@ export const createContactFormEntry = async (req, res) => {
  * @query {number} page - Page number (default: 1)
  * @query {number} limit - Items per page (default: 20, max: 100)
  * @query {string} status - Filter by status: open, in_progress, resolved, closed
- * @query {string} type - Filter by type: general, bug_report, feature_request, user_report, other
+ * @query {string} type - Filter by type: general, bug_report, feature_request, user_report, other, commission_dispute, copyright_complaint
  * @returns {Object} Paginated entries with summary statistics
  */
 export const getContactFormEntries = async (req, res) => {
@@ -107,7 +133,15 @@ export const getContactFormEntries = async (req, res) => {
     if (status && ['open', 'in_progress', 'resolved', 'closed'].includes(status)) {
       filter.status = status;
     }
-    if (type && ['general', 'bug_report', 'feature_request', 'user_report', 'other'].includes(type)) {
+    if (type && [
+      'general',
+      'bug_report',
+      'feature_request',
+      'user_report',
+      'other',
+      'commission_dispute',
+      'copyright_complaint'
+    ].includes(type)) {
       filter.type = type;
     }
 

@@ -107,11 +107,13 @@ export const contactForumSchema = Joi.object({
     'feature_request',
     'user_report',
     'other',
-    'commission_dispute'
+    'commission_dispute',
+    'copyright_complaint'
   ).required().messages({
-    'any.only': 'Type must be one of: general, bug_report, feature_request, user_report, other, commission_dispute.',
+    'any.only': 'Type must be one of: general, bug_report, feature_request, user_report, other, commission_dispute, copyright_complaint.',
     'any.required': 'Contact type is required.'
-  })
+  }),
+  commissionId: Joi.string().optional() // Allow optional commissionId for dispute/contact linkage
 });
 
 // Guide track upload validation schema

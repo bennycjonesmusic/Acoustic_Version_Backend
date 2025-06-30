@@ -1,6 +1,7 @@
 import BackingTrack from "../models/backing_track.js";
 import User from "../models/User.js";
 import { isSafeRegexInput } from '../utils/regexSanitizer.js';
+import { createArtistRejectedNotification, createTrackRejectedNotification, createTrackTakedownNotification } from '../utils/notificationHelpers.js';
 
 
 
@@ -155,4 +156,34 @@ export const getAllFlags = async (req, res) => {
         console.error('Error fetching all flags:', error);
         return res.status(500).json({ message: 'Failed to fetch all flags' });
     }
+};
+
+// Admin: Copyright takedown a track (soft delete)
+export const adminTakedownTrack = async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    if (!user || user.role !== 'admin') {
+      return res.status(403).json({ message: 'Admin privileges required.' });
+    }
+    const track = await BackingTrack.findById(req.params.trackId);
+    if (!track) {
+      return res.status(404).json({ message: 'Track not found.' });
+    }
+    // Soft delete: mark as deleted and optionally log takedown reason
+    track.isDeleted = true;
+    track.takedownReason = req.body.reason || 'Copyright takedown';
+    await track.save();
+    // Notify uploader (artist) of takedown
+    try {
+      if (track.user) {
+        await createTrackTakedownNotification(track.user, track._id, track.title, track.takedownReason);
+      }
+    } catch (notifError) {
+      console.error('Error sending takedown notification:', notifError);
+    }
+    return res.status(200).json({ message: 'Track has been taken down for copyright reasons.' });
+  } catch (error) {
+    console.error('Error in admin copyright takedown:', error);
+    return res.status(500).json({ message: 'Failed to takedown track' });
+  }
 };

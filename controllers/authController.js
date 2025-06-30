@@ -153,7 +153,7 @@ export const login = async (req, res) => {
         const { login, password } = req.body;
         // Only select needed fields, including approval and ban status
         const user = await User.findOne({$or: [{email: login}, {username: login}]})
-            .select('password role hasLoggedInBefore isBanned username hasBoughtCommission email profileStatus');
+            .select('password role hasLoggedInBefore isBanned username hasBoughtCommission email profileStatus verified');
         if (!user) {
             return res.status(400).json({ message: "Invalid username or password" });
         }
@@ -756,6 +756,33 @@ export const upgradeToArtist = async (req, res) => {
   }
 
 }
+
+export const resendVerificationEmail = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ message: 'Email is required.' });
+    }
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+    if (user.verified) {
+      return res.status(400).json({ message: 'User is already verified.' });
+    }
+    // Generate a new verification token
+    const token = jwt.sign(
+      { userId: user._id },
+      process.env.EMAIL_VERIFICATION_SECRET,
+      { expiresIn: '1d' }
+    );
+    await sendVerificationEmail(user.email, token);
+    return res.status(200).json({ message: 'Verification email resent. Please check your inbox.' });
+  } catch (error) {
+    console.error('Error resending verification email:', error);
+    return res.status(500).json({ message: 'Failed to resend verification email.' });
+  }
+};
 
 
 

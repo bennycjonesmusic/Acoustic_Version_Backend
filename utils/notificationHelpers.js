@@ -336,3 +336,14 @@ export const createCommissionInProgressNotification = async (artistId, commissio
         relatedCommission: commissionId
     });
 };
+
+export const createTrackTakedownNotification = async (artistId, trackId, trackTitle, reason) => {
+    return await Notification.createNotification({
+        userId: artistId,
+        type: 'track_takedown',
+        title: 'Track Taken Down',
+        message: `Your track "${trackTitle}" has been taken down due to a copyright complaint or DMCA notice.`,
+        relatedTrack: trackId,
+        metadata: { reason }
+    });
+};

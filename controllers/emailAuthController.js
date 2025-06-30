@@ -28,16 +28,18 @@ export const verifyEmail = async (req, res) => {
             return res.status(400).json({ message: "Invalid token. User not found." });
         }
 
-        // If the user is already verified, return a message
+        // If the user is already verified, redirect to the success page
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3002';
         if (user.verified) {
-            return res.status(200).json({ message: "Email already verified." });
+            return res.redirect(`${frontendUrl}/email-verified`);
         }
 
         // Mark the user as verified
         user.verified = true;
         await user.save();
 
-        res.status(200).json({ message: "Email successfully verified!" });
+        // Redirect to the success page after verification
+        return res.redirect(`${frontendUrl}/email-verified`);
 
     } catch (error) {
         console.error('Error verifying email:', error);
@@ -46,65 +48,29 @@ export const verifyEmail = async (req, res) => {
 };
 
 export const resendEmail = async(req, res) => { //controller to resend verification email
-
     const { email } = req.body; //destructure email from body
-    const validateUser = req.userId;
 
-
-   
-
-    if (! email){ //check for email
-
-        return res.status(400).json({message: "Email is required"})
+    if (!email) {
+        return res.status(400).json({message: "Email is required"});
     }
 
-
     try {
-
-        const user = await User.findOne({email}); //clean way of writing email: email.. email being the email destructured from req.body
-
-       if (validateUser.toString() !== user._id.toString()){
-
-            return res.status(403).json({message: "You are not authorized to do this"})
-        }
-        if (! user){
-
+        const user = await User.findOne({email});
+        if (!user) {
             return res.status(404).json({message: "User not found"});
         }
-
         if (user.verified) {
-
-            return res.status(400).json({message: "Email already verified"})
-
+            return res.status(400).json({message: "Email already verified"});
         }
-
         const token = jwt.sign(
-
             {userId: user._id},
             process.env.EMAIL_VERIFICATION_SECRET,
             {expiresIn: '24h'}
-
-
-
         );
-
         await sendVerificationEmail(user.email, token);
-
-
-        user.verified = true;
-        await user.save(); //should fix bug
-
-
         return res.status(200).json({message: "Verification email successfully sent"});
-
-
-    } catch (error){
-
+    } catch (error) {
         console.error("Error resending verification email", error);
         return res.status(500).json({message: "Failed to resend email. Server error"});
-
-
     }
-
-
 }

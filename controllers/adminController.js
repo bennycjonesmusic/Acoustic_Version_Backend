@@ -291,3 +291,135 @@ export const deleteUserByEmail = async (req, res) => {
     return res.status(500).json({ message: 'Error deleting user', error: err.message });
   }
 };
+
+export const getAllArtistsForApporval = async (req, res) => {
+  try {
+    // Parse pagination params
+    const { page = 1, limit = 10 } = req.query;
+    let pageNum = parseInt(page, 10);
+    if (isNaN(pageNum) || pageNum < 1) pageNum = 1;
+    let limitNum = parseInt(limit, 10);
+    if (isNaN(limitNum) || limitNum < 1) limitNum = 10;
+    if (limitNum > 50) limitNum = 50;
+    const skip = (pageNum - 1) * limitNum;
+
+    // Query for pending artists with pagination
+    const filter = { role: 'artist', profileStatus: 'pending' };
+    const totalArtists = await User.countDocuments(filter);
+    const artists = await User.find(filter)
+      .select('name description artistExamples')
+      .skip(skip)
+      .limit(limitNum);
+
+    if (!artists || artists.length === 0) {
+      return res.status(404).json({ message: 'No artists pending approval' });
+    }
+
+    // Only return the required fields, using artistExamples
+    const result = artists.map(artist => ({
+      name: artist.name,
+      description: artist.description,
+      examples: artist.artistExamples?.map(example => ({
+        url: example.url,
+        description: example.description,
+        uploadedAt: example.uploadedAt
+      })) || []
+    }));
+
+    const totalPages = Math.ceil(totalArtists / limitNum);
+    return res.status(200).json({
+      artists: result,
+      totalPages,
+      totalArtists,
+      currentPage: pageNum,
+      limit: limitNum
+    });
+  } catch (err) {
+    return res.status(500).json({ message: 'Failed to fetch artists for approval', error: err.message });
+  }
+}
+
+// Admin: Get contact us forms, paginated and grouped by type
+export const getContactForms = async (req, res) => {
+  try {
+    // Parse pagination and sorting params
+    const { page = 1, limit = 10, sort = 'createdAt', order = 'desc', type } = req.query;
+    let pageNum = parseInt(page, 10);
+    if (isNaN(pageNum) || pageNum < 1) pageNum = 1;
+    let limitNum = parseInt(limit, 10);
+    if (isNaN(limitNum) || limitNum < 1) limitNum = 10;
+    if (limitNum > 50) limitNum = 50;
+    const skip = (pageNum - 1) * limitNum;
+    let sortOption = {};
+    sortOption[sort] = order === 'asc' ? 1 : -1;
+
+    // Build filter
+    const filter = {};
+    if (type) filter.type = type;
+
+    // Get total count for pagination
+    const totalForms = await contactForm.countDocuments(filter);
+    // Query forms
+    const forms = await contactForm.find(filter)
+      .sort(sortOption)
+      .skip(skip)
+      .limit(limitNum)
+      .populate('reporter', 'username email');
+
+    // Group by type (category)
+    const grouped = {};
+    forms.forEach(form => {
+      if (!grouped[form.type]) grouped[form.type] = [];
+      grouped[form.type].push(form);
+    });
+
+    const totalPages = Math.ceil(totalForms / limitNum);
+    return res.status(200).json({
+      forms: grouped,
+      totalPages,
+      totalForms,
+      currentPage: pageNum,
+      limit: limitNum
+    });
+  } catch (err) {
+    return res.status(500).json({ message: 'Failed to fetch contact forms', error: err.message });
+  }
+}
+
+// Utility: Get a mailto link for replying to a contact form
+export const replyToForm = (form) => {
+  if (!form || !form.email) return null;
+  // Optionally, you can prefill subject/body here
+  const subject = encodeURIComponent('Reply to your contact form query on Acoustic-version');
+  const body = encodeURIComponent('Hi,\n\nThank you for contacting us.\n\n');
+  return `mailto:${form.email}?subject=${subject}&body=${body}`;
+};
+
+// Admin: Get website analytics (basic)
+export const getWebsiteAnalytics = async (req, res) => {
+  try {
+    // Only allow admin
+    if (!req.user || req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Admin privileges required.' });
+    }
+    // Aggregate analytics from all users
+    const users = await User.find({}, 'analytics');
+    let totalHits = 0;
+    let uniqueHits = 0;
+    let conversions = 0;
+    users.forEach(user => {
+      if (user.analytics) {
+        totalHits += user.analytics.totalHits || 0;
+        uniqueHits += user.analytics.uniqueHits || 0;
+        conversions += user.analytics.conversions || 0;
+      }
+    });
+    return res.status(200).json({
+      totalHits,
+      uniqueHits,
+      conversions
+    });
+  } catch (err) {
+    return res.status(500).json({ message: 'Failed to fetch analytics', error: err.message });
+  }
+};
