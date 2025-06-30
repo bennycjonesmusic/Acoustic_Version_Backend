@@ -1,4 +1,6 @@
 import mongoose from 'mongoose';
+import { getCommissionRateForUser } from '../utils/commission.js';
+import User from './User.js';
 
 // Define the schema for the backing track
 const backingTrackSchema = new mongoose.Schema({
@@ -391,11 +393,19 @@ backingTrackSchema.index({ user: 1 }); // Fast lookup of tracks by artist/owner
 backingTrackSchema.index({ title: 'text' }); // Already present for text search
 
 // Pre-validate hook to set customerPrice
-backingTrackSchema.pre('validate', function(next) {
-  // Automatically set customerPrice as price + 12% commission (rounded to 2 decimals)
-  if (typeof this.price === 'number') {
-    const commission = Math.round(this.price * 0.12 * 100) / 100; // 12% commission
-    this.customerPrice = Math.round((this.price + commission) * 100) / 100;
+backingTrackSchema.pre('validate', async function(next) {
+  // Dynamically set customerPrice as price + commission (rounded to 2 decimals)
+  if (typeof this.price === 'number' && this.user) {
+    try {
+      const user = await User.findById(this.user).lean();
+      const commissionRate = getCommissionRateForUser(user);
+      const commission = Math.round(this.price * commissionRate * 100) / 100;
+      this.customerPrice = Math.round((this.price + commission) * 100) / 100;
+    } catch (err) {
+      // fallback to 12% if user lookup fails
+      const commission = Math.round(this.price * 0.12 * 100) / 100;
+      this.customerPrice = Math.round((this.price + commission) * 100) / 100;
+    }
   }
   next();
 });
