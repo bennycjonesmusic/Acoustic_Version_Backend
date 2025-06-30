@@ -45,6 +45,9 @@ export const flagTrack = async (req, res) => {
                 createdAt: new Date(),
                 reviewed: false,
             });
+
+            track.flagCount = (track.flagCount || 0) + 1; 
+            track.isFlagged = true; // Mark track as flagged
             await track.save();
 
             return res.status(200).json({ message: 'Track has been flagged. An admin will review it shortly.' });

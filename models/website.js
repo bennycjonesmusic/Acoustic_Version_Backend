@@ -1,5 +1,15 @@
 import mongoose from 'mongoose';
 
+// IP address schema for tracking unique visitors
+const ipAddressSchema = new mongoose.Schema({
+  ip: { type: String, required: true, unique: true },
+  firstSeen: { type: Date, default: Date.now },
+});
+// Optional: TTL index to expire IPs after 30 days
+ipAddressSchema.index({ firstSeen: 1 }, { expireAfterSeconds: 60 * 60 * 24 * 30 });
+
+const IPAddress = mongoose.model('IPAddress', ipAddressSchema);
+
 const websiteSchema = new mongoose.Schema({
   // DMCA or copyright takedown requests
   takedownRequests: [
@@ -26,6 +36,9 @@ const websiteSchema = new mongoose.Schema({
   ],
   // Simple analytics for website hits
   analytics: {
+    homePageHits: { type: Number, default: 0 },
+    commissionMusicianHits: { type: Number, default: 0 },
+    searchTracksHits: { type: Number, default: 0 },
     totalHits: { type: Number, default: 0 },
     uniqueVisitors: { type: Number, default: 0 },
     lastHitAt: { type: Date }
@@ -35,3 +48,4 @@ const websiteSchema = new mongoose.Schema({
 
 const Website = mongoose.model('Website', websiteSchema);
 export default Website;
+export { IPAddress };

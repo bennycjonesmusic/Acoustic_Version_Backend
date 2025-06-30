@@ -320,6 +320,14 @@ backingTrackSchema.virtual('vocalRangeGender').get(function () {
   return null;
 });
 
+// Virtual for conversion rate (percentage of purchases per total hits)
+backingTrackSchema.virtual('conversionRate').get(function () {
+  const totalHits = this.analytics?.totalHits || 0;
+  const purchases = this.purchaseCount || 0;
+  if (!totalHits || totalHits === 0) return 0;
+  return Math.round((purchases / totalHits) * 1000) / 10; // e.g. 12.3% (1 decimal)
+});
+
 // Sanitizing the schema before returning it as JSON
 backingTrackSchema.set('toJSON', {
   virtuals: true, // Include virtual fields in JSON output
@@ -352,6 +360,7 @@ backingTrackSchema.set('toJSON', {
       if (viewerRole === 'public' || (!isAdmin && !isSelf)) {
         delete ret.downloadCount;
         delete ret.licenseStatus;
+        delete ret.analytics; // Hide analytics for public and non-owners
       }
       // Always include previewUrl in output
       if (doc.previewUrl) {
