@@ -85,7 +85,7 @@ router.patch('/profile', authMiddleware, avatarUpload.single('avatar'), avatarMo
 // Add GET /users/me route
 router.get('/me', authMiddleware, async (req, res) => {
   try {
-    const user = await User.findById(req.userId); // Removed .lean() to allow .toJSON transform
+    const user = await User.findById(req.userId);
     if (!user) return res.status(404).json({ message: 'User not found' });
     res.status(200).json({ user });
   } catch (error) {

@@ -80,18 +80,16 @@ router.post('/cancel-subscription', authMiddleware, async (req, res) => {
     if (!user || !user.stripeSubscriptionId) {
       return res.status(404).json({ error: 'No active subscription found.' });
     }
-    // Use only the Stripe v18+ .cancel method for subscription cancellation
+    // Set cancel_at_period_end so user retains access until the end of the billing period
     let result;
-    if (typeof stripeClient.subscriptions.cancel === 'function') {
-      result = await stripeClient.subscriptions.cancel(user.stripeSubscriptionId);
+    if (typeof stripeClient.subscriptions.update === 'function') {
+      result = await stripeClient.subscriptions.update(user.stripeSubscriptionId, { cancel_at_period_end: true });
     } else {
-      throw new Error('Stripe subscription cancellation method not found. Please check Stripe SDK version.');
+      throw new Error('Stripe subscription update method not found. Please check Stripe SDK version.');
     }
-    // Downgrade user to free tier and clear subscriptionId
-    user.subscriptionTier = 'free';
-    user.stripeSubscriptionId = undefined;
-    await user.save();
-    return res.status(200).json({ message: 'Subscription cancelled and account downgraded.' });
+    // Do NOT downgrade user immediately. Downgrade in webhook after period ends.
+    // See webhook handler for customer.subscription.deleted or status=canceled.
+    return res.status(200).json({ message: 'Subscription will be cancelled at period end. You will retain access until then.' });
   } catch (error) {
     console.error('Error cancelling subscription:', error);
     return res.status(500).json({ error: 'Failed to cancel subscription.' });

@@ -293,12 +293,23 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
     const subscription = event.data.object;
     const subscriptionId = subscription.id;
     try {
+      // Find the user by the canceled subscription ID
       const user = await User.findOne({ stripeSubscriptionId: subscriptionId });
       if (user) {
-        user.subscriptionTier = 'free';
-        user.stripeSubscriptionId = undefined;
-        await user.save();
-        console.log(`[WEBHOOK] Downgraded user ${user.email} to free tier after subscription cancellation.`);
+        // Check if user has any other active paid subscription (pro or enterprise)
+        const hasOtherActivePaid = await User.exists({
+          _id: user._id,
+          subscriptionTier: { $in: ['pro', 'enterprise'] },
+          stripeSubscriptionId: { $ne: subscriptionId, $exists: true, $ne: null }
+        });
+        if (!hasOtherActivePaid) {
+          user.subscriptionTier = 'free';
+          user.stripeSubscriptionId = undefined;
+          await user.save();
+          console.log(`[WEBHOOK] Downgraded user ${user.email} to free tier after subscription cancellation.`);
+        } else {
+          console.log(`[WEBHOOK] Subscription ${subscriptionId} ended, but user ${user.email} has another active paid subscription. No downgrade.`);
+        }
       }
     } catch (err) {
       console.error('[WEBHOOK] Error downgrading user after subscription cancellation:', err);
