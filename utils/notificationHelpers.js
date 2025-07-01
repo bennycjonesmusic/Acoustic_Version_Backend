@@ -39,46 +39,50 @@ export const createTrackPurchaseNotification = async (artistId, buyerUsername, t
     });
 };
 
-export const createCommissionRequestNotification = async (artistId, clientUsername, commissionId) => {
+export const createCommissionRequestNotification = async (artistId, clientUserId, clientUsername, commissionId) => {
     return await Notification.createNotification({
         userId: artistId,
         type: 'commission_request',
         title: 'New Commission Request',
         message: `${clientUsername} sent you a commission request`,
         relatedCommission: commissionId,
+        relatedUser: clientUserId,
         metadata: { clientUsername }
     });
 };
 
-export const createCommissionAcceptedNotification = async (clientId, artistUsername, commissionId) => {
+export const createCommissionAcceptedNotification = async (clientId, artistUserId, artistUsername, commissionId) => {
     return await Notification.createNotification({
         userId: clientId,
         type: 'commission_accepted',
         title: 'Commission Accepted',
         message: `${artistUsername} accepted your commission request`,
         relatedCommission: commissionId,
+        relatedUser: artistUserId,
         metadata: { artistUsername }
     });
 };
 
-export const createCommissionCompletedNotification = async (clientId, artistUsername, commissionId) => {
+export const createCommissionCompletedNotification = async (clientId, artistUserId, artistUsername, commissionId) => {
     return await Notification.createNotification({
         userId: clientId,
         type: 'commission_completed',
         title: 'Commission Completed',
         message: `${artistUsername} completed your commission`,
         relatedCommission: commissionId,
+        relatedUser: artistUserId,
         metadata: { artistUsername }
     });
 };
 
-export const createCommissionDeclinedNotification = async (clientId, artistUsername, commissionId, reason) => {
+export const createCommissionDeclinedNotification = async (clientId, artistUserId, artistUsername, commissionId, reason) => {
     return await Notification.createNotification({
         userId: clientId,
         type: 'commission_declined',
         title: 'Commission Declined',
         message: `${artistUsername} declined your commission request`,
         relatedCommission: commissionId,
+        relatedUser: artistUserId,
         metadata: { artistUsername, reason }
     });
 };
@@ -124,13 +128,14 @@ export const createPayoutProcessedNotification = async (artistId, amount, curren
     });
 };
 
-export const createReviewAddedNotification = async (artistId, reviewerUsername, trackId, trackTitle, rating) => {
+export const createReviewAddedNotification = async (artistId, reviewerUserId, reviewerUsername, trackId, trackTitle, rating) => {
     return await Notification.createNotification({
         userId: artistId,
         type: 'review_added',
         title: 'New Review',
         message: `${reviewerUsername} left a ${rating}-star review on "${trackTitle}"`,
         relatedTrack: trackId,
+        relatedUser: reviewerUserId,
         metadata: { reviewerUsername, rating }
     });
 };

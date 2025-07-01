@@ -17,6 +17,12 @@ import { parseKeySignature } from '../utils/parseKeySignature.js';
 import mongoose from 'mongoose';
 import cache from '../utils/cache.js';
 
+// Clear all cache on server start
+if (cache && typeof cache.clear === 'function') {
+    cache.clear();
+    console.log('[Cache] All cache cleared on server start');
+}
+
 /** * @typedef {Object} TrackSummary
  * @property {string} id - Track ID
  * @property {string} title - Track title
@@ -136,6 +142,11 @@ export const getUserDetails = async (req, res) => {
         let user = await User.findById(req.params.id);
         if (!user) {
             return res.status(404).json({ message: "User not found" });
+        }
+        // Ensure customerCommissionPrice is set and not 0
+        if (!user.customerCommissionPrice || user.customerCommissionPrice === 0) {
+            user.customerCommissionPrice = calculateCustomerCommissionPrice(user.commissionPrice);
+            await user.save();
         }
 
         // Parse pagination and filtering parameters for uploaded tracks
@@ -354,7 +365,7 @@ export const getFeaturedArtists = async (req, res) => {
         }
         console.log('[getFeaturedArtists] No cache found, fetching fresh data');        // First, try to find artists with tracks/commissions (quality filter)
         const commissionArtistIds = await CommissionRequest.distinct('artist');
-        const userSummaryFields = 'username avatar customerCommissionPrice averageTrackRating artistExamples maxTimeTakenForCommission averageCommissionCompletionTime averageCommissionCompletionTimeHours numOfCommissions artistInstrument numOfRatings';
+        const userSummaryFields = 'username avatar commissionPrice customerCommissionPrice averageTrackRating artistExamples maxTimeTakenForCommission averageCommissionCompletionTime averageCommissionCompletionTimeHours numOfCommissions artistInstrument numOfRatings';
         const featuredArtists = await User.find({
             role: { $in: ['artist', 'admin'] },
             profileStatus: 'approved',
@@ -405,26 +416,19 @@ export const getFeaturedArtists = async (req, res) => {
             featured = [...featured, ...additionalArtists];
             console.log(`[getFeaturedArtists] Total featured artists after fallback: ${featured.length}`);
         }
-        // Only fix customerCommissionPrice if it is 0
+        // Only fix customerCommissionPrice if it is 0 (for summary endpoints)
         for (const artist of featured) {
             if (!artist.customerCommissionPrice || artist.customerCommissionPrice === 0) {
+                console.log('[DEBUG] Fixing customerCommissionPrice for', artist.username, 'commissionPrice:', artist.commissionPrice);
                 artist.customerCommissionPrice = calculateCustomerCommissionPrice(artist.commissionPrice);
+                await artist.save();
+                console.log('[DEBUG] New customerCommissionPrice:', artist.customerCommissionPrice);
             }
         }
-        console.log('[getFeaturedArtists] Raw featured artists data:', featured[0]);
-        // Calculate average track rating for all featured artists
-        console.log('[getFeaturedArtists] Calculating average track ratings for featured artists...');
-        for (const artist of featured) {
-            try {
-                await artist.calculateAverageTrackRating(); 
-                await artist.save(); //ensures customercommission gets updated
-                console.log(`[getFeaturedArtists] Updated rating for ${artist.username}: ${artist.averageTrackRating}`);
-            } catch (error) {
-                console.error(`[getFeaturedArtists] Error calculating rating for ${artist.username}:`, error);
-            }
-        }
+        // Log summary before sending
         const summary = toUserSummary(featured);
-        console.log('[getFeaturedArtists] After toUserSummary:', summary[0]);        cache.set('featuredArtists', summary);
+        console.log('[DEBUG] Featured artists summary:', summary);
+        cache.set('featuredArtists', summary);
         return res.status(200).json(summary);
     } catch (error) {
         console.error('Error getting featured artists:', error);

@@ -14,6 +14,7 @@ export function toUserSummary(users) {
     averageCommissionCompletionTimeHours: user.averageCommissionCompletionTimeHours, // <-- Ensure this is included
     numOfCommissions: user.numOfCommissions,
     artistInstrument: user.artistInstrument,
-    numOfRatings: user.numOfRatings // Add total ratings to summary for frontend
+    numOfRatings: user.numOfRatings, // Add total ratings to summary for frontend
+    commissionPrice: user.commissionPrice, // Add commissionPrice for frontend calculations
   }));
 }
