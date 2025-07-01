@@ -1,6 +1,7 @@
 import { S3Client, ListObjectsCommand, DeleteObjectsCommand } from '@aws-sdk/client-s3';
 import User from '../models/User.js';
 import BackingTrack from '../models/backing_track.js';
+import Website from '../models/website.js';
 import { createArtistApprovedNotification, createArtistRejectedNotification } from '../utils/notificationHelpers.js';
 import { Parser } from 'json2csv';
 import path from 'path';
@@ -292,7 +293,7 @@ export const deleteUserByEmail = async (req, res) => {
   }
 };
 
-export const getAllArtistsForApporval = async (req, res) => {
+export const getAllArtistsForApproval = async (req, res) => {
   try {
     // Parse pagination params
     const { page = 1, limit = 10 } = req.query;
@@ -402,22 +403,22 @@ export const getWebsiteAnalytics = async (req, res) => {
     if (!req.user || req.user.role !== 'admin') {
       return res.status(403).json({ message: 'Admin privileges required.' });
     }
-    // Aggregate analytics from all users
-    const users = await User.find({}, 'analytics');
-    let totalHits = 0;
-    let uniqueHits = 0;
-    let conversions = 0;
-    users.forEach(user => {
-      if (user.analytics) {
-        totalHits += user.analytics.totalHits || 0;
-        uniqueHits += user.analytics.uniqueHits || 0;
-        conversions += user.analytics.conversions || 0;
-      }
-    });
+    // Fetch analytics from Website schema
+    let website = await Website.findOne();
+    if (!website) {
+      website = await Website.create({}); // Create with defaults
+    }
+    if (!website.analytics) {
+      return res.status(404).json({ message: 'No website analytics found.' });
+    }
+    const { homePageHits, commissionMusicianHits, searchTracksHits, totalHits, uniqueVisitors, lastHitAt } = website.analytics;
     return res.status(200).json({
+      homePageHits,
+      commissionMusicianHits,
+      searchTracksHits,
       totalHits,
-      uniqueHits,
-      conversions
+      uniqueVisitors,
+      lastHitAt
     });
   } catch (err) {
     return res.status(500).json({ message: 'Failed to fetch analytics', error: err.message });

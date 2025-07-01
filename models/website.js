@@ -41,7 +41,9 @@ const websiteSchema = new mongoose.Schema({
     searchTracksHits: { type: Number, default: 0 },
     totalHits: { type: Number, default: 0 },
     uniqueVisitors: { type: Number, default: 0 },
-    lastHitAt: { type: Date }
+    lastHitAt: { type: Date },
+    pageHits: { type: Map, of: Number, default: {} }, // Track hits per page URL
+    weeklyHits: { type: [ { weekStart: Date, count: Number } ], default: [] }, // Track total hits per week
   },
   // You can add more global site data here as needed
 });

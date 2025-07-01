@@ -1,4 +1,5 @@
 import User from '../models/User.js';
+import BackingTrack from '../models/backing_track.js';
 import { createFollowNotification } from '../utils/notificationHelpers.js';
 import * as Filter from 'bad-words';
 import { validateUserForPayouts } from '../utils/stripeAccountStatus.js';
@@ -529,4 +530,37 @@ try {
 }
 
 }
+
+// Controller to get most viewed, least viewed, and total hits for the current artist's uploaded tracks
+export const getArtistTrackViewStats = async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    if (user.role !== 'artist' && user.role !== 'admin') {
+      return res.status(403).json({ message: 'Only artists can access their track stats' });
+    }
+    // Find all tracks uploaded by this artist
+    const tracks = await BackingTrack.find({ user: user._id }, 'analytics.totalHits title');
+    if (!tracks || tracks.length === 0) {
+      return res.status(200).json({ mostViewed: null, leastViewed: null, totalHits: 0 });
+    }
+    let totalHits = 0;
+    tracks.forEach(track => {
+      totalHits += track.analytics?.totalHits || 0;
+    });
+    const sorted = tracks.slice().sort((a, b) => (a.analytics?.totalHits || 0) - (b.analytics?.totalHits || 0));
+    const leastViewed = sorted[0];
+    const mostViewed = sorted[sorted.length - 1];
+    return res.status(200).json({
+      mostViewed: { id: mostViewed._id, title: mostViewed.title, totalHits: mostViewed.analytics?.totalHits || 0 },
+      leastViewed: { id: leastViewed._id, title: leastViewed.title, totalHits: leastViewed.analytics?.totalHits || 0 },
+      totalHits
+    });
+  } catch (error) {
+    console.error('Error getting artist track view stats:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
 

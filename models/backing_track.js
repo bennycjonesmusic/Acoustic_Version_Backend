@@ -247,6 +247,7 @@ analytics: {
   totalHits: { type: Number, default: 0 },
   uniqueHits: { type: Number, default: 0 },
   conversions: { type: Number, default: 0 }, // e.g. purchases
+  weeklyHits: { type: [ { weekStart: Date, count: Number } ], default: [] }, // Track total hits per week for this track
   // Optionally, you can add more fields for advanced analytics
   },
   bestMetadata: {

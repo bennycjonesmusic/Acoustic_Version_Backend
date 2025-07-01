@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import authMiddleware from '../middleware/customer_auth.js';
 import isAdmin from '../middleware/Admin.js';
-import { clearS3, deleteAllUsers, getUsers, banUser, getAllSalesAndRefunds, getSalesStatsAndCsv, getPendingArtists, approveArtist, rejectArtist, deleteUserByEmail } from '../controllers/adminController.js';
+import { clearS3, deleteAllUsers, getUsers, banUser, getAllSalesAndRefunds, getSalesStatsAndCsv, getPendingArtists, approveArtist, rejectArtist, deleteUserByEmail, getWebsiteAnalytics } from '../controllers/adminController.js';
 
 const router = Router();
 
@@ -17,6 +17,7 @@ router.post('/reject-artist/:id', authMiddleware, isAdmin, rejectArtist);
 
 
 router.delete('/test-delete-user', authMiddleware, isAdmin, deleteUserByEmail);
+router.get('/website-analytics', authMiddleware, isAdmin, getWebsiteAnalytics);
 
 
 export default router;

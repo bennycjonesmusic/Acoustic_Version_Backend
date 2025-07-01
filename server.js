@@ -162,7 +162,20 @@ mongoose.connect(process.env.MONGODB_URI)
     
     .then(async() => {
         console.log('Connected to MongoDB');
-          try {
+        // Ensure everlasting Website analytics document exists
+        try {
+          const Website = (await import('./models/website.js')).default;
+          let website = await Website.findOne();
+          if (!website) {
+            website = await Website.create({});
+            console.log('Created everlasting Website analytics document.');
+          } else {
+            console.log('Website analytics document already exists.');
+          }
+        } catch (err) {
+          console.error('Error ensuring Website analytics document exists:', err);
+        }
+        try {
     console.log("Running initial admin update");
     const result = await User.updateMany(
       { email: { $in: adminEmails } },

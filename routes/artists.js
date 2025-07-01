@@ -1,7 +1,7 @@
 import express from 'express';
 import authMiddleware from '../middleware/customer_auth.js';
 import artistAuthMiddleware from '../middleware/artist_auth.js';
-import { getArtistStorage, getNumberOfUploadedTracks } from '../controllers/artistController.js';
+import { getArtistStorage, getNumberOfUploadedTracks, getArtistTrackViewStats } from '../controllers/artistController.js';
 import User from '../models/User.js';
 import BackingTrack from '../models/backing_track.js';
 import CommissionRequest from '../models/CommissionRequest.js';
@@ -144,5 +144,8 @@ router.get('/storage', (req, res, next) => {
   console.log('Storage route hit:', req.method, req.path);
   next();
 }, artistAuthMiddleware, getArtistStorage);
+
+// Route to get most viewed, least viewed, and total hits for the current artist's uploaded tracks
+router.get('/track/view-stats', artistAuthMiddleware, getArtistTrackViewStats);
 
 export default router;
