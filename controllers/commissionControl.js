@@ -9,7 +9,8 @@ import { validateUserForPayouts } from '../utils/stripeAccountStatus.js';
 import { 
     createCommissionRequestNotification, 
     createCommissionAcceptedNotification, 
-    createCommissionCompletedNotification 
+    createCommissionCompletedNotification,
+    createSystemNotification
 } from '../utils/notificationHelpers.js';
 import { S3Client } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
@@ -602,10 +603,14 @@ export const confirmOrDenyCommission = async (req, res) => {
     }
     
     try {
+        // Fetch user and only select role
+        const user = await User.findById(customerId).select('role');
         const commission = await CommissionRequest.findById(commissionId);
         console.log('[confirmOrDenyCommission] Loaded commission:', commission);
         if (!commission) return res.status(404).json({ error: 'Commission not found' });
-        if (commission.customer.toString() !== customerId) return res.status(403).json({ error: 'Not authorized' });
+        // Allow customer or admin to approve
+        const isAdmin = user && user.role === 'admin';
+        if (commission.customer.toString() !== customerId && !isAdmin) return res.status(403).json({ error: 'Not authorized' });
         if (commission.status !== 'delivered') {
             console.log('[confirmOrDenyCommission] Not ready for confirmation. Status:', commission.status);
             return res.status(400).json({ error: 'Not ready for confirmation' });
@@ -667,7 +672,7 @@ export const refundCommission = async (req, res) => {
         if (!commissionId) {
             return res.status(400).json({ error: 'Missing commissionId' });
         }
-        const commission = await CommissionRequest.findById(commissionId);
+        const commission = await CommissionRequest.findById(commissionId).populate('customer artist');
         if (!commission) {
             return res.status(404).json({ error: 'Commission not found' });
         }        // Only refund if not already refunded or completed
@@ -683,6 +688,11 @@ export const refundCommission = async (req, res) => {
                 });
                 commission.status = 'cancelled';
                 await commission.save();
+                // Send notification to both artist and customer
+                const customerUsername = commission.customer?.username || 'the customer';
+                const message = `We have come to a conclusion and ${customerUsername} has been refunded. We have come to this conclusion after careful consideration of the dispute matter.`;
+                await createSystemNotification(commission.customer._id, 'Commission Refund', message);
+                await createSystemNotification(commission.artist._id, 'Commission Refund', message);
                 return res.status(200).json({ success: true });
             } catch (err) {
                 return res.status(500).json({ error: 'Failed to issue refund', details: err.message });

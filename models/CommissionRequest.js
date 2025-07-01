@@ -27,8 +27,8 @@ const commissionRequestSchema = new mongoose.Schema({
   cancellationReason: { type: String },
   guideTrackForSingerUrl: { type: String }, // URL for guide track for singer
   singerRequestedGuideTrack: { type: Boolean, default: false }, 
-  disputedByCustomer: { type: mongoose.Schema.Types.ObjectId, ref: 'contact_form', default: null }, // Reference to contact_form document for customer dispute
-  disputedByArtist: { type: mongoose.Schema.Types.ObjectId, ref: 'contact_form', default: null }, // Reference to contact_form document for artist dispute
+  disputedByCustomer: { type: mongoose.Schema.Types.ObjectId, ref: 'ContactForm', default: null }, // Reference to ContactForm document for customer dispute
+  disputedByArtist: { type: mongoose.Schema.Types.ObjectId, ref: 'ContactForm', default: null }, // Reference to ContactForm document for artist dispute
   disputeCreatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }, // User who created the dispute
 }, {
 });

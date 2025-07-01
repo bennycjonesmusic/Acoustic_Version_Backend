@@ -2,10 +2,12 @@ import { S3Client, ListObjectsCommand, DeleteObjectsCommand } from '@aws-sdk/cli
 import User from '../models/User.js';
 import BackingTrack from '../models/backing_track.js';
 import Website from '../models/website.js';
+import CommissionRequest from '../models/CommissionRequest.js';
 import { createArtistApprovedNotification, createArtistRejectedNotification } from '../utils/notificationHelpers.js';
 import { Parser } from 'json2csv';
 import path from 'path';
 import fs from 'fs';
+import contactForm from '../models/contact_form.js';
 
 export const clearS3 = async (req, res) => {
     try {
@@ -422,5 +424,56 @@ export const getWebsiteAnalytics = async (req, res) => {
     });
   } catch (err) {
     return res.status(500).json({ message: 'Failed to fetch analytics', error: err.message });
+  }
+};
+
+// Admin: Get all disputed commissions (paginated)
+export const getDisputedCommissions = async (req, res) => {
+  try {
+    if (!req.user || req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Admin privileges required.' });
+    }
+    // Parse pagination params
+    const { page = 1, limit = 20 } = req.query;
+    let pageNum = parseInt(page, 10);
+    if (isNaN(pageNum) || pageNum < 1) pageNum = 1;
+    let limitNum = parseInt(limit, 10);
+    if (isNaN(limitNum) || limitNum < 1) limitNum = 20;
+    if (limitNum > 100) limitNum = 100;
+    const skip = (pageNum - 1) * limitNum;
+
+    // Find total count for pagination
+    const filter = {
+      $or: [
+        { disputedByCustomer: { $ne: null } },
+        { disputedByArtist: { $ne: null } },
+        { disputeCreatedBy: { $ne: null } }
+      ]
+    };
+    const total = await CommissionRequest.countDocuments(filter);
+    const disputed = await CommissionRequest.find(filter)
+      .skip(skip)
+      .limit(limitNum)
+      .populate('customer', 'username email')
+      .populate('artist', 'username email')
+      .populate('disputedByCustomer')
+      .populate('disputedByArtist')
+      .populate('disputeCreatedBy', 'username email');
+    // Add id field to each commission for frontend actions
+    const commissionsWithId = disputed.map(c => ({
+      ...c.toObject(),
+      id: c._id.toString()
+    }));
+    const totalPages = Math.ceil(total / limitNum);
+    return res.status(200).json({
+      commissions: commissionsWithId,
+      total,
+      totalPages,
+      currentPage: pageNum,
+      limit: limitNum
+    });
+  } catch (err) {
+    console.error('Error fetching disputed commissions:', err);
+    return res.status(500).json({ message: 'Failed to fetch disputed commissions', error: err.message });
   }
 };
