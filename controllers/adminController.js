@@ -310,7 +310,7 @@ export const getAllArtistsForApproval = async (req, res) => {
     const filter = { role: 'artist', profileStatus: 'pending' };
     const totalArtists = await User.countDocuments(filter);
     const artists = await User.find(filter)
-      .select('name description artistExamples')
+      .select('username email profileStatus createdAt name description artistExamples')
       .skip(skip)
       .limit(limitNum);
 
@@ -319,15 +319,20 @@ export const getAllArtistsForApproval = async (req, res) => {
     }
 
     // Only return the required fields, using artistExamples
-    const result = artists.map(artist => ({
-      name: artist.name,
-      description: artist.description,
-      examples: artist.artistExamples?.map(example => ({
-        url: example.url,
-        description: example.description,
-        uploadedAt: example.uploadedAt
-      })) || []
-    }));
+   const result = artists.map(artist => ({
+  id: artist._id?.toString?.() || artist.id,
+  username: artist.username,
+  email: artist.email,
+  profileStatus: artist.profileStatus,
+  createdAt: artist.createdAt,
+  name: artist.name,
+  description: artist.description,
+  examples: artist.artistExamples?.map(example => ({
+    url: example.url,
+    description: example.description,
+    uploadedAt: example.uploadedAt
+  })) || []
+}));
 
     const totalPages = Math.ceil(totalArtists / limitNum);
     return res.status(200).json({
