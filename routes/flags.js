@@ -4,7 +4,8 @@ import {
   getFlagsForTrack,
   deleteFlag,
   reviewFlag,
-  getAllFlags
+  getAllFlags,
+  adminTakedownTrack
 } from '../controllers/flagController.js';
 import authMiddleware from '../middleware/customer_auth.js';
 import isAdmin from '../middleware/Admin.js';
@@ -25,5 +26,8 @@ router.patch('/:flagId/review', authMiddleware, isAdmin, reviewFlag);
 
 // Admin: get all flags for all tracks
 router.get('/', authMiddleware, isAdmin, getAllFlags);
+
+// Admin: takedown a track (copyright)
+router.post('/takedown/:trackId', authMiddleware, isAdmin, adminTakedownTrack);
 
 export default router;

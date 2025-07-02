@@ -70,24 +70,28 @@ export const flagTrack = async (req, res) => {
 export const deleteFlag = async (req, res) => {
     try {
         const user = await User.findById(req.userId);
-        const track = await BackingTrack.findById(req.params.trackId);
-        if (!user) {
-            return res.status(404).json({ message: 'User not found.' });
+        if (!user || user.role !== 'admin') {
+            return res.status(403).json({ message: 'Admin privileges required.' });
         }
+
+        const flagId = req.params.flagId;
+        
+        // Find the track that contains this flag
+        const track = await BackingTrack.findOne({ 'flags._id': flagId });
         if (!track) {
-            return res.status(404).json({ message: 'Track not found.' });
+            return res.status(404).json({ message: 'Flag not found.' });
         }
-        // Find the flag
-        const flagIndex = track.flags.findIndex(flag => flag.user.toString() === user._id.toString());
-        if (flagIndex === -1) {
-            return res.status(404).json({ message: 'Flag not found for this user.' });
+
+        const flag = track.flags.id(flagId);
+        if (!flag) {
+            return res.status(404).json({ message: 'Flag not found.' });
         }
-        // Allow user to delete their own flag, or admin to delete any
-        if (track.flags[flagIndex].user.toString() !== user._id.toString() && user.role !== 'admin') {
-            return res.status(403).json({ message: 'Not authorized to delete this flag.' });
-        }
-        track.flags.splice(flagIndex, 1);
+
+        // Remove the flag
+        track.flags.pull(flagId);
+        track.flagCount = Math.max(0, (track.flagCount || 0) - 1);
         await track.save();
+
         return res.status(200).json({ message: 'Flag deleted successfully.' });
     } catch (error) {
         console.error('Error deleting flag:', error);
@@ -99,20 +103,31 @@ export const deleteFlag = async (req, res) => {
 export const reviewFlag = async (req, res) => {
     try {
         const user = await User.findById(req.userId);
-        const track = await BackingTrack.findById(req.params.trackId);
         if (!user || user.role !== 'admin') {
             return res.status(403).json({ message: 'Admin privileges required.' });
         }
+
+        const flagId = req.params.flagId;
+        
+        // Find the track that contains this flag
+        const track = await BackingTrack.findOne({ 'flags._id': flagId });
         if (!track) {
-            return res.status(404).json({ message: 'Track not found.' });
+            return res.status(404).json({ message: 'Flag not found.' });
         }
-        const flag = track.flags.id(req.params.flagId);
+
+        const flag = track.flags.id(flagId);
         if (!flag) {
             return res.status(404).json({ message: 'Flag not found.' });
         }
-        flag.reviewed = true;
+
+        // Update flag with review status and admin notes
+        flag.reviewed = req.body.reviewed !== undefined ? req.body.reviewed : true;
+        if (req.body.adminNotes) {
+            flag.adminNotes = req.body.adminNotes;
+        }
+
         await track.save();
-        return res.status(200).json({ message: 'Flag marked as reviewed.' });
+        return res.status(200).json({ message: 'Flag reviewed successfully.' });
     } catch (error) {
         console.error('Error reviewing flag:', error);
         return res.status(500).json({ message: 'Failed to review flag' });
@@ -136,9 +151,22 @@ export const getFlagsForTrack = async (req, res) => {
 // Admin: get all flags for all tracks
 export const getAllFlags = async (req, res) => {
     try {
+        // Pagination parameters
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const skip = (page - 1) * limit;
+
+        // Get total count of tracks with flags
+        const totalTracksWithFlags = await BackingTrack.countDocuments({ 'flags.0': { $exists: true } });
+
+        // Get paginated tracks with flags
         const tracks = await BackingTrack.find({ 'flags.0': { $exists: true } })
             .populate('flags.user', 'username email')
-            .select('title originalArtist flags');
+            .select('title originalArtist flags')
+            .skip(skip)
+            .limit(limit)
+            .sort({ 'flags.createdAt': -1 }); // Sort by newest flags first
+
         // Flatten all flags with track info
         const allFlags = [];
         for (const track of tracks) {
@@ -151,7 +179,18 @@ export const getAllFlags = async (req, res) => {
                 });
             }
         }
-        return res.status(200).json({ flags: allFlags });
+
+        // Calculate total pages based on individual flags count
+        // Note: This is an approximation since we're paginating by tracks, not individual flags
+        const totalPages = Math.ceil(totalTracksWithFlags / limit);
+
+        return res.status(200).json({ 
+            flags: allFlags,
+            currentPage: page,
+            totalPages: totalPages,
+            totalTracks: totalTracksWithFlags,
+            totalFlags: allFlags.length
+        });
     } catch (error) {
         console.error('Error fetching all flags:', error);
         return res.status(500).json({ message: 'Failed to fetch all flags' });
