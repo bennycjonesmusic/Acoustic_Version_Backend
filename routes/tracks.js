@@ -57,7 +57,16 @@ router.get('/tracks/download/:id', (req, res, next) => {
 }, downloadLimiter, authMiddleware, downloadTrack); //req.params.id = :id needed in route
 
 // Guide track routes
-router.post('/tracks/:id/guide-track', uploadLimiter, authMiddleware, upload.single('guideTrack'), uploadGuideTrack);
+router.post('/tracks/:id/guide-track', uploadLimiter, authMiddleware, (req, res, next) => {
+  const contentType = req.headers['content-type'];
+  if (contentType && contentType.includes('application/json')) {
+    // Handle JSON request (YouTube URL)
+    next();
+  } else {
+    // Handle file upload
+    upload.single('guideTrack')(req, res, next);
+  }
+}, uploadGuideTrack);
 router.get('/tracks/:id/guide-track/download', downloadLimiter, authMiddleware, downloadGuideTrack);
 router.delete('/tracks/:id/guide-track', authMiddleware, deleteGuideTrack);
 

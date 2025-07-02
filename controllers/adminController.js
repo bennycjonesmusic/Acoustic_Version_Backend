@@ -482,3 +482,17 @@ export const getDisputedCommissions = async (req, res) => {
     return res.status(500).json({ message: 'Failed to fetch disputed commissions', error: err.message });
   }
 };
+
+
+export const clearCancelledCommissions = async (req, res) => {
+try {
+  await CommissionRequest.deleteMany({ status: 'cancelled' });
+  return res.status(200).json({ message: 'Cancelled commissions cleared successfully.' });
+} catch(error){
+
+    console.error('Error clearing cancelled commissions:', error);
+    return res.status(500).json({ message: 'Failed to clear cancelled commissions', error: error.message });
+  }
+}
+
+

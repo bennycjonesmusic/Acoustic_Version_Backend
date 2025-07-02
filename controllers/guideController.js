@@ -15,14 +15,15 @@ import * as Filter from 'bad-words';
  */
 
 /**
- * Upload a guide track file for an existing backing track
- * @param {Express.Request & {userId: string, params: {id: string}, file: Express.Multer.File}} req - Express request with auth, track ID, and file
+ * Upload a guide track file or set a YouTube URL for an existing backing track
+ * @param {Express.Request & {userId: string, params: {id: string}, file?: Express.Multer.File, body: {youtubeUrl?: string}}} req - Express request with auth, track ID, and optional file or YouTube URL
  * @param {Express.Response} res - Express response
  * @returns {Promise<GuideTrackUploadResponse>} Promise resolving to API response with guide track URL
  */
 export const uploadGuideTrack = async (req, res) => {
     try {
         const trackId = req.params.id;
+        const { youtubeUrl } = req.body;
         const profanity = new Filter.Filter();
 
         // Validate track ID
@@ -30,33 +31,43 @@ export const uploadGuideTrack = async (req, res) => {
             return res.status(400).json({ message: "A valid Track ID is required." });
         }
 
-        // Check if file was uploaded
-        if (!req.file) {
-            return res.status(400).json({ message: 'No guide track file uploaded' });
-        }        // Validate file type (MP3 files only)
-        const allowedMimeTypes = [
-            'audio/mpeg', 'audio/mp3'
-        ];
-        
-        if (!allowedMimeTypes.includes(req.file.mimetype)) {
-            return res.status(400).json({ 
-                message: 'Invalid file type. Please upload an MP3 file only.' 
-            });
+        // Check if either file or YouTube URL is provided
+        if (!req.file && !youtubeUrl) {
+            return res.status(400).json({ message: 'Either a guide track file or YouTube URL is required' });
         }
 
-        // Check file size (max 50MB for guide tracks)
-        const maxFileSize = 50 * 1024 * 1024; // 50MB
-        if (req.file.size > maxFileSize) {
-            return res.status(400).json({ 
-                message: 'File too large. Guide tracks must be under 50MB.' 
-            });
+        // If both are provided, prioritize file upload
+        if (req.file && youtubeUrl) {
+            return res.status(400).json({ message: 'Please provide either a file or YouTube URL, not both' });
         }
 
-        // Profanity check on file name
-        if (profanity.isProfane(req.file.originalname)) {
-            return res.status(400).json({ 
-                message: "Please avoid using inappropriate language in the file name." 
-            });
+        // Only validate file properties if a file is provided
+        if (req.file) {
+            // Validate file type (MP3 files only)
+            const allowedMimeTypes = [
+                'audio/mpeg', 'audio/mp3'
+            ];
+            
+            if (!allowedMimeTypes.includes(req.file.mimetype)) {
+                return res.status(400).json({ 
+                    message: 'Invalid file type. Please upload an MP3 file only.' 
+                });
+            }
+
+            // Check file size (max 50MB for guide tracks)
+            const maxFileSize = 50 * 1024 * 1024; // 50MB
+            if (req.file.size > maxFileSize) {
+                return res.status(400).json({ 
+                    message: 'File too large. Guide tracks must be under 50MB.' 
+                });
+            }
+
+            // Profanity check on file name
+            if (profanity.isProfane(req.file.originalname)) {
+                return res.status(400).json({ 
+                    message: "Please avoid using inappropriate language in the file name." 
+                });
+            }
         }
 
         // Find the track
@@ -86,6 +97,44 @@ export const uploadGuideTrack = async (req, res) => {
             });
         }
 
+        // Handle YouTube URL case
+        if (youtubeUrl) {
+            // Validate YouTube URL format
+            const youtubeUrlPattern = /^(https?:\/\/)?(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/)[a-zA-Z0-9_-]{11}$/;
+            if (!youtubeUrlPattern.test(youtubeUrl)) {
+                return res.status(400).json({ 
+                    message: 'Invalid YouTube URL format.' 
+                });
+            }
+
+            // Profanity check on YouTube URL
+            if (profanity.isProfane(youtubeUrl)) {
+                return res.status(400).json({ 
+                    message: "Please avoid using inappropriate language in the YouTube URL." 
+                });
+            }
+
+            // Set YouTube URL as guide track
+            if ('guideTrackForSingerUrl' in track) {
+                track.guideTrackForSingerUrl = youtubeUrl;
+            } else if ('guideTrackUrl' in track) {
+                track.guideTrackUrl = youtubeUrl;
+            }
+            await track.save();
+
+            console.log('YouTube guide track set successfully:', {
+                trackId: track._id,
+                guideTrackUrl: youtubeUrl,
+                userId: req.userId
+            });
+
+            return res.status(200).json({ 
+                message: 'YouTube guide track set successfully!',
+                guideTrackUrl: youtubeUrl
+            });
+        }
+
+        // Handle file upload case (rest of the function is for file uploads only)
         // Try to import sanitizeFileName robustly (ESM compatible)
         let sanitizeFileName = (name) => {
             // fallback: remove unsafe chars, fallback to 'file.mp3' if empty

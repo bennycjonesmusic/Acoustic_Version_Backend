@@ -690,8 +690,9 @@ export const refundCommission = async (req, res) => {
                 await commission.save();
                 // Send notification to both artist and customer
                 const customerUsername = commission.customer?.username || 'the customer';
-                const message = `We have come to a conclusion and ${customerUsername} has been refunded. We have come to this conclusion after careful consideration of the dispute matter.`;
-                await createSystemNotification(commission.customer._id, 'Commission Refund', message);
+                const message2 = "We have issued you a refund! Please allow 3-5 business days for the funds to appear. We apologise that we did not meet your expectations at this time."
+                const message = `We have come to a conclusion and ${customerUsername} has been refunded. We have come to this decision after careful consideration of the dispute matter.`;
+                await createSystemNotification(commission.customer._id, 'Commission Refund', message2);
                 await createSystemNotification(commission.artist._id, 'Commission Refund', message);
                 return res.status(200).json({ success: true });
             } catch (err) {
