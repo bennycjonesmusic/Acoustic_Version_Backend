@@ -257,7 +257,7 @@ export const createWelcomeNotification = async (userId) => {
             userId: userId,
             type: 'welcome',
             title: 'Welcome to Acoustic Version!',
-            message: 'A home for Custom Made Acoustic Backing Tracks. Click "Shop" to get started. If you would like to learn more about our commission-a-musician service, please go to "About" and read the FAQ.',
+            message: 'A home for Custom Made Acoustic Backing Tracks. Click "Shop" to get started.',
             metadata: {
                 isWelcome: true,
                 priority: 'high'

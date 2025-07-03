@@ -744,8 +744,20 @@ export const upgradeToArtist = async (req, res) => {
 
     await user.save();
 
+    // Issue a new JWT token with the updated role so user doesn't need to log out/in
+    const newToken = jwt.sign(
+      { 
+        id: user._id, 
+        email: user.email, 
+        role: user.role 
+      }, 
+      process.env.JWT_SECRET, 
+      { expiresIn: '2h' }
+    );
+
     return res.status(200).json({ 
       message: 'User upgraded to artist role. Your profile is pending admin approval.', 
+      token: newToken, // Include new token in response
       user: {
         id: user._id,
         username: user.username,
