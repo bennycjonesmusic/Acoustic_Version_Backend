@@ -801,6 +801,9 @@ export const getTrack = async (req, res) => {
             return res.status(404).json({ message: 'Track not found' });
         }
 
+        // Debug: Log license fields
+        console.log('[getTrack] licenseStatus:', track.licenseStatus, 'licensedFrom:', track.licensedFrom);
+
         // Then try to populate - if it fails, return track without populated data
         try {
             await track.populate('user', 'avatar username');
@@ -817,7 +820,11 @@ export const getTrack = async (req, res) => {
         } catch (populateError) {
             console.error('Error populating track data:', populateError);
             // Continue with unpopulated track data
-        }        return res.status(200).json(track);
+        }
+        // Return both id and _id for maximum compatibility
+        const trackObj = track.toObject({ virtuals: true });
+        trackObj.id = trackObj._id?.toString();
+        return res.status(200).json(trackObj);
     } catch (error) {
         console.error('Error in getTrack:', error); // Log the actual error for debugging
         return res.status(500).json({ message: 'Internal server error' });

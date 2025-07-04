@@ -16,7 +16,7 @@ export const sendVerificationEmail = async (email, token) => {
 
   //temp email for testing
   const mailOptions = {
-    from: `"Your App Name" <${process.env.EMAIL_USER}>`,
+    from: `"Acousticversion" <${process.env.EMAIL_USER}>`,
     to: email,
     subject: 'Please verify your email',
     html: `
@@ -34,7 +34,7 @@ export const sendVerificationEmail = async (email, token) => {
 export const sendPasswordResetEmail = async (email, token) => {
   const resetUrl = `${process.env.BASE_URL}/reset-password?token=${token}`;
   const mailOptions = {
-    from: `"Your App Name" <${process.env.EMAIL_USER}>`,
+    from: `"Acousticversion" <${process.env.EMAIL_USER}>`,
     to: email,
     subject: 'Password Reset Request',
     html: `
@@ -69,7 +69,7 @@ export const sendPurchaseReceiptEmail = async (buyerEmail, track, artist, sessio
 
 export const sendSaleNotificationEmail = async (sellerEmail, track, buyer, session) => {
   const mailOptions = {
-    from: `"Backing Tracks" <${process.env.EMAIL_USER}>`,
+    from: `"Acousticversion" <${process.env.EMAIL_USER}>`,
     to: sellerEmail,
     subject: `You sold a track: ${track.title}`,
     html: `
@@ -85,7 +85,7 @@ export const sendSaleNotificationEmail = async (sellerEmail, track, buyer, sessi
 
 export const sendRefundNotificationEmail = async (email, trackId, refundStatus) => {
   const mailOptions = {
-    from: `"Backing Tracks" <${process.env.EMAIL_USER}>`,
+    from: `"Acousticversion" <${process.env.EMAIL_USER}>`,
     to: email,
     subject: 'Your track refund has been processed',
     text: `Your refund for track ID ${trackId} has been processed. If you have any questions, please contact support.\nStripe refund status: ${refundStatus}`

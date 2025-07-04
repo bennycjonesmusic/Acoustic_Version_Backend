@@ -362,7 +362,6 @@ backingTrackSchema.set('toJSON', {
       // Show less details if not admin or self (owner)
       if (viewerRole === 'public' || (!isAdmin && !isSelf)) {
         delete ret.downloadCount;
-        delete ret.licenseStatus;
         delete ret.analytics; // Hide analytics for public and non-owners
       }
       // Always include previewUrl in output

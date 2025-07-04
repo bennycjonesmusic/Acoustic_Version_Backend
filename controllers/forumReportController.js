@@ -150,15 +150,28 @@ export const getContactFormEntries = async (req, res) => {
     
     // Get entries with pagination
     const entries = await contactForm.find(filter)
-      .populate('reporter', 'username email')
+      .populate({
+        path: 'reporter',
+        select: 'username email',
+        model: 'User'
+      })
       .sort({ createdAt: -1 }) // Newest first
       .skip(skip)
       .limit(limitNum);
 
+    // For each entry, if reporter exists, set entry.email = reporter.email
+    const entriesWithUserEmail = entries.map(entry => {
+      const obj = entry.toObject();
+      if (obj.reporter && obj.reporter.email) {
+        obj.email = obj.reporter.email;
+      }
+      return obj;
+    });
+
     const totalPages = Math.ceil(totalEntries / limitNum);
 
     return res.status(200).json({
-      entries,
+      entries: entriesWithUserEmail,
       pagination: {
         currentPage: pageNum,
         totalPages,
