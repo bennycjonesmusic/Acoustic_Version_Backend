@@ -153,11 +153,11 @@ export const login = async (req, res) => {
         const { login, password } = req.body;
         // Only select needed fields, including approval and ban status
         const user = await User.findOne({$or: [{email: login}, {username: login}]})
-            .select('password role hasLoggedInBefore isBanned username hasBoughtCommission email profileStatus verified');
+            .select('password role hasLoggedInBefore banned username hasBoughtCommission email profileStatus verified');
         if (!user) {
             return res.status(400).json({ message: "Invalid username or password" });
         }
-        if (user.isBanned && user.isBanned()) {
+        if (user.banned) {
             return res.status(403).json({ message: "Your account has been banned. Please contact support." });
         }
         // TEST MODE: Automatically verify user for testing
@@ -200,14 +200,31 @@ export const login = async (req, res) => {
         }
         // Debug: log the user object after fetching
         console.log('Fetched user in login:', user);
+        console.log('User banned field details:', {
+            banned: user.banned,
+            bannedType: typeof user.banned,
+            bannedAsString: String(user.banned),
+            bannedAsBoolean: Boolean(user.banned),
+            bannedStrictCheck: user.banned === true,
+            bannedLooseCheck: user.banned == true
+        });
         await makeAdmin(req, res, async () => {
             const userId = user._id || user.id;
             const token = jwt.sign({ id: userId, email: user.email, role: user.role }, process.env.JWT_SECRET, { expiresIn: '2h' });
+            
+            // Debug: log what we're about to send in the response
+            console.log('About to send in response:', {
+                banned: user.banned,
+                bannedType: typeof user.banned,
+                hasBoughtCommission: user.hasBoughtCommission,
+                profileStatus: user.profileStatus
+            });
+            
             // Include hasBoughtCommission, isBanned, and profileStatus in the response
             res.status(200).json({
                 token,
                 hasBoughtCommission: user.hasBoughtCommission,
-                isBanned: !!user.isBanned,
+                banned: user.banned,
                 profileStatus: user.profileStatus,
                 message: "Logged in successfully!"
             });
@@ -804,6 +821,31 @@ export const resendVerificationEmail = async (req, res) => {
   }
 };
 
+export const getIdAndRole = async (req, res) => {
+
+  try {
+
+    const user = await User.findById(req.userId).select('_id id role');
+    return res.status(200).json({ 
+      userId: user._id || user.id, // Use _id or id field
+      role: user.role,
+      message: 'User ID and role retrieved successfully.'
+    })
+
+
+
+  } catch (error) {
+
+    return res.status(500).json({ message: 'Failed to get user ID and role.' });
+
+
+
+  }
+
+
+
+
+}
 
 
 

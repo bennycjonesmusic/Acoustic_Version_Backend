@@ -223,11 +223,6 @@ userSchema.pre('save', function(next) {
   next();
 });
 
-// Block banned users from logging in or performing actions
-userSchema.methods.isBanned = function() {
-  return !!this.banned;
-};
-
 // Method to calculate average track rating
 userSchema.methods.calculateAverageTrackRating = async function() {
   // Populate uploadedTracks with ratings

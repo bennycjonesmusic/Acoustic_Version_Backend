@@ -16,7 +16,8 @@ import {
     resetPassword,
     updateProfile,
     getUserRole,
-    upgradeToArtist
+    upgradeToArtist,
+    getIdAndRole
 } from '../controllers/authController.js';
 import { getArtistApprovalStatus, getArtistStripeStatus } from '../controllers/artistController.js';
 import { addToCart, removeFromCart, getCart, cleanCart } from '../controllers/cart.js';
@@ -91,6 +92,9 @@ router.post('/cart/clear', authMiddleware, async (req, res) => {
 
 // Get user commission bools (hasBoughtCommission)
 router.get('/user-bools', authMiddleware, getUserBools);
+
+// Get user ID and role
+router.get('/get-id-and-role', authMiddleware, getIdAndRole);
 
 export default router;
 
