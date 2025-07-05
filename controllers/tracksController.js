@@ -287,6 +287,12 @@ export const uploadTrack = async (req, res) => {
             previewUrl = null;
             res.locals.previewError = err && err.message ? err.message : 'Unknown error generating preview';        }
         // --- end preview logic ---
+
+        if (req.body.licenseStatus === "unlicensed"){
+
+
+            return res.status(403).json({ message: "You must have a valid license to upload tracks." });
+        }
         
         // Parse key signature if provided
         let keyData = {};
