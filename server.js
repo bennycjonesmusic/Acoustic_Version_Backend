@@ -205,7 +205,13 @@ app.use((req, res, next) => {
 
 //define the middleware. This will be used to parse the incoming requests. It allows frontend to communicate with the backend.
 app.use(cors({
-  origin: ['http://localhost:3002', 'http://localhost:3003', 'https://acoustic-version.com', 'https://www.acoustic-version.com'],
+  origin: [
+    'http://localhost:3002',
+    'http://localhost:3003',
+    'https://acoustic-version.com',
+    'https://www.acoustic-version.com',
+    'http://192.168.178.37:3002' // Added LAN frontend for mobile access
+  ],
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Cache-Control'],
   credentials: true // Allow cookies to be sent with requests
@@ -297,8 +303,8 @@ app.use((err, req, res, next) => {
 
 const port = 3000; //set the port. This will be the port that the server will listen on. Lovely job.
 
-const server = app.listen(port, () => {
-console.log(`Server is running on http://localhost:${port}`); //check the console to see if server is running
+const server = app.listen(port, '0.0.0.0', () => {
+  console.log(`Server is running on http://0.0.0.0:${port} (accessible on your LAN IP)`);
 });
 
 //make sure the server closes gracefully when the process is terminated
