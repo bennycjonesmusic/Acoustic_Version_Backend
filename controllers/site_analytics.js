@@ -8,8 +8,7 @@ export const trackSiteVisit = async (req, res) => {
     const ip = req.body?.ip || req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress;
     let pageUrl = req.body?.pageUrl || null;
     let unique = false;
-    console.log(`[trackSiteVisit] Incoming IP:`, ip, pageUrl ? `Page: ${pageUrl}` : '');
-    console.log('[DEBUG] req.body:', req.body, 'pageUrl:', req.body?.pageUrl);
+    
     // Normalize track detail pages to '/tracks' for analytics
     if (pageUrl && /^\/tracks\/[\w-]+$/.test(pageUrl)) {
       pageUrl = '/tracks';
@@ -20,9 +19,6 @@ export const trackSiteVisit = async (req, res) => {
       await IPAddress.create({ ip });
       await Website.updateOne({}, { $inc: { 'analytics.uniqueVisitors': 1 } });
       unique = true;
-      console.log(`[trackSiteVisit] New unique IP added:`, ip);
-    } else {
-      console.log(`[trackSiteVisit] IP already exists, not unique:`, ip);
     }
     // Always increment totalHits and update lastHitAt
     await Website.updateOne(
@@ -33,28 +29,38 @@ export const trackSiteVisit = async (req, res) => {
       },
       { upsert: true }
     );
-    // Increment weeklyHits for the current week
-    const now = new Date();
-    const weekStart = new Date(now);
-    weekStart.setUTCHours(0, 0, 0, 0);
-    weekStart.setUTCDate(weekStart.getUTCDate() - weekStart.getUTCDay()); // Sunday as start of week
-    await Website.updateOne(
-      {
-        'analytics.weeklyHits.weekStart': weekStart
-      },
-      {
-        $inc: { 'analytics.weeklyHits.$.count': 1 }
+
+    // --- 30-day daily hits logic ---
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0); // Midnight UTC
+    const website = await Website.findOne();
+    if (website) {
+      let { dailyHitsLast30 = [], dailyHitsLast30Dates = [] } = website.analytics;
+      if (dailyHitsLast30.length === 0 || dailyHitsLast30Dates.length === 0) {
+        // Initialize
+        dailyHitsLast30 = [1];
+        dailyHitsLast30Dates = [today];
+      } else {
+        const lastDate = new Date(dailyHitsLast30Dates[dailyHitsLast30Dates.length - 1]);
+        lastDate.setUTCHours(0, 0, 0, 0);
+        if (today.getTime() === lastDate.getTime()) {
+          // Same day, increment last value
+          dailyHitsLast30[dailyHitsLast30.length - 1] += 1;
+        } else {
+          // New day
+          dailyHitsLast30.push(1);
+          dailyHitsLast30Dates.push(today);
+          if (dailyHitsLast30.length > 30) {
+            dailyHitsLast30.shift();
+            dailyHitsLast30Dates.shift();
+          }
+        }
       }
-    );
-    // If no entry for this week, push a new one
-    await Website.updateOne(
-      {
-        'analytics.weeklyHits.weekStart': { $ne: weekStart }
-      },
-      {
-        $push: { 'analytics.weeklyHits': { weekStart, count: 1 } }
-      }
-    );
+      // Save back to DB
+      website.analytics.dailyHitsLast30 = dailyHitsLast30;
+      website.analytics.dailyHitsLast30Dates = dailyHitsLast30Dates;
+      await website.save();
+    }
     // Optionally log or store the pageUrl for analytics
     if (pageUrl) {
       await Website.updateOne(
@@ -135,7 +141,7 @@ export const getUserTotalHits = async (req, res) => {
       select: 'analytics',
       model: 'BackingTrack',
     });
-    console.log('Populated user.uploadedTracks:', user.uploadedTracks);
+    
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
@@ -229,3 +235,76 @@ export const getUserTrackWeeklyHits = async (req, res) => {
     return res.status(500).json({ error: 'Internal server error' });
   }
 };
+
+// Controller to get last 30 days daily site hits
+export const getDailyHitsLast30 = async (req, res) => {
+  try {
+    const website = await Website.findOne();
+    if (!website || !website.analytics || !website.analytics.dailyHitsLast30) {
+      return res.status(200).json({ dailyHits: [] });
+    }
+    // Optionally include dates for graphing
+    return res.status(200).json({
+      dailyHits: website.analytics.dailyHitsLast30,
+      dates: website.analytics.dailyHitsLast30Dates
+    });
+  } catch (error) {
+    console.error('Error getting last 30 days daily hits:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+
+export const getMostVisitedTrack = async (req, res) => {
+  try {
+    // Only select the fields needed for analytics and uploader
+    const track = await BackingTrack.findOne({ 'analytics.totalHits': { $gt: 0 } })
+      .sort({ 'analytics.totalHits': -1 })
+      .select('title analytics user')
+      .populate({ path: 'user', select: 'username email _id' });
+    if (!track) {
+      return res.status(404).json({ message: 'No tracks found' });
+    }
+    // Return only the minimal info needed
+    return res.status(200).json({
+      id: track._id,
+      title: track.title,
+      totalHits: track.analytics?.totalHits || 0,
+      uploader: track.user ? {
+        id: track.user._id,
+        username: track.user.username,
+        email: track.user.email
+      } : null
+    });
+  } catch (error) {
+    console.error('Error getting most visited track:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+export const getLeastVisitedTrack = async (req, res) => {
+  try {
+    // Only select the fields needed for analytics and uploader
+    const track = await BackingTrack.findOne({ 'analytics.totalHits': { $gt: 0 } })
+      .sort({ 'analytics.totalHits': 1 })
+      .select('title analytics user')
+      .populate({ path: 'user', select: 'username email _id' });
+    if (!track) {
+      return res.status(404).json({ message: 'No tracks found' });
+    }
+    // Return only the minimal info needed
+    return res.status(200).json({
+      id: track._id,
+      title: track.title,
+      totalHits: track.analytics?.totalHits || 0,
+      uploader: track.user ? {
+        id: track.user._id,
+        username: track.user.username,
+        email: track.user.email
+      } : null
+    });
+  } catch (error) {
+    console.error('Error getting least visited track:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+}

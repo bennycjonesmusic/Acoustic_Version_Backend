@@ -86,13 +86,6 @@ export const createContactFormEntry = async (req, res) => {
       }
     }
 
-    console.log('Contact form entry created:', { 
-      id: newEntry._id, 
-      type: newEntry.type, 
-      email: newEntry.email,
-      hasReporter: !!reporter 
-    });
-    
     return res.status(201).json({ 
       message: 'Contact form submitted successfully. We will review your message and get back to you soon.',
       success: true
@@ -200,16 +193,30 @@ export const getContactFormEntries = async (req, res) => {
  * @param {string} id - Contact form entry ID
  * @body {string} status - New status value: open, in_progress, resolved, closed
  * @returns {Object} Updated contact form entry
+ * 
+ * 
+ *
  */
+
+
+export const clearReviewedContactFormEntries = async (req, res) => {
+  try {
+    await contactForm.deleteMany({ status: 'resolved' });
+    return res.status(200).json({ message: "Reviewed contact form entries cleared successfully." });
+  } catch (error) {
+
+
+
+    console.error('Error clearing reviewed contact form entries:', error);
+   return res.status(500).json({ message: "Failed to clear reviewed contact form entries."});
+    }
+};
 export const updateContactFormEntry = async (req, res) => {
     try {
         const { id } = req.params;
         const { status } = req.body;
         
-        console.log('[DEBUG] PATCH /report/:id', { id, status, body: req.body });
-        
         if (!['open', 'in_progress', 'resolved', 'closed'].includes(status)) {
-            console.log('[DEBUG] Invalid status value:', status);
             return res.status(400).json({ message: 'Invalid status value. Must be one of: open, in_progress, resolved, closed.' });
         }
         
@@ -220,21 +227,18 @@ export const updateContactFormEntry = async (req, res) => {
         ).populate('reporter', 'username email');
         
         if (!entry) {
-            console.log('[DEBUG] Contact form entry not found for id:', id);
             return res.status(404).json({ message: 'Contact form entry not found.' });
         }
         
         // If status is closed, delete the entry
         if (status === 'closed') {
             await contactForm.findByIdAndDelete(id);
-            console.log('[DEBUG] Contact form entry closed and removed:', id);
             return res.status(200).json({ 
                 message: 'Contact form entry closed and removed successfully.',
                 success: true
             });
         }
         
-        console.log('[DEBUG] Contact form entry updated:', entry);
         return res.status(200).json({ 
             message: 'Contact form entry updated successfully.', 
             entry,
@@ -290,7 +294,6 @@ export const deleteContactFormEntry = async (req, res) => {
       return res.status(404).json({ message: 'Contact form entry not found.' });
     }
     
-    console.log('[DEBUG] Contact form entry deleted:', id);
     return res.status(200).json({ 
       message: 'Contact form entry deleted successfully.',
       success: true

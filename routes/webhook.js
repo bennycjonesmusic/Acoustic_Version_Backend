@@ -4,6 +4,7 @@ import User from '../models/User.js';
 import BackingTrack from '../models/backing_track.js';
 import { sendPurchaseReceiptEmail, sendSaleNotificationEmail } from '../utils/emailAuthentication.js';
 import { createCommissionRequestNotification, createTrackPurchaseNotification } from '../utils/notificationHelpers.js';
+import { logError } from '../utils/errorLogger.js';
 import fs from 'fs';
 import dotenv from 'dotenv';
 import { stripeWebhookHealth } from '../controllers/commissionControl.js';
@@ -21,6 +22,11 @@ async function triggerFastPayout() {
       console.log('[FAST PAYOUT] Triggered payout completed');
     } catch (error) {
       console.error('[FAST PAYOUT] Error in triggered payout:', error);
+      await logError({
+        message: 'Fast payout failed after cart purchase',
+        stack: error.stack,
+        errorType: 'stripe_payout'
+      });
     }
   }, 30000); // 30 seconds
 }
@@ -49,6 +55,15 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
     console.log('Webhook event received:', event.type);
   } catch (err) {
     console.error('Webhook signature verification failed:', err.message);
+    
+    // Log webhook verification failure
+    await logError({
+      message: `Stripe webhook signature verification failed: ${err.message}`,
+      stack: err.stack,
+      errorType: 'stripe_webhook',
+      stripeEventType: 'signature_verification_failed'
+    }, req, 400);
+    
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
@@ -146,6 +161,11 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
             await triggerFastPayout();
           } catch (error) {
             console.error('[FAST PAYOUT] Error triggering fast payout:', error);
+            await logError({
+              message: 'Failed to trigger fast payout after cart purchase',
+              stack: error.stack,
+              errorType: 'stripe_payout'
+            });
           }
         } else {
           console.log('[PAYOUT] Cart purchase completed - payouts will be processed by hourly cron job');
@@ -265,6 +285,14 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
         }
       } catch (err) {
         console.error('Error handling commission payment:', err);
+        
+        // Log commission payment error
+        await logError({
+          message: `Commission payment webhook failed: ${err.message}`,
+          stack: err.stack,
+          errorType: 'stripe_webhook',
+          stripeEventType: 'commission_payment_failed'
+        }, req, 500);
       }
     }
     // Handle subscription upgrade

@@ -12,6 +12,7 @@ import {
     createCommissionCompletedNotification,
     createSystemNotification
 } from '../utils/notificationHelpers.js';
+import { logError } from '../utils/errorLogger.js';
 import { S3Client } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
 import path from 'path';
@@ -228,6 +229,14 @@ export const createCommissionRequest = async (req, res) => {
     }
     catch(error){
         console.error('[createCommissionRequest] Error creating commission request:', error, error.errors);
+        
+        // Log commission creation error
+        await logError({
+            message: `Commission request creation failed: ${error.message}`,
+            stack: error.stack,
+            errorType: 'general'
+        }, req, 500);
+        
         return res.status(500).json({ error: "Internal server error" });
     }
 
@@ -316,6 +325,14 @@ export const approveCommissionAndPayout = async (req, res) => {
 
     } catch (error) {
         console.error('Error approving commission:', error);
+        
+        // Log commission approval error
+        await logError({
+            message: `Commission approval failed: ${error.message}`,
+            stack: error.stack,
+            errorType: 'general'
+        }, req, 500);
+        
         return res.status(500).json({ error: 'Internal server error' });
     }
 };
@@ -458,6 +475,14 @@ export const processExpiredCommissionsStandalone = async () => {
         return results;
     } catch (error) {
         console.error('[CRON] Error processing expired commissions:', error);
+        
+        // Log expired commission processing error
+        await logError({
+            message: `Expired commission processing failed: ${error.message}`,
+            stack: error.stack,
+            errorType: 'general'
+        });
+        
         throw error;
     }
 };

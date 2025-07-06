@@ -2,6 +2,7 @@ import { Router } from 'express';
 import authMiddleware from '../middleware/customer_auth.js';
 import isAdmin from '../middleware/Admin.js';
 import { clearS3, deleteAllUsers, getUsers, banUser, unbanUser, getAllSalesAndRefunds, getSalesStatsAndCsv, getAllArtistsForApproval, approveArtist, rejectArtist, deleteUserByEmail, getWebsiteAnalytics, getDisputedCommissions, clearCancelledCommissions } from '../controllers/adminController.js';
+import { getRecentErrors, getErrorStats } from '../utils/errorLogger.js';
 import { refundCommission } from '../controllers/commissionControl.js';
 
 const router = Router();
@@ -26,5 +27,27 @@ router.delete('/clear-cancelled-commissions', authMiddleware, isAdmin, clearCanc
 // Admin-only: Issue a refund for a commission (for admin dashboard proxy)
 router.post('/refund-commission', authMiddleware, isAdmin, refundCommission);
 
+// Admin-only: Get recent errors for monitoring
+router.get('/errors', authMiddleware, isAdmin, async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 50;
+    const errors = await getRecentErrors(limit);
+    res.status(200).json({ errors, success: true });
+  } catch (error) {
+    console.error('Error fetching recent errors:', error);
+    res.status(500).json({ message: 'Failed to fetch errors', success: false });
+  }
+});
+
+// Admin-only: Get error statistics
+router.get('/error-stats', authMiddleware, isAdmin, async (req, res) => {
+  try {
+    const stats = await getErrorStats();
+    res.status(200).json({ stats, success: true });
+  } catch (error) {
+    console.error('Error fetching error statistics:', error);
+    res.status(500).json({ message: 'Failed to fetch error statistics', success: false });
+  }
+});
 
 export default router;

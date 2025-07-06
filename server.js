@@ -35,6 +35,7 @@ import stripeReconcileRouter from './routes/stripe_reconcile.js'; // Import the 
 import flagsRoutes from './routes/flags.js'; // Import flagging routes
 import licenseRoutes from './routes/license.js'; // Import license routes
 import analyticsRoutes from './routes/analytics.js'; // Import analytics routes
+import { logError } from './utils/errorLogger.js'; // Import error logging utility
 
 // Handle uncaught exceptions and unhandled promise rejections
 process.on('uncaughtException', (err) => {
@@ -186,15 +187,19 @@ mongoose.connect(process.env.MONGODB_URI)
     console.error('Error running initial admin update:', error);
   }
     })
-    .catch((error) => {
+    .catch(async (error) => {
         console.error('Error connecting to MongoDB:', error);
+        
+        // Log database connection error
+        await logError({
+            message: `MongoDB connection failed: ${error.message}`,
+            stack: error.stack,
+            errorType: 'database'
+        });
     });
 const app = express();
 
-app.use((req, res, next) => {
-  console.log('[GLOBAL DEBUG]', req.method, req.url);
-  next();
-});
+// Global request logging removed for production
 
 
 //const cors = require('cors');
@@ -216,7 +221,6 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Cache-Control'],
   credentials: true // Allow cookies to be sent with requests
 }));
-console.log('[SERVER DEBUG] Importing and registering /webhook route');
 // Register the webhook route BEFORE any body parsers!
 app.use('/webhook/stripe', webhookRoutes); // <-- Change to match Stripe CLI forwarding
 app.use(express.json());
@@ -232,7 +236,7 @@ const globalLimiter = process.env.NODE_ENV === 'test'
   ? (req, res, next) => next() // No-op in test mode
   : rateLimit({
       windowMs: 15 * 60 * 1000, // 15 minutes
-      max: 100, // limit each IP to 100 requests per windowMs
+      max: 500, // limit each IP to 500 requests per windowMs
       standardHeaders: true,
       legacyHeaders: false,
       message: { message: 'Too many requests, please try again later.' }
@@ -280,20 +284,28 @@ const swaggerDocument = YAML.load('./openapi.yaml');
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 // Global error handler - MUST be the last middleware before starting the server
-app.use((err, req, res, next) => {
+app.use(async (err, req, res, next) => {
   const timestamp = new Date().toISOString();
+  const statusCode = err.status || 500;
+  
   console.error(`[GLOBAL ERROR HANDLER] [${timestamp}] ${req.method} ${req.url}`);
   
-  // Log the error details
+  // Log the error details to console
   if (err && err.stack) {
     console.error('Stack:', err.stack);
   } else {
     console.error('Error object:', err);
   }
   
+  // Log error to database for tracking
+  await logError({
+    message: err.message || 'Unknown error',
+    stack: err.stack
+  }, req, statusCode);
+  
   // Ensure we always send a JSON response, never binary data
   if (!res.headersSent) {
-    res.status(err.status || 500).json({ 
+    res.status(statusCode).json({ 
       error: 'Internal server error',
       message: err.message || 'An unexpected error occurred',
       timestamp: timestamp

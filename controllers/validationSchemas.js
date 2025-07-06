@@ -2,31 +2,46 @@ import Joi from 'joi'; //joi is used for input validation apparently.
 
 const isTestEnv = process.env.NODE_ENV === 'test';
 
+// Enhanced string validation with HTML/XSS protection
+const safeStringSchema = (min = 1, max = 100) => 
+  Joi.string()
+    .min(min)
+    .max(max)
+    .pattern(/^[^<>'"&]*$/, 'safe characters') // Block basic HTML/XSS chars
+    .trim();
+
+const safeOptionalStringSchema = (max = 500) => 
+  Joi.string()
+    .max(max)
+    .pattern(/^[^<>'"&]*$/, 'safe characters')
+    .allow('')
+    .trim()
+    .optional();
+
 export const uploadTrackSchema = Joi.object({
-  title: Joi.string().min(1).max(100).required(),
-  description: Joi.string().max(500).required(),
-  price: Joi.number().min(0).required(),
-  originalArtist: Joi.string().min(1).max(100).required(),
+  title: safeStringSchema(1, 100).required(),
+  description: safeStringSchema(1, 500).required(),
+  price: Joi.number().min(0).max(999999).required(), // Add reasonable max price
+  originalArtist: safeStringSchema(1, 100).required(),
   type: Joi.string().valid('Backing Track', 'Jam Track', 'Acoustic Instrumental Version').required(),  backingTrackType: Joi.string().valid('Acoustic Guitar', 'Piano', 'Full Arrangement Track', 'Other').required(),
   genre: Joi.string().valid('Pop', 'Rock', 'Folk', 'Jazz', 'Classical', 'Musical Theatre', 'Country', 'Other').optional(),
   vocalRange: Joi.string().valid('Soprano', 'Mezzo-Soprano', 'Contralto', 'Countertenor', 'Tenor', 'Baritone', 'Bass').optional(),
-  keySignature: Joi.string().allow('').optional(), // Optional key signature (e.g., "C", "Dm", "F#", "Bb")
-  instructions: Joi.string().max(1000).allow('').optional(),
-  youtubeGuideUrl: Joi.string().uri().allow('').optional(),
-  guideTrackUrl: Joi.string().uri().allow('').optional(),
+  keySignature: safeOptionalStringSchema(10), // Key signatures are short
+  instructions: safeOptionalStringSchema(1000),
+  youtubeGuideUrl: Joi.string().uri().max(500).allow('').optional(),
+  guideTrackUrl: Joi.string().uri().max(500).allow('').optional(),
   licenseStatus: Joi.string().valid('unlicensed', 'licensed', 'not_required').default('not_required').optional(),
   licensedFrom: Joi.when('licenseStatus', {
     is: 'licensed',
-    then: Joi.string().trim().min(1).required().messages({
+    then: safeStringSchema(1, 200).required().messages({
       'string.empty': 'Licensed from must be a non-empty string when licenseStatus is "licensed".',
       'any.required': 'Licensed from must be a non-empty string when licenseStatus is "licensed".'
     }),
-    otherwise: Joi.string().allow('').optional()
+    otherwise: safeOptionalStringSchema(200)
   }),
   isHigher: Joi.boolean().optional(),
   isLower: Joi.boolean().optional(),
-  // key: Joi.string().valid('A', 'B', 'C', 'D', 'E', 'F', 'G').optional(),
-  licenseDocumentUrl: Joi.string().uri().allow('').optional(),
+  licenseDocumentUrl: Joi.string().uri().max(500).allow('').optional(),
 });
 
 export const editTrackSchema = Joi.object({

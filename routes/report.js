@@ -5,7 +5,8 @@ import {
   getContactFormEntry,
   updateContactFormEntry,
   deleteContactFormEntry,
-  getContactFormStats
+  getContactFormStats,
+  clearReviewedContactFormEntries
 } from '../controllers/forumReportController.js';
 import authMiddleware from '../middleware/customer_auth.js';
 import publicAuth from '../middleware/public_auth.js';
@@ -21,6 +22,9 @@ router.get('/stats', authMiddleware, IsAdmin, getContactFormStats);
 
 // Admin: get all contact form entries (with pagination and filtering)
 router.get('/', authMiddleware, IsAdmin, getContactFormEntries);
+
+// Admin: clear all reviewed (resolved) contact form entries
+router.delete('/clear-reviewed', authMiddleware, IsAdmin, clearReviewedContactFormEntries);
 
 // Admin: get specific contact form entry by ID
 router.get('/:id', authMiddleware, IsAdmin, getContactFormEntry);

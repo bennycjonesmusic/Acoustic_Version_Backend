@@ -361,5 +361,31 @@ userSchema.set('toJSON', {
 userSchema.index({username: "text"}); //add index to search for username
 userSchema.index({ email: 1 }, { unique: true }); // Ensure fast lookups and uniqueness for email
 
+// Additional production indexes for optimal performance
+userSchema.index({ stripeAccountId: 1 }); // Fast Stripe account lookups
+userSchema.index({ 
+  username: 1, 
+  email: 1, 
+  'profile.artistName': 1 
+}, { name: 'user_search_compound' }); // Compound search index
+userSchema.index({ 
+  stripeAccountId: 1, 
+  stripePayoutsEnabled: 1 
+}, { name: 'stripe_payout_compound' }); // Payout processing optimization
+
+// Specialized index for money owed processing (partial index for efficiency)
+userSchema.index({ 
+  'moneyOwed.0': 1, 
+  stripeAccountId: 1, 
+  stripePayoutsEnabled: 1 
+}, { 
+  name: 'money_owed_processing',
+  partialFilterExpression: { 
+    'moneyOwed.0': { $exists: true },
+    stripeAccountId: { $exists: true, $ne: null },
+    stripePayoutsEnabled: true
+  }
+});
+
 const User = mongoose.model('User', userSchema);
 export default User;

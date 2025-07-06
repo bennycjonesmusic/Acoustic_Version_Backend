@@ -64,5 +64,25 @@ commissionRequestSchema.post('save', async function(doc) {
 commissionRequestSchema.index({ customer: 1 }); // Fast lookup of commissions by customer
 commissionRequestSchema.index({ artist: 1 });   // Fast lookup of commissions by artist
 
+// Production performance indexes
+commissionRequestSchema.index({ 
+  artist: 1, 
+  status: 1, 
+  createdAt: -1 
+}, { name: 'artist_commissions_compound' }); // Artist dashboard optimization
+commissionRequestSchema.index({ 
+  customer: 1, 
+  status: 1, 
+  createdAt: -1 
+}, { name: 'customer_commissions_compound' }); // Customer dashboard optimization
+commissionRequestSchema.index({ 
+  status: 1, 
+  createdAt: -1 
+}, { name: 'status_commissions_compound' }); // Admin/status filtering
+commissionRequestSchema.index({ 
+  status: 1, 
+  expiryDate: 1 
+}, { name: 'commission_deadline_check' }); // Cron job optimization for deadline checks
+
 const CommissionRequest = mongoose.model('CommissionRequest', commissionRequestSchema);
 export default CommissionRequest;

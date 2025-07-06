@@ -15,18 +15,19 @@ import crypto from 'crypto';
 import adminEmails from '../utils/admins.js';
 import makeAdmin from '../middleware/make_admin.js';
 import { sanitizeFileName } from '../utils/regexSanitizer.js';
+import { logError } from '../utils/errorLogger.js'; // Import error logging
 
 //Create...
 export const register = async (req, res) => {
-    // Debug: log what is received for avatar upload
-    console.log('REGISTER DEBUG:', {
-      file: req.file,
-      bodyAvatar: req.body.avatar,
-      body: req.body
-    });
     // Validate input using Joi schema
     const { error } = registerSchema.validate(req.body);
     if (error) {
+        // Log validation error
+        await logError({
+            message: `Registration validation failed: ${error.details[0].message}`,
+            errorType: 'validation'
+        }, req, 400);
+        
         return res.status(400).json({ message: error.details[0].message });
     }
     try {
@@ -138,6 +139,13 @@ export const register = async (req, res) => {
         res.status(201).json({ message: "User has been registered!" });
     } catch (error) {
         console.error('Error checking for existing user:', error);
+        
+        // Log error to database
+        await logError({
+            message: 'User registration failed',
+            stack: error.stack
+        }, req, 500);
+        
         return res.status(500).json({ message: "Internal server error" });
     }
 };
@@ -198,27 +206,9 @@ export const login = async (req, res) => {
                 console.error('Error creating welcome notification:', notifError);
             }
         }
-        // Debug: log the user object after fetching
-        console.log('Fetched user in login:', user);
-        console.log('User banned field details:', {
-            banned: user.banned,
-            bannedType: typeof user.banned,
-            bannedAsString: String(user.banned),
-            bannedAsBoolean: Boolean(user.banned),
-            bannedStrictCheck: user.banned === true,
-            bannedLooseCheck: user.banned == true
-        });
         await makeAdmin(req, res, async () => {
             const userId = user._id || user.id;
             const token = jwt.sign({ id: userId, email: user.email, role: user.role }, process.env.JWT_SECRET, { expiresIn: '2h' });
-            
-            // Debug: log what we're about to send in the response
-            console.log('About to send in response:', {
-                banned: user.banned,
-                bannedType: typeof user.banned,
-                hasBoughtCommission: user.hasBoughtCommission,
-                profileStatus: user.profileStatus
-            });
             
             // Include hasBoughtCommission, isBanned, and profileStatus in the response
             res.status(200).json({
@@ -231,6 +221,13 @@ export const login = async (req, res) => {
         });
     } catch (error) {
         console.error('Error logging in:', error);
+        
+        // Log error to database
+        await logError({
+            message: 'User login failed',
+            stack: error.stack
+        }, req, 500);
+        
         res.status(500).json({ message: "Internal server error" });
     }
 };
@@ -528,6 +525,14 @@ export const resetPassword = async (req, res) => {
   try {
     const { token, newPassword } = req.body;
     if (!token || !newPassword) return res.status(400).json({ message: 'Token and new password are required.' });
+    // Joi validation for password (same as register)
+    const { error } = registerSchema.extract('password').validate(newPassword);
+    if (error) return res.status(400).json({ message: error.details[0].message });
+    // zxcvbn password strength check
+    const passwordStrength = zxcvbn(newPassword);
+    if (passwordStrength.score < 3) {
+      return res.status(400).json({ message: 'Password is too weak. Needs more power.' });
+    }
     const user = await User.findOne({ passwordResetToken: token, passwordResetExpires: { $gt: Date.now() } });
     if (!user) return res.status(400).json({ message: 'Invalid or expired token.' });
     // Validate password strength if needed

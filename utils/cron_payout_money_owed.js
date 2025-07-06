@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import stripe from 'stripe';
 import User from '../models/User.js';
 import CommissionRequest from '../models/CommissionRequest.js';
+import { logError } from './errorLogger.js';
 
 dotenv.config();
 
@@ -53,10 +54,11 @@ async function processPayouts() {
     // Note: When called from server.js, we use the existing DB connection
     // Only connect if this script is run standalone
     
-    // Find all users with money owed who have valid Stripe accounts
+    // Find all users with money owed who have valid Stripe accounts and are NOT the platform account
+    const platformStripeAccountId = process.env.PLATFORM_STRIPE_ACCOUNT_ID;
     const usersWithMoneyOwed = await User.find({
       'moneyOwed.0': { $exists: true }, // Has at least one money owed entry
-      stripeAccountId: { $exists: true, $ne: null },
+      stripeAccountId: { $exists: true, $ne: null, $ne: platformStripeAccountId },
       stripePayoutsEnabled: true
     });
 
@@ -193,6 +195,13 @@ async function processPayouts() {
           console.error(`[CRON PAYOUT] ❌ Failed to transfer £${owed.amount} to ${user.email}:`, error.message);
           console.error(`[CRON PAYOUT] Reference: ${owed.reference}`);
 
+          // Log individual payout failure
+          await logError({
+            message: `Individual payout failed: £${owed.amount} to ${user.email} - ${error.message}`,
+            stack: error.stack,
+            errorType: 'stripe_payment'
+          });
+
           totalFailed++;
 
           // Keep this entry for next retry
@@ -222,6 +231,13 @@ async function processPayouts() {
 
   } catch (error) {
     console.error('[CRON PAYOUT] Error in payout process:', error);
+    
+    // Log payout process error
+    await logError({
+      message: `Payout process failed: ${error.message}`,
+      stack: error.stack,
+      errorType: 'stripe_payment'
+    });
   }
 }
 

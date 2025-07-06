@@ -44,9 +44,33 @@ const websiteSchema = new mongoose.Schema({
     lastHitAt: { type: Date },
     pageHits: { type: Map, of: Number, default: {} }, // Track hits per page URL
     weeklyHits: { type: [ { weekStart: Date, count: Number } ], default: [] }, // Track total hits per week
+    dailyHitsLast30: { type: [Number], default: [] }, // Array of 30 daily hit counts
+    dailyHitsLast30Dates: { type: [Date], default: [] }, // Array of 30 dates (midnight UTC)
   },
+  // Error tracking with 7-day rolling window
+  errors: [
+    {
+      message: { type: String, required: true },
+      stack: { type: String },
+      endpoint: { type: String }, // Which API endpoint
+      method: { type: String }, // HTTP method (GET, POST, etc.)
+      userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // User who experienced the error (if authenticated)
+      userEmail: { type: String }, // Email if available
+      ip: { type: String }, // IP address
+      userAgent: { type: String }, // Browser/client info
+      statusCode: { type: Number }, // HTTP status code
+      requestBody: { type: mongoose.Schema.Types.Mixed }, // Sanitized request data
+      errorType: { type: String, enum: ['general', 'stripe_webhook', 'stripe_payment', 'auth', 'database', 'validation'], default: 'general' }, // Error category
+      stripeEventType: { type: String }, // For Stripe webhook errors
+      timestamp: { type: Date, default: Date.now, expires: 604800 } // Expires after 7 days (604800 seconds)
+    }
+  ],
   // You can add more global site data here as needed
 });
+
+// Production performance indexes for error tracking
+websiteSchema.index({ 'errors.timestamp': -1 }); // Error log queries by date
+websiteSchema.index({ 'errors.errorType': 1, 'errors.timestamp': -1 }); // Error filtering by type and date
 
 const Website = mongoose.model('Website', websiteSchema);
 export default Website;

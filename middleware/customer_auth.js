@@ -1,4 +1,5 @@
-import jwt from 'jsonwebtoken'; 
+import jwt from 'jsonwebtoken';
+import { logError } from '../utils/errorLogger.js'; // Import error logging 
 import dotenv from 'dotenv';
 
 // Middleware is a function that has access to the request (req), response (res), and next().
@@ -6,7 +7,7 @@ import dotenv from 'dotenv';
 // and either respond to the client or pass control to the next middleware or route handler.
 
    
-const authMiddleware = (req, res, next) => {
+const authMiddleware = async (req, res, next) => {
     const authHeader = req.header('Authorization'); //pull http header from the request. 
     console.log('[authMiddleware] Authorization header:', authHeader);
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -28,8 +29,14 @@ const authMiddleware = (req, res, next) => {
         console.log('[authMiddleware] Token valid, userId:', req.userId);
         next(); //call the next middleware function. 
     } catch (error) {
+        // Log authentication failure
+        await logError({
+            message: `Authentication failed: ${error.message}`,
+            stack: error.stack,
+            errorType: 'authentication'
+        }, req, 401);
 
-            //If token is invalid, return 401.;
+        //If token is invalid, return 401.;
         console.error('[authMiddleware] Invalid token', error);
         return res.status(401).json({message: "Invalid token."});
     }

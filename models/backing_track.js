@@ -392,6 +392,37 @@ backingTrackSchema.set('toJSON', {
 backingTrackSchema.index({ user: 1 }); // Fast lookup of tracks by artist/owner
 backingTrackSchema.index({ title: 'text' }); // Already present for text search
 
+// Production performance indexes
+backingTrackSchema.index({ 
+  'tags.key': 1, 
+  'tags.tempo': 1, 
+  'tags.genre': 1 
+}, { name: 'search_filters_compound' }); // Main search/filter optimization
+backingTrackSchema.index({ 
+  user: 1, 
+  approved: 1, 
+  createdAt: -1 
+}, { name: 'artist_tracks_compound' }); // Artist dashboard queries
+backingTrackSchema.index({ 
+  approved: 1, 
+  createdAt: -1 
+}, { name: 'approved_tracks_recent' }); // Homepage recent tracks
+
+// Advanced search compound index
+backingTrackSchema.index({ 
+  approved: 1, 
+  'tags.key': 1, 
+  'tags.tempo': 1, 
+  'tags.genre': 1, 
+  'tags.timeSignature': 1 
+}, { name: 'advanced_search_compound' });
+
+// Text search index for track names and descriptions
+backingTrackSchema.index({ 
+  title: 'text', 
+  description: 'text' 
+}, { name: 'track_text_search' });
+
 // Pre-validate hook to set customerPrice
 backingTrackSchema.pre('validate', async function(next) {
   // Dynamically set customerPrice as price + commission (rounded to 2 decimals)

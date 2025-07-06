@@ -9,19 +9,12 @@ function isValidObjectId(id) {
 
 export const addToCart = async (req, res) => {
     try {
-        console.log('🛒 addToCart: Request received');
-        console.log('🛒 addToCart: req.userId:', req.userId);
-        console.log('🛒 addToCart: req.body:', req.body);
-        
         const { trackId } = req.body;
         
         // 🔒 Security: Validate trackId format
         if (!trackId || !isValidObjectId(trackId)) {
-            console.log('🛒 addToCart: Invalid track ID:', trackId);
             return res.status(400).json({ message: "Invalid track ID" });
         }
-        
-        console.log('🛒 addToCart: Looking for user with ID:', req.userId);
         
         // 🔒 Security: Check if user exists
         const user = await User.findById(req.userId);
@@ -45,7 +38,6 @@ export const addToCart = async (req, res) => {
         
         // 🔒 Security: Prevent users from adding their own tracks to cart
         if (track.user.toString() === req.userId.toString()) {
-            console.log('🛒 addToCart: User trying to add their own track');
             return res.status(400).json({ message: "You cannot add your own track to cart" });
         }
         
@@ -54,24 +46,15 @@ export const addToCart = async (req, res) => {
             purchase.track && purchase.track.toString() === trackId && !purchase.refunded
         );
         if (alreadyPurchased) {
-            console.log('🛒 addToCart: User has already purchased this track');
             return res.status(400).json({ message: "You have already purchased this track" });
         }
 
-
-        
-        console.log('🛒 addToCart: Current cart items:', user.cart.length);
-        
         // 🔒 Security: Check if track is already in cart (use 'track' field, not 'trackId')
         if (!user.cart.some(item => item.track.toString() === trackId)) {
             user.cart.push({ track: trackId }); // addedAt will be set automatically
             await user.save();
-            console.log('🛒 addToCart: Track added to cart successfully');
-        } else {
-            console.log('🛒 addToCart: Track already in cart');
         }
 
-        console.log('🛒 addToCart: Final cart items:', user.cart.length);
         return res.status(200).json({ message: "Track added to cart successfully" });
 
     } catch (error) {

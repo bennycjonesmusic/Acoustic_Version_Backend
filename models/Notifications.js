@@ -219,5 +219,12 @@ notificationsSchema.statics.getUserNotifications = async function(userId, page =
     };
 };
 
+// Production performance indexes
+notificationsSchema.index({ 
+  userId: 1, 
+  read: 1, 
+  createdAt: -1 
+}, { name: 'user_notifications_compound' }); // Optimized user notification queries
+
 const Notification = mongoose.model('Notification', notificationsSchema);
 export default Notification;

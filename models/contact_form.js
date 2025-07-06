@@ -41,6 +41,10 @@ const contactFormSchema = new mongoose.Schema({
 
 });
 
+// Production performance indexes
+contactFormSchema.index({ createdAt: -1 }); // Admin queries by date
+contactFormSchema.index({ status: 1, createdAt: -1 }); // Status filtering with date sort
+
 const contactForm = mongoose.model('ContactForm', contactFormSchema);
 export default contactForm;
 // contactForum.js

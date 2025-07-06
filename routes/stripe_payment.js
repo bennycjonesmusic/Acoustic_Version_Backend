@@ -3,6 +3,7 @@ import stripe from 'stripe';
 import authMiddleware from '../middleware/customer_auth.js';
 import User from '../models/User.js';
 import BackingTrack from '../models/backing_track.js';
+import { logError } from '../utils/errorLogger.js';
 import http from 'http';
 
 
@@ -66,6 +67,14 @@ router.post('/create-account-link', authMiddleware, async (req, res) => {
         res.status(200).json({ url: accountLink.url });
     } catch (error) {
         console.error('Error creating account link:', error);
+        
+        // Log Stripe account creation error
+        await logError({
+            message: `Stripe account link creation failed: ${error.message}`,
+            stack: error.stack,
+            errorType: 'stripe_payment'
+        }, req, 500);
+        
         res.status(500).json({ error: 'Failed to create account link' });
     }
 }); 
@@ -181,6 +190,14 @@ router.post('/create-cart-checkout-session', authMiddleware, async (req, res) =>
             code: error.code,
             type: error.type
         });
+        
+        // Log cart checkout error
+        await logError({
+            message: `Cart checkout session creation failed: ${error.message}`,
+            stack: error.stack,
+            errorType: 'stripe_payment'
+        }, req, 500);
+        
         return res.status(500).json({ error: 'Failed to create checkout session' });
     }
 });
