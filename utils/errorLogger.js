@@ -96,6 +96,65 @@ export const logError = async (errorData, req = null, statusCode = 500) => {
 };
 
 /**
+ * Log a frontend error to the Website collection
+ * @param {Object} frontendErrorData - Frontend error information
+ * @param {string} frontendErrorData.message - Error message
+ * @param {string} frontendErrorData.stack - Error stack trace
+ * @param {string} frontendErrorData.url - URL where the error occurred
+ * @param {string} frontendErrorData.userAgent - User agent string of the client
+ * @param {Object} frontendErrorData.viewport - Viewport dimensions at the time of the error
+ * @param {string} frontendErrorData.userId - ID of the authenticated user (if available)
+ * @param {string} frontendErrorData.componentStack - React component stack trace (if available)
+ * @param {string} frontendErrorData.errorType - Type of error (frontend, validation, etc.)
+ */
+export const logFrontendError = async (frontendErrorData) => {
+  try {
+    // Don't log errors in test environment to avoid cluttering test data
+    if (process.env.NODE_ENV === 'test') {
+      return;
+    }
+
+    const frontendErrorEntry = {
+      message: frontendErrorData.message || 'Unknown frontend error',
+      stack: frontendErrorData.stack,
+      url: frontendErrorData.url,
+      userAgent: frontendErrorData.userAgent,
+      viewport: frontendErrorData.viewport,
+      userId: frontendErrorData.userId,
+      componentStack: frontendErrorData.componentStack,
+      errorType: frontendErrorData.errorType || 'frontend',
+      timestamp: new Date()
+    };
+
+    // Find the website document and add the frontend error
+    const result = await Website.updateOne(
+      {}, // Match the first/only website document
+      { 
+        $push: { 
+          frontendErrorLog: frontendErrorEntry 
+        } 
+      },
+      { upsert: true } // Create website document if it doesn't exist
+    );
+    console.log('Website.updateOne result:', result);
+
+    // Optional: Log to console for immediate debugging (in development)
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('Frontend error logged to database:', {
+        message: frontendErrorEntry.message,
+        url: frontendErrorEntry.url,
+        userId: frontendErrorEntry.userId,
+        timestamp: frontendErrorEntry.timestamp
+      });
+    }
+
+  } catch (logError) {
+    // Don't let error logging break the application
+    console.error('Failed to log frontend error to database:', logError);
+  }
+};
+
+/**
  * Get recent errors from the database (admin only)
  * @param {number} limit - Maximum number of errors to return (default: 50)
  * @returns {Array} Array of recent errors

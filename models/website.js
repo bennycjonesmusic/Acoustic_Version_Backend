@@ -52,17 +52,31 @@ const websiteSchema = new mongoose.Schema({
     {
       message: { type: String, required: true },
       stack: { type: String },
-      endpoint: { type: String }, // Which API endpoint
-      method: { type: String }, // HTTP method (GET, POST, etc.)
-      userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // User who experienced the error (if authenticated)
-      userEmail: { type: String }, // Email if available
-      ip: { type: String }, // IP address
-      userAgent: { type: String }, // Browser/client info
-      statusCode: { type: Number }, // HTTP status code
-      requestBody: { type: mongoose.Schema.Types.Mixed }, // Sanitized request data
-      errorType: { type: String, enum: ['general', 'stripe_webhook', 'stripe_payment', 'auth', 'database', 'validation'], default: 'general' }, // Error category
-      stripeEventType: { type: String }, // For Stripe webhook errors
-      timestamp: { type: Date, default: Date.now, expires: 604800 } // Expires after 7 days (604800 seconds)
+      endpoint: { type: String }, // API endpoint (backend errors)
+      method: { type: String },
+      userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      userEmail: { type: String },
+      ip: { type: String },
+      userAgent: { type: String },
+      statusCode: { type: Number },
+      requestBody: { type: mongoose.Schema.Types.Mixed },
+      errorType: { type: String, enum: ['general', 'stripe_webhook', 'stripe_payment', 'auth', 'database', 'validation'], default: 'general' },
+      stripeEventType: { type: String },
+      timestamp: { type: Date, default: Date.now, expires: 604800 }
+    }
+  ],
+  // Frontend error tracking (separate array for clear separation)
+  frontendErrorLog: [
+    {
+      message: { type: String, required: true },
+      stack: { type: String },
+      url: { type: String }, // Page URL where error occurred
+      userAgent: { type: String }, // Browser info
+      viewport: { type: String }, // Screen resolution
+      userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // If user is logged in
+      componentStack: { type: String }, // React component stack trace
+      errorType: { type: String, enum: ['frontend', 'javascript', 'network', 'ui'], default: 'frontend' },
+      timestamp: { type: Date, default: Date.now, expires: 604800 } // 7 days TTL
     }
   ],
   // You can add more global site data here as needed
