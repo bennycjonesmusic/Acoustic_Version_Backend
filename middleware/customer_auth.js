@@ -12,13 +12,19 @@ const authMiddleware = async (req, res, next) => {
     console.log('[authMiddleware] Authorization header:', authHeader);
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
         console.log('[authMiddleware] No token provided');
+        await logError({
+            message: 'Unauthorized: No token provided',
+            errorType: 'authentication'
+        }, req, 401);
         return res.status(401).json({ message: 'Unauthorized: No token provided' });
     }
     const token = authHeader.split(' ')[1];  //was getting an error in postman. Let us try this. split the token, access it via index[1]
     if (!token) {
         console.log('[authMiddleware] Token split failed');
-        //if token does not exist, return 401.
-   
+        await logError({
+            message: 'Access denied. No token provided.',
+            errorType: 'authentication'
+        }, req, 401);
         return res.status(401).json({message: "Access denied. No token provided."}); //401 means unauthorized. Locked out.
     }
 

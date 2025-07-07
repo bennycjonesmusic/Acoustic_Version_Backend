@@ -31,8 +31,8 @@ router.post('/refund-commission', authMiddleware, isAdmin, refundCommission);
 router.get('/errors', authMiddleware, isAdmin, async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 50;
-    const errors = await getRecentErrors(limit);
-    res.status(200).json({ errors, success: true });
+    const errorLog = await getRecentErrors(limit);
+    res.status(200).json({ errorLog, success: true });
   } catch (error) {
     console.error('Error fetching recent errors:', error);
     res.status(500).json({ message: 'Failed to fetch errors', success: false });

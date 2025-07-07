@@ -68,15 +68,16 @@ export const logError = async (errorData, req = null, statusCode = 500) => {
     }
 
     // Find the website document and add the error
-    await Website.updateOne(
+    const result = await Website.updateOne(
       {}, // Match the first/only website document
       { 
         $push: { 
-          errors: errorEntry 
+          errorLog: errorEntry 
         } 
       },
       { upsert: true } // Create website document if it doesn't exist
     );
+    console.log('Website.updateOne result:', result);
 
     // Optional: Log to console for immediate debugging (in development)
     if (process.env.NODE_ENV !== 'production') {
@@ -101,13 +102,13 @@ export const logError = async (errorData, req = null, statusCode = 500) => {
  */
 export const getRecentErrors = async (limit = 50) => {
   try {
-    const website = await Website.findOne().select('errors');
-    if (!website || !website.errors) {
+    const website = await Website.findOne().select('errorLog');
+    if (!website || !website.errorLog) {
       return [];
     }
 
     // Sort by timestamp (newest first) and limit results
-    const recentErrors = website.errors
+    const recentErrors = website.errorLog
       .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
       .slice(0, limit);
 
@@ -124,8 +125,8 @@ export const getRecentErrors = async (limit = 50) => {
  */
 export const getErrorStats = async () => {
   try {
-    const website = await Website.findOne().select('errors');
-    if (!website || !website.errors) {
+    const website = await Website.findOne().select('errorLog');
+    if (!website || !website.errorLog) {
       return {
         totalErrors: 0,
         last24Hours: 0,
@@ -139,7 +140,7 @@ export const getErrorStats = async () => {
     const last24Hours = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     const last7Days = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-    const errors = website.errors;
+    const errors = website.errorLog;
     const recentErrors24h = errors.filter(err => new Date(err.timestamp) > last24Hours);
     const recentErrors7d = errors.filter(err => new Date(err.timestamp) > last7Days);
 

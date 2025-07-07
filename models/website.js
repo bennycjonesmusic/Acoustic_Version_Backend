@@ -48,7 +48,7 @@ const websiteSchema = new mongoose.Schema({
     dailyHitsLast30Dates: { type: [Date], default: [] }, // Array of 30 dates (midnight UTC)
   },
   // Error tracking with 7-day rolling window
-  errors: [
+  errorLog: [
     {
       message: { type: String, required: true },
       stack: { type: String },
@@ -69,8 +69,8 @@ const websiteSchema = new mongoose.Schema({
 });
 
 // Production performance indexes for error tracking
-websiteSchema.index({ 'errors.timestamp': -1 }); // Error log queries by date
-websiteSchema.index({ 'errors.errorType': 1, 'errors.timestamp': -1 }); // Error filtering by type and date
+websiteSchema.index({ 'errorLog.timestamp': -1 }); // Error log queries by date
+websiteSchema.index({ 'errorLog.errorType': 1, 'errorLog.timestamp': -1 }); // Error filtering by type and date
 
 const Website = mongoose.model('Website', websiteSchema);
 export default Website;
