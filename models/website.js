@@ -60,7 +60,7 @@ const websiteSchema = new mongoose.Schema({
       userAgent: { type: String },
       statusCode: { type: Number },
       requestBody: { type: mongoose.Schema.Types.Mixed },
-      errorType: { type: String, enum: ['general', 'stripe_webhook', 'stripe_payment', 'auth', 'database', 'validation'], default: 'general' },
+      errorType: { type: String, enum: ['general', 'stripe_webhook', 'stripe_payment', 'auth', 'authentication', 'database', 'validation'], default: 'general' },
       stripeEventType: { type: String },
       timestamp: { type: Date, default: Date.now, expires: 604800 }
     }
