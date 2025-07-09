@@ -36,6 +36,7 @@ import flagsRoutes from './routes/flags.js'; // Import flagging routes
 import licenseRoutes from './routes/license.js'; // Import license routes
 import analyticsRoutes from './routes/analytics.js'; // Import analytics routes
 import { logError } from './utils/errorLogger.js'; // Import error logging utility
+import { spawn } from 'child_process'; // Import spawn for FFmpeg testing
 
 // Handle uncaught exceptions and unhandled promise rejections
 process.on('uncaughtException', (err) => {
@@ -282,6 +283,42 @@ app.use('/report', reportRoutes);
 
 const swaggerDocument = YAML.load('./openapi.yaml');
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+
+// Add FFmpeg test endpoint (temporary for testing)
+app.get('/test-ffmpeg', (req, res) => {
+  const ffmpegPath = process.env.FFMPEG_PATH || 'ffmpeg';
+  const ffprobe = spawn('ffprobe', ['-version']);
+  const ffmpeg = spawn(ffmpegPath, ['-version']);
+  
+  let ffprobeOutput = '';
+  let ffmpegOutput = '';
+  let ffprobeError = '';
+  let ffmpegError = '';
+  
+  ffprobe.stdout.on('data', (data) => ffprobeOutput += data.toString());
+  ffprobe.stderr.on('data', (data) => ffprobeError += data.toString());
+  ffmpeg.stdout.on('data', (data) => ffmpegOutput += data.toString());
+  ffmpeg.stderr.on('data', (data) => ffmpegError += data.toString());
+  
+  Promise.allSettled([
+    new Promise((resolve) => ffprobe.on('close', (code) => resolve({ tool: 'ffprobe', code, output: ffprobeOutput || ffprobeError }))),
+    new Promise((resolve) => ffmpeg.on('close', (code) => resolve({ tool: 'ffmpeg', code, output: ffmpegOutput || ffmpegError })))
+  ]).then((results) => {
+    res.json({
+      ffprobe: {
+        available: results[0].value.code === 0,
+        version: results[0].value.output.split('\n')[0] || 'Not available',
+        exitCode: results[0].value.code
+      },
+      ffmpeg: {
+        available: results[1].value.code === 0,
+        version: results[1].value.output.split('\n')[0] || 'Not available', 
+        exitCode: results[1].value.code
+      },
+      buildpackWorking: results[0].value.code === 0 && results[1].value.code === 0
+    });
+  });
+});
 
 // Global error handler - MUST be the last middleware before starting the server
 app.use(async (err, req, res, next) => {
