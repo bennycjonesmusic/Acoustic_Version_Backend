@@ -4,6 +4,7 @@ import fs from 'fs';
 export async function getAudioPreview(inputPath, outputPath, duration = 30) {
   return new Promise((resolve, reject) => {
     const ffmpegPath = process.env.FFMPEG_PATH || 'ffmpeg';
+    const ffprobePath = process.env.FFPROBE_PATH || 'ffprobe';
     
     console.log('🎵 Starting audio preview generation...');
     console.log(`Input: ${inputPath}`);
@@ -13,7 +14,7 @@ export async function getAudioPreview(inputPath, outputPath, duration = 30) {
     console.log('Input file size:', fs.existsSync(inputPath) ? fs.statSync(inputPath).size : 'N/A');
     
     // First, validate the input file with ffprobe
-    const ffprobe = spawn('ffprobe', [
+    const ffprobe = spawn(ffprobePath, [
       '-v', 'quiet',
       '-print_format', 'json', 
       '-show_format',

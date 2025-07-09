@@ -13,6 +13,8 @@ import User from './models/User.js';
 import BackingTrack from './models/backing_track.js';
 import CommissionRequest from './models/CommissionRequest.js';
 import ContactForm from './models/contact_form.js';
+import Website from './models/website.js';
+import Notification from './models/Notifications.js';
 
 const MONGO_URI = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb://localhost:27017/backing-tracks';
 
@@ -55,12 +57,16 @@ async function clearMongoCollections() {
     const trackCount = await BackingTrack.countDocuments();
     const commissionCount = await CommissionRequest.countDocuments();
     const contactCount = await ContactForm.countDocuments();
+    const websiteCount = await Website.countDocuments();
+    const notificationCount = await Notification.countDocuments();
 
     log(`\n📊 Current document counts:`, 'blue');
     log(`   Users: ${userCount}`, 'cyan');
     log(`   Backing Tracks: ${trackCount}`, 'cyan');
     log(`   Commission Requests: ${commissionCount}`, 'cyan');
     log(`   Contact Forms: ${contactCount}`, 'cyan');
+    log(`   Website: ${websiteCount}`, 'cyan');
+    log(`   Notifications: ${notificationCount}`, 'cyan');
 
     // Clear all collections
     log('\n🧹 Deleting all documents...', 'yellow');
@@ -77,13 +83,23 @@ async function clearMongoCollections() {
     const contactResult = await ContactForm.deleteMany({});
     log(`   Deleted ${contactResult.deletedCount} contact forms`, 'green');
 
+    const websiteResult = await Website.deleteMany({});
+    log(`   Deleted ${websiteResult.deletedCount} website documents`, 'green');
+
+    const notificationResult = await Notification.deleteMany({});
+    log(`   Deleted ${notificationResult.deletedCount} notifications`, 'green');
+
     // Verify collections are empty
     const finalUserCount = await User.countDocuments();
     const finalTrackCount = await BackingTrack.countDocuments();
     const finalCommissionCount = await CommissionRequest.countDocuments();
     const finalContactCount = await ContactForm.countDocuments();
+    const finalWebsiteCount = await Website.countDocuments();
+    const finalNotificationCount = await Notification.countDocuments();
 
-    if (finalUserCount + finalTrackCount + finalCommissionCount + finalContactCount === 0) {
+    if (
+      finalUserCount + finalTrackCount + finalCommissionCount + finalContactCount + finalWebsiteCount + finalNotificationCount === 0
+    ) {
       log('\n✅ All MongoDB collections successfully cleared!', 'green');
     } else {
       log('\n⚠️  Some documents may remain in collections', 'yellow');
@@ -188,6 +204,12 @@ async function resetIndexes() {
     
     await ContactForm.syncIndexes();
     log('   ✅ ContactForm indexes synced', 'green');
+    
+    await Website.syncIndexes();
+    log('   ✅ Website indexes synced', 'green');
+    
+    await Notification.syncIndexes();
+    log('   ✅ Notification indexes synced', 'green');
 
   } catch (error) {
     log(`❌ Error resetting indexes: ${error.message}`, 'red');

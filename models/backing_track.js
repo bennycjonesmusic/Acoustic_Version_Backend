@@ -263,7 +263,7 @@ analytics: {
 // Method to generate a shareable URL for this track
 backingTrackSchema.methods.getShareUrl = function () {
   // Adjust the base URL as needed for your deployment
-  return `https://acousticversion.co.uk/track/${this._id}`;
+  return `https://www.acoustic-version.com/track/${this._id}`;
 };
 
 // Method to calculate average rating
