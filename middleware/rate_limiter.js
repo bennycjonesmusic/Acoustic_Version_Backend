@@ -2,6 +2,9 @@ import rateLimit from 'express-rate-limit';
 
 const noop = (req, res, next) => next();
 
+// Helper: skip rate limit for admin users
+const skipIfAdmin = (req) => req.userRole === 'admin';
+
 let registerLimiter, uploadLimiter, downloadLimiter, loginLimiter, paymentLimiter, commissionLimiter;
 
 if (process.env.NODE_ENV === 'test') {
@@ -18,6 +21,7 @@ if (process.env.NODE_ENV === 'test') {
     message: { error: 'Too many registration attempts, please try again later.' },
     standardHeaders: true,
     legacyHeaders: false,
+    skip: skipIfAdmin,
   });
 
   loginLimiter = rateLimit({
@@ -26,6 +30,7 @@ if (process.env.NODE_ENV === 'test') {
     message: { error: 'Too many login attempts, please try again later.' },
     standardHeaders: true,
     legacyHeaders: false,
+    skip: skipIfAdmin,
   });
 
   uploadLimiter = rateLimit({
@@ -34,6 +39,7 @@ if (process.env.NODE_ENV === 'test') {
     message: { error: 'Too many tracks uploaded today. Only 10 per day. Please upload more tomorrow.' },
     standardHeaders: true,
     legacyHeaders: false,
+    skip: skipIfAdmin,
   });
 
   downloadLimiter = rateLimit({
@@ -42,6 +48,7 @@ if (process.env.NODE_ENV === 'test') {
     message: { error: 'Too many downloads from this IP, please try again in an hour.' },
     standardHeaders: true,
     legacyHeaders: false,
+    skip: skipIfAdmin,
   });
 
   // Payment operations should be heavily rate limited
@@ -51,6 +58,7 @@ if (process.env.NODE_ENV === 'test') {
     message: { error: 'Too many payment attempts, please wait before trying again.' },
     standardHeaders: true,
     legacyHeaders: false,
+    skip: skipIfAdmin,
   });
 
   // Commission requests rate limiting
@@ -60,6 +68,7 @@ if (process.env.NODE_ENV === 'test') {
     message: { error: 'Too many commission requests, please wait before submitting another.' },
     standardHeaders: true,
     legacyHeaders: false,
+    skip: skipIfAdmin,
   });
 }
 

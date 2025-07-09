@@ -211,12 +211,14 @@ userSchema.pre('save', function(next) {
   if (this.email && adminEmails.includes(this.email)) {
     this.role = 'admin';
   }  // Auto-calculate customerCommissionPrice if commissionPrice is set, else set to 0
-  let platformCommissionRate = 0.12; // 12% platform fee
+  let platformCommissionRate = 0.10; // 10% platform fee for standard users
+  let stripeProcessingFee = 0.20; // 20p Stripe processing fee
   if (this.subscriptionTier === 'enterprise') {
     platformCommissionRate = 0.04; // 4% for enterprise
   }
   if (typeof this.commissionPrice === 'number' && this.commissionPrice > 0) {
-    this.customerCommissionPrice = Math.round((this.commissionPrice + (this.commissionPrice * platformCommissionRate)) * 100) / 100;
+    const platformFee = this.commissionPrice * platformCommissionRate;
+    this.customerCommissionPrice = Math.round((this.commissionPrice + platformFee + stripeProcessingFee) * 100) / 100;
   } else {
     this.customerCommissionPrice = 0;
   }
@@ -329,6 +331,8 @@ userSchema.set('toJSON', {
     delete ret.__v;
     delete ret.password;
     delete ret.stripeAccountId; // Always hide Stripe account ID from all users
+    delete ret.passwordResetToken; // Always hide password reset tokens
+    delete ret.passwordResetExpires; // Always hide password reset expiry
 
     const viewerRole = options?.viewerRole || 'user';
     const viewerId = options?.viewerId || null;
@@ -337,19 +341,40 @@ userSchema.set('toJSON', {
     // Use ret.id for comparison BEFORE we potentially delete it
     const isSelf = viewerId && ret.id && viewerId.toString() === ret.id;
 
-    // show less details if not admin or self
+    // Hide sensitive information from non-admin, non-self users
     if (!isAdmin && !isSelf) {
       delete ret.email;
-      delete ret.stripeAccountId;
-      delete ret.stripeSubscriptionId
+      delete ret.stripeAccountStatus;
+      delete ret.stripePayoutsEnabled;
+      delete ret.stripeOnboardingComplete;
       delete ret.amountOfTracksSold;
       delete ret.amountOfFollowers;
-      delete ret.purchasedTracks;
-      delete ret.totalIncome;
       if (Array.isArray(ret.uploadedTracks)) {
         ret.uploadedTracks = ret.uploadedTracks.filter(track => !track.isPrivate);
       }
-    }    // Ensure self can always see their own email
+    }    // Additional protection: Some fields should only be visible to the user themselves
+    // Even admins shouldn't see these unless explicitly needed for admin operations
+    if (!isSelf) {
+      delete ret.cart; // Personal cart information
+      delete ret.purchasedTracks; // Personal purchase history
+      delete ret.moneyOwed; // Personal financial information
+      delete ret.stripeSubscriptionId; // Personal subscription details
+      delete ret.totalIncome; // Personal income information
+    }
+
+    // Subscription tier should only be visible to self or admin
+    if (!isAdmin && !isSelf) {
+      delete ret.subscriptionTier;
+    }
+
+    // Storage information should only be visible to self or admin
+    if (!isAdmin && !isSelf) {
+      delete ret.storageUsed;
+      delete ret.maxStorage;
+      delete ret.storageUsagePercentage;
+    }
+
+    // Ensure self can always see their own email
     if (isSelf) {
       if (doc.email) ret.email = doc.email;
     }

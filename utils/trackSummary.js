@@ -6,6 +6,7 @@ export function toTrackSummary(tracks) {
     return tracks.map(track => ({
       id: track.id || track._id, // Defensive handling for both id formats
       title: track.title,
+      createdAt: track.createdAt, // Add createdAt field for date display
       averageRating: track.averageRating,
       numOfRatings: track.numOfRatings,
       user: track.user && track.user.username ? {
@@ -27,7 +28,8 @@ export function toTrackSummary(tracks) {
       isMajor: track.isMajor,
       isMinor: track.isMinor,
       isHigher: track.isHigher,
-      isLower: track.isLower
+      isLower: track.isLower,
+      vocalRange: track.vocalRange // Added vocal range to track summary
     }));
     
   } catch (error) {

@@ -2,7 +2,7 @@ import express from 'express';
 import Stripe from 'stripe';
 import User from '../models/User.js';
 import BackingTrack from '../models/backing_track.js';
-import { sendPurchaseReceiptEmail, sendSaleNotificationEmail } from '../utils/emailAuthentication.js';
+import { sendPurchaseReceiptEmail, sendSaleNotificationEmail, sendCommissionPaymentConfirmationEmail, sendCommissionPaymentNotificationToArtistEmail } from '../utils/emailAuthentication.js';
 import { createCommissionRequestNotification, createTrackPurchaseNotification } from '../utils/notificationHelpers.js';
 import { logError } from '../utils/errorLogger.js';
 import fs from 'fs';
@@ -271,12 +271,39 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
           if (commission.customer && commission.customer.email && process.env.NODE_ENV !== 'test') {
             console.log('[WEBHOOK DEBUG] Sending purchase receipt email to customer:', commission.customer.email);
             await sendPurchaseReceiptEmail(commission.customer.email, commission, commission.artist, session);
+            
+            // Also send commission payment confirmed email
+            await sendCommissionPaymentConfirmationEmail(
+              commission.customer.email,
+              commission.customer.username || 'Customer',
+              commission.artist.username,
+              {
+                requirements: commission.requirements,
+                deliveryTime: commission.artist.deliveryTime || '2 weeks',
+                customerPrice: commission.price
+              }
+            );
+            console.log('[WEBHOOK DEBUG] Commission payment confirmed email sent to customer:', commission.customer.email);
           } else {
             console.log('[WEBHOOK DEBUG] No customer email found for commission or in test mode:', commissionId);
           }
           if (commission.artist && commission.artist.email && process.env.NODE_ENV !== 'test') {
             console.log('[WEBHOOK DEBUG] Sending sale notification email to artist:', commission.artist.email);
             await sendSaleNotificationEmail(commission.artist.email, commission, commission.customer, session);
+            
+            // Also send commission payment notification to artist
+            await sendCommissionPaymentNotificationToArtistEmail(
+              commission.artist.email,
+              commission.artist.username,
+              commission.customer.username || 'Customer',
+              {
+                requirements: commission.requirements,
+                customerPrice: commission.price,
+                artistPrice: commission.artist.commissionPrice || commission.price, // fallback to commission.price if undefined
+                deliveryTime: commission.artist.deliveryTime || '2 weeks'
+              }
+            );
+            console.log('[WEBHOOK DEBUG] Commission payment notification sent to artist:', commission.artist.email);
           } else {
             console.log('[WEBHOOK DEBUG] No artist email found for commission or in test mode:', commissionId);
           }

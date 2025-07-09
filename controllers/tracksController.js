@@ -598,7 +598,7 @@ export const getPurchasedTracks = async (req, res) => {
         // Only populate essential fields for purchased tracks display
         const userWithTracks = await User.findById(req.userId).populate({
             path: 'purchasedTracks.track',
-            select: 'title originalArtist price customerPrice averageRating numOfRatings previewUrl guideTrackUrl createdAt user',
+            select: 'title originalArtist price customerPrice averageRating numOfRatings previewUrl guideTrackUrl youtubeGuideUrl createdAt user',
             populate: {
                 path: 'user',
                 select: 'username avatar'

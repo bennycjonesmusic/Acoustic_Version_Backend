@@ -94,3 +94,222 @@ export const sendRefundNotificationEmail = async (email, trackId, refundStatus) 
   if (process.env.NODE_ENV === 'test') return;
   await transporter.sendMail(mailOptions);
 };
+
+// Commission email notifications
+export const sendCommissionRequestEmail = async (artistEmail, artistName, customerName, commissionDetails) => {
+  const mailOptions = {
+    from: `"Acousticversion" <${process.env.EMAIL_USER}>`,
+    to: artistEmail,
+    subject: 'New Commission Request',
+    html: `
+      <h2>🎵 New Commission Request!</h2>
+      <p>Hi ${artistName},</p>
+      <p>You have received a new commission request from <strong>${customerName}</strong>.</p>
+      
+      <div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px; margin: 15px 0;">
+        <h3>Commission Details:</h3>
+        <p><strong>Customer:</strong> ${customerName}</p>
+        <p><strong>Requirements:</strong> ${commissionDetails.requirements}</p>
+        <p><strong>Price:</strong> £${commissionDetails.customerPrice}</p>
+        ${commissionDetails.guideTrackUrl ? `<p><strong>Guide Track:</strong> <a href="${commissionDetails.guideTrackUrl}">Listen here</a></p>` : ''}
+      </div>
+      
+      <p>Please log in to your artist dashboard to review and respond to this commission request.</p>
+      <p><a href="${process.env.CLIENT_URL}/artist-dashboard" style="background-color: #059669; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">View Commission Request</a></p>
+      
+      <p>Best regards,<br>The Acousticversion Team</p>
+    `,
+  };
+  if (process.env.NODE_ENV === 'test') return;
+  await transporter.sendMail(mailOptions);
+};
+
+export const sendCommissionAcceptedEmail = async (customerEmail, customerName, artistName, commissionDetails) => {
+  const mailOptions = {
+    from: `"Acousticversion" <${process.env.EMAIL_USER}>`,
+    to: customerEmail,
+    subject: 'Commission Request Accepted!',
+    html: `
+      <h2>🎉 Great News! Your Commission Was Accepted</h2>
+      <p>Hi ${customerName},</p>
+      <p><strong>${artistName}</strong> has accepted your commission request!</p>
+      
+      <div style="background-color: #f0f9ff; padding: 15px; border-radius: 8px; margin: 15px 0;">
+        <h3>Next Steps:</h3>
+        <p>Your commission is now ready for payment. Once payment is completed, ${artistName} will begin working on your custom backing track.</p>
+        <p><strong>Commission Price:</strong> £${commissionDetails.customerPrice}</p>
+      </div>
+      
+      <p>Please complete your payment to get your commission started.</p>
+      <p><a href="${process.env.CLIENT_URL}/my-commission-requests" style="background-color: #2563eb; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Complete Payment</a></p>
+      
+      <p>Best regards,<br>The Acousticversion Team</p>
+    `,
+  };
+  if (process.env.NODE_ENV === 'test') return;
+  await transporter.sendMail(mailOptions);
+};
+
+export const sendCommissionRejectedEmail = async (customerEmail, customerName, artistName, commissionDetails) => {
+  const mailOptions = {
+    from: `"Acousticversion" <${process.env.EMAIL_USER}>`,
+    to: customerEmail,
+    subject: 'Commission Request Update',
+    html: `
+      <h2>Commission Request Update</h2>
+      <p>Hi ${customerName},</p>
+      <p>Unfortunately, <strong>${artistName}</strong> is unable to take on your commission request at this time.</p>
+      
+      <div style="background-color: #fef3cd; padding: 15px; border-radius: 8px; margin: 15px 0;">
+        <p>Don't worry! You can browse other talented artists on our platform who might be perfect for your project.</p>
+      </div>
+      
+      <p><a href="${process.env.CLIENT_URL}/tracks" style="background-color: #059669; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Browse Artists</a></p>
+      
+      <p>Best regards,<br>The Acousticversion Team</p>
+    `,
+  };
+  if (process.env.NODE_ENV === 'test') return;
+  await transporter.sendMail(mailOptions);
+};
+
+export const sendCommissionPaymentConfirmationEmail = async (customerEmail, customerName, artistName, commissionDetails) => {
+  const mailOptions = {
+    from: `"Acousticversion" <${process.env.EMAIL_USER}>`,
+    to: customerEmail,
+    subject: 'Commission Payment Confirmed',
+    html: `
+      <h2>✅ Payment Confirmed!</h2>
+      <p>Hi ${customerName},</p>
+      <p>Your payment for the commission with <strong>${artistName}</strong> has been successfully processed.</p>
+      
+      <div style="background-color: #f0fdf4; padding: 15px; border-radius: 8px; margin: 15px 0;">
+        <h3>What's Next:</h3>
+        <p>📧 ${artistName} has been notified that payment is complete</p>
+        <p>🎵 Work on your custom backing track will begin shortly</p>
+        <p>📱 You'll receive updates as progress is made</p>
+        <p>📋 Track progress in your commission requests dashboard</p>
+      </div>
+      
+      <p><strong>Estimated Delivery:</strong> ${commissionDetails.deliveryTime || 'As discussed with the artist'}</p>
+      
+      <p><a href="${process.env.CLIENT_URL}/my-commission-requests" style="background-color: #2563eb; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Track Progress</a></p>
+      
+      <p>Best regards,<br>The Acousticversion Team</p>
+    `,
+  };
+  if (process.env.NODE_ENV === 'test') return;
+  await transporter.sendMail(mailOptions);
+};
+
+export const sendCommissionPaymentNotificationToArtistEmail = async (artistEmail, artistName, customerName, commissionDetails) => {
+  const mailOptions = {
+    from: `"Acousticversion" <${process.env.EMAIL_USER}>`,
+    to: artistEmail,
+    subject: 'Commission Payment Received - Ready to Start!',
+    html: `
+      <h2>💰 Payment Received!</h2>
+      <p>Hi ${artistName},</p>
+      <p>Great news! <strong>${customerName}</strong> has completed payment for your commission.</p>
+      
+      <div style="background-color: #f0fdf4; padding: 15px; border-radius: 8px; margin: 15px 0;">
+        <h3>Commission Details:</h3>
+        <p><strong>Customer:</strong> ${customerName}</p>
+        <p><strong>Requirements:</strong> ${commissionDetails.requirements}</p>
+        <p><strong>Your Payout:</strong> £${commissionDetails.artistPrice}</p>
+        ${commissionDetails.guideTrackUrl ? `<p><strong>Guide Track:</strong> <a href="${commissionDetails.guideTrackUrl}">Listen here</a></p>` : ''}
+      </div>
+      
+      <p>You can now begin work on this commission. Please keep the customer updated on your progress through the commission dashboard.</p>
+      
+      <p><a href="${process.env.CLIENT_URL}/artist-dashboard" style="background-color: #059669; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Start Working</a></p>
+      
+      <p>Best regards,<br>The Acousticversion Team</p>
+    `,
+  };
+  if (process.env.NODE_ENV === 'test') return;
+  await transporter.sendMail(mailOptions);
+};
+
+export const sendCommissionDeliveredEmail = async (customerEmail, customerName, artistName, commissionDetails) => {
+  const mailOptions = {
+    from: `"Acousticversion" <${process.env.EMAIL_USER}>`,
+    to: customerEmail,
+    subject: '🎵 Your Commission is Ready for Review!',
+    html: `
+      <h2>🎉 Your Custom Track is Ready!</h2>
+      <p>Hi ${customerName},</p>
+      <p><strong>${artistName}</strong> has completed your commission and uploaded a preview for your review.</p>
+      
+      <div style="background-color: #f0f9ff; padding: 15px; border-radius: 8px; margin: 15px 0;">
+        <h3>What's Next:</h3>
+        <p>🎧 Listen to the preview of your custom backing track</p>
+        <p>✅ Approve the track if you're happy with it</p>
+        <p>🔄 Request changes if needed (you have revision options)</p>
+      </div>
+      
+      <p>Please review your commission and let us know your decision. Once approved, you'll receive the full high-quality track for download.</p>
+      
+      <p><a href="${process.env.CLIENT_URL}/my-commission-requests" style="background-color: #2563eb; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Review Your Track</a></p>
+      
+      <p>Best regards,<br>The Acousticversion Team</p>
+    `,
+  };
+  if (process.env.NODE_ENV === 'test') return;
+  await transporter.sendMail(mailOptions);
+};
+
+export const sendCommissionApprovedEmail = async (artistEmail, artistName, customerName, commissionDetails) => {
+  const mailOptions = {
+    from: `"Acousticversion" <${process.env.EMAIL_USER}>`,
+    to: artistEmail,
+    subject: '✅ Commission Approved - Payment Processing!',
+    html: `
+      <h2>🎉 Excellent Work!</h2>
+      <p>Hi ${artistName},</p>
+      <p>Fantastic news! <strong>${customerName}</strong> has approved your commission.</p>
+      
+      <div style="background-color: #f0fdf4; padding: 15px; border-radius: 8px; margin: 15px 0;">
+        <h3>Payment Information:</h3>
+        <p>💰 Your payout of <strong>£${commissionDetails.artistPrice}</strong> is now being processed</p>
+        <p>📅 Funds will be transferred to your account within 2-7 business days</p>
+        <p>📧 You'll receive a notification when the transfer is complete</p>
+      </div>
+      
+      <p>Thank you for delivering excellent work! The customer now has access to download their custom backing track.</p>
+      
+      <p><a href="${process.env.CLIENT_URL}/artist-dashboard" style="background-color: #059669; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">View Commission</a></p>
+      
+      <p>Best regards,<br>The Acousticversion Team</p>
+    `,
+  };
+  if (process.env.NODE_ENV === 'test') return;
+  await transporter.sendMail(mailOptions);
+};
+
+export const sendCommissionRevisionRequestedEmail = async (artistEmail, artistName, customerName, revisionDetails) => {
+  const mailOptions = {
+    from: `"Acousticversion" <${process.env.EMAIL_USER}>`,
+    to: artistEmail,
+    subject: 'Commission Revision Requested',
+    html: `
+      <h2>🔄 Revision Request</h2>
+      <p>Hi ${artistName},</p>
+      <p><strong>${customerName}</strong> has requested some changes to their commission.</p>
+      
+      <div style="background-color: #fef3cd; padding: 15px; border-radius: 8px; margin: 15px 0;">
+        <h3>Revision Details:</h3>
+        <p><strong>Revision ${revisionDetails.revisionCount} of ${revisionDetails.maxRevisions}</strong></p>
+        ${revisionDetails.feedback ? `<p><strong>Customer Feedback:</strong> ${revisionDetails.feedback}</p>` : ''}
+      </div>
+      
+      <p>Please review the feedback and make the requested changes. You can upload the revised track through your artist dashboard.</p>
+      
+      <p><a href="${process.env.CLIENT_URL}/artist-dashboard" style="background-color: #d97706; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Upload Revision</a></p>
+      
+      <p>Best regards,<br>The Acousticversion Team</p>
+    `,
+  };
+  if (process.env.NODE_ENV === 'test') return;
+  await transporter.sendMail(mailOptions);
+};

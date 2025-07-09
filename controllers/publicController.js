@@ -20,7 +20,6 @@ import cache from '../utils/cache.js';
 // Clear all cache on server start
 if (cache && typeof cache.clear === 'function') {
     cache.clear();
-    console.log('[Cache] All cache cleared on server start');
 }
 
 /** * @typedef {Object} TrackSummary
@@ -145,7 +144,7 @@ export const getUserDetails = async (req, res) => {
         }
         // Ensure customerCommissionPrice is set and not 0
         if (!user.customerCommissionPrice || user.customerCommissionPrice === 0) {
-            user.customerCommissionPrice = calculateCustomerCommissionPrice(user.commissionPrice);
+            user.customerCommissionPrice = calculateCustomerCommissionPrice(user.commissionPrice, user.subscriptionTier);
             await user.save();
         }
 
@@ -420,7 +419,7 @@ export const getFeaturedArtists = async (req, res) => {
         for (const artist of featured) {
             if (!artist.customerCommissionPrice || artist.customerCommissionPrice === 0) {
                 console.log('[DEBUG] Fixing customerCommissionPrice for', artist.username, 'commissionPrice:', artist.commissionPrice);
-                artist.customerCommissionPrice = calculateCustomerCommissionPrice(artist.commissionPrice);
+                artist.customerCommissionPrice = calculateCustomerCommissionPrice(artist.commissionPrice, artist.subscriptionTier);
                 await artist.save();
                 console.log('[DEBUG] New customerCommissionPrice:', artist.customerCommissionPrice);
             }
@@ -536,7 +535,7 @@ export const queryUsers = async (req, res) => {
         // Only fix customerCommissionPrice if it is 0
         for (const user of users) {
             if (!user.customerCommissionPrice || user.customerCommissionPrice === 0) {
-                user.customerCommissionPrice = calculateCustomerCommissionPrice(user.commissionPrice);
+                user.customerCommissionPrice = calculateCustomerCommissionPrice(user.commissionPrice, user.subscriptionTier);
             }
         }
         const totalPages = Math.ceil(totalUsers / limitNum);
@@ -558,7 +557,7 @@ export const queryTracks = async (req, res) => {
     try {
         // Debug: Log incoming query params
         console.log('[queryTracks] Incoming req.query:', req.query);
-        const { orderBy, page = 1, limit = 10, keySig, "vocal-range": vocalRange, artistId, qualityValidated, query, type, backingTrackType, genre } = req.query;
+        const { orderBy, page = 1, limit = 10, keySig, "vocal-range": vocalRange, artistId, qualityValidated, query, type, backingTrackType, genre, vocalGender } = req.query;
         let sort = {};
         let filter = {};
         // Validate and sanitize pagination
@@ -566,11 +565,13 @@ export const queryTracks = async (req, res) => {
         if (isNaN(pageNum) || pageNum < 1) pageNum = 1;
         let limitNum = parseInt(limit, 10);
         if (isNaN(limitNum) || limitNum < 1) limitNum = 10;
-        if (limitNum > 50) limitNum = 50;        if (orderBy == "popularity") sort = { purchaseCount: -1 };
-        if (orderBy == "date-uploaded") sort = { createdAt: -1 };
-        if (orderBy == "date-uploaded/ascending") sort = { createdAt: 1 };
-        if (orderBy == "rating") sort = { averageRating: -1 };
-        if (orderBy == "price") sort = { customerPrice: 1 };        if (keySig) {
+        if (limitNum > 50) limitNum = 50;        if (orderBy == "popularity") sort = { purchaseCount: -1, createdAt: -1 }; // Secondary sort by creation date
+        if (orderBy == "date-uploaded") sort = { createdAt: -1, _id: -1 }; // Secondary sort by ID for consistency
+        if (orderBy == "date-uploaded/ascending") sort = { createdAt: 1, _id: 1 }; // Secondary sort by ID for consistency
+        if (orderBy == "rating") sort = { averageRating: -1, createdAt: -1 }; // Secondary sort by creation date
+        if (orderBy == "price") sort = { customerPrice: 1, createdAt: -1 }; // Secondary sort by creation date
+
+        if (keySig) {
             try {
                 console.log('[DEBUG] Parsing keySig:', keySig); // Debug log
                 const { key, isFlat, isSharp } = parseKeySignature(keySig); //function to parse key signature BB = Bflat e.t.c
@@ -620,6 +621,16 @@ export const queryTracks = async (req, res) => {
             }
             filter.genre = genre;
         }
+        // Vocal gender filter (female/male)
+        const femaleRanges = ["Alto", "Soprano", "Contralto", "Mezzo-Soprano"];
+        const maleRanges = ["Tenor", "Baritone", "Bass", "Countertenor"];
+        if (vocalGender === 'female') {
+            filter.vocalRange = { $in: femaleRanges };
+        } else if (vocalGender === 'male') {
+            filter.vocalRange = { $in: maleRanges };
+        } else if (vocalRange) {
+            filter.vocalRange = vocalRange;
+        }
         // Validate artistId if present
         if (artistId) {
             if (!mongoose.Types.ObjectId.isValid(artistId)) {
@@ -653,7 +664,7 @@ export const queryTracks = async (req, res) => {
             }
         }
         // Debug: Log constructed filter object
-        console.log('[queryTracks] Constructed filter:', filter);
+        console.log('[queryTracks] Final filter:', filter);
         let tracks;
         let totalTracks;
         // If a search query is present, do a text/regex search, then filter/sort
@@ -864,10 +875,15 @@ export const getLicenseInformation = async (req, res) => {
 }
 
 // Helper to always calculate customerCommissionPrice in-memory for summary endpoints
-function calculateCustomerCommissionPrice(commissionPrice) {
-  const platformCommissionRate = 0.12;
+function calculateCustomerCommissionPrice(commissionPrice, subscriptionTier = 'free') {
+  let platformCommissionRate = 0.10; // 10% platform fee for standard users
+  if (subscriptionTier === 'enterprise') {
+    platformCommissionRate = 0.04; // 4% for enterprise
+  }
+  const stripeProcessingFee = 0.20; // 20p Stripe processing fee
   if (typeof commissionPrice === 'number' && commissionPrice > 0) {
-    return Math.round((commissionPrice + (commissionPrice * platformCommissionRate)) * 100) / 100;
+    const platformFee = commissionPrice * platformCommissionRate;
+    return Math.round((commissionPrice + platformFee + stripeProcessingFee) * 100) / 100;
   }
   return 0;
 }

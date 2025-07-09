@@ -35,7 +35,6 @@ router.get('/errors', authMiddleware, isAdmin, async (req, res) => {
     const errorLog = await getRecentErrors(limit);
     res.status(200).json({ errorLog, success: true });
   } catch (error) {
-    console.error('Error fetching recent errors:', error);
     res.status(500).json({ message: 'Failed to fetch errors', success: false });
   }
 });
@@ -46,7 +45,6 @@ router.get('/error-stats', authMiddleware, isAdmin, async (req, res) => {
     const stats = await getErrorStats();
     res.status(200).json({ stats, success: true });
   } catch (error) {
-    console.error('Error fetching error statistics:', error);
     res.status(500).json({ message: 'Failed to fetch error statistics', success: false });
   }
 });
@@ -89,7 +87,6 @@ router.post('/log-frontend-error', async (req, res) => {
     });
     res.status(200).json({ success: true, message: 'Frontend error logged successfully' });
   } catch (error) {
-    console.error('Failed to log frontend error:', error);
     res.status(500).json({ success: false, message: 'Failed to log frontend error' });
   }
 });

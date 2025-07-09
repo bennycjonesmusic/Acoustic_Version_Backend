@@ -7,9 +7,19 @@ import { sendCommissionPreviewEmail } from '../utils/updateFollowers.js';
 import { getAudioPreview } from '../utils/audioPreview.js';
 import { validateUserForPayouts } from '../utils/stripeAccountStatus.js';
 import { 
+    sendCommissionRequestEmail,
+    sendCommissionAcceptedEmail,
+    sendCommissionRejectedEmail,
+    sendCommissionPaymentConfirmationEmail,
+    sendCommissionDeliveredEmail,
+    sendCommissionApprovedEmail,
+    sendCommissionRevisionRequestedEmail
+} from '../utils/emailAuthentication.js';
+import { 
     createCommissionRequestNotification, 
     createCommissionAcceptedNotification, 
     createCommissionCompletedNotification,
+    createCommissionDeclinedNotification,
     createSystemNotification
 } from '../utils/notificationHelpers.js';
 import { logError } from '../utils/errorLogger.js';
@@ -189,8 +199,24 @@ export const createCommissionRequest = async (req, res) => {
                 customerId,
                 commission._id
             );
+            
+            // Send email notification to artist about new commission request
+            const customer = await User.findById(customerId);
+            if (artist.email && customer && process.env.NODE_ENV !== 'test') {
+                await sendCommissionRequestEmail(
+                    artist.email,
+                    artist.username,
+                    customer.username,
+                    {
+                        requirements,
+                        customerPrice,
+                        guideTrackUrl
+                    }
+                );
+                console.log(`Commission request email sent to artist: ${artist.email}`);
+            }
         } catch (notifError) {
-            console.error('Error creating commission request notification:', notifError);
+            console.error('Error creating commission request notification or sending email:', notifError);
         }
         const session = await stripeClient.checkout.sessions.create({
             payment_method_types: ['card'],
@@ -316,7 +342,49 @@ export const approveCommissionAndPayout = async (req, res) => {
         commission.status = 'cron_pending';
         await commission.save();
 
+        // Add commission to customer's purchasedTracks for download access
+        const customer = await User.findById(commission.customer._id);
+        if (!customer) {
+            return res.status(404).json({ error: 'Customer not found' });
+        }
+        
+        let commissionPurchase = customer.purchasedTracks.find(pt => pt.track?.toString() === commission._id.toString());
+        
+        if (commissionPurchase && (!commissionPurchase.track || commissionPurchase.track === null)) {
+            commissionPurchase.track = commission._id;
+            commissionPurchase.commission = commission._id;
+            await customer.save();
+        } else if (!commissionPurchase) {
+            customer.purchasedTracks.push({
+                track: commission._id, // Use commissionId as BackingTrack ref
+                commission: commission._id, // Set commission ref
+                paymentIntentId: commission.stripePaymentIntentId || 'commission',
+                purchasedAt: new Date(),
+                price: commission.price || 0,
+                refunded: false
+            });
+            await customer.save();
+        }
+
         console.log(`[COMMISSION APPROVAL] Added £${artistPrice} to money owed queue for artist ${artist._id}, commission ${commission._id}`);
+
+        // Send email notification to artist about commission approval and upcoming payout
+        try {
+            if (artist.email && process.env.NODE_ENV !== 'test') {
+                await sendCommissionApprovedEmail(
+                    artist.email,
+                    artist.username,
+                    commission.customer.username || 'Customer',
+                    {
+                        artistPrice,
+                        commissionId: commission._id
+                    }
+                );
+                console.log(`Commission approved email sent to artist: ${artist.email}`);
+            }
+        } catch (emailError) {
+            console.error('Error sending commission approved email:', emailError);
+        }
 
         return res.status(200).json({ 
             success: true, 
@@ -591,11 +659,25 @@ export const uploadFinishedTrack = async (req, res) => {
                     commissionToUpdate.artist.username,
                     commissionId
                 );
+                
+                // Send email notification to customer about track delivery
+                if (commissionToUpdate.customer.email && process.env.NODE_ENV !== 'test') {
+                    await sendCommissionDeliveredEmail(
+                        commissionToUpdate.customer.email,
+                        commissionToUpdate.customer.username || 'Customer',
+                        commissionToUpdate.artist.username,
+                        {
+                            requirements: commissionToUpdate.requirements,
+                            previewUrl: commissionToUpdate.previewTrackUrl
+                        }
+                    );
+                    console.log(`Commission delivered email sent to customer: ${commissionToUpdate.customer.email}`);
+                }
             } else {
                 console.error('Could not create commission completed notification: missing customer or commission ID');
             }
         } catch (notifError) {
-            console.error('Error creating commission completed notification:', notifError);
+            console.error('Error creating commission completed notification or sending email:', notifError);
         }
         
         // Send preview email to customer
@@ -670,6 +752,26 @@ export const confirmOrDenyCommission = async (req, res) => {
             commission.revisionCount = currentRevisions + 1;
             commission.status = 'in_progress'; // Allow artist to re-upload
             await commission.save();
+            
+            // Send email notification to artist about revision request
+            try {
+                const artist = await User.findById(commission.artist);
+                if (artist && artist.email && process.env.NODE_ENV !== 'test') {
+                    await sendCommissionRevisionRequestedEmail(
+                        artist.email,
+                        artist.username,
+                        commission.customer.username || 'Customer',
+                        {
+                            revisionCount: commission.revisionCount,
+                            maxRevisions: maxRevisions,
+                            feedback: revisionFeedback || 'No specific feedback provided'
+                        }
+                    );
+                    console.log(`Commission revision requested email sent to artist: ${artist.email}`);
+                }
+            } catch (emailError) {
+                console.error('Error sending commission revision requested email:', emailError);
+            }
             
             console.log('[confirmOrDenyCommission] Commission changes requested:', commissionId, 'Revision:', commission.revisionCount);
             return res.status(200).json({ 
@@ -762,11 +864,27 @@ export const artistRespondToCommission = async (req, res) => {
                         artist.username,
                         commissionId
                     );
+                    
+                    // Send email notification to customer about commission acceptance
+                    const customer = await User.findById(customerId);
+                    if (customer && customer.email && process.env.NODE_ENV !== 'test') {
+                        await sendCommissionAcceptedEmail(
+                            customer.email,
+                            customer.username,
+                            artist.username,
+                            {
+                                requirements: commission.requirements,
+                                deliveryTime: artist.deliveryTime || '2 weeks',
+                                customerPrice: commission.price
+                            }
+                        );
+                        console.log(`Commission accepted email sent to customer: ${customer.email}`);
+                    }
                 } else {
                     console.error('Could not create commission accepted notification: missing customer or commission ID');
                 }
             } catch (notifError) {
-                console.error('Error creating commission accepted notification:', notifError);
+                console.error('Error creating commission accepted notification or sending email:', notifError);
             }
             
             return res.status(200).json({ success: true, message: 'Commission accepted. Awaiting customer payment.' });
@@ -778,16 +896,32 @@ export const artistRespondToCommission = async (req, res) => {
                 const customerId = commission.customer._id || commission.customer.id || commission.customer;
                 const commissionId = commission._id || commission.id;
                 if (customerId && commissionId) {
-                    await createCommissionRejectedNotification(
+                    await createCommissionDeclinedNotification(
                         customerId,
-                        commission.artist.username,
-                        commissionId
+                        artist._id,
+                        artist.username,
+                        commissionId,
+                        'Commission request rejected'
                     );
+                    
+                    // Send email notification to customer about commission rejection
+                    const customer = await User.findById(customerId);
+                    if (customer && customer.email && process.env.NODE_ENV !== 'test') {
+                        await sendCommissionRejectedEmail(
+                            customer.email,
+                            customer.username,
+                            artist.username,
+                            {
+                                requirements: commission.requirements
+                            }
+                        );
+                        console.log(`Commission rejected email sent to customer: ${customer.email}`);
+                    }
                 } else {
                     console.error('Could not create commission rejected notification: missing customer or commission ID');
                 }
             } catch (notifError) {
-                console.error('Error creating commission rejected notification:', notifError);
+                console.error('Error creating commission rejected notification or sending email:', notifError);
             }
             return res.status(200).json({ success: true, message: 'Commission rejected.' });
         } else {
@@ -1009,10 +1143,12 @@ export const approveOrDenyCommission = async (req, res) => {
                 const customerId = commission.customer._id || commission.customer.id || commission.customer;
                 const commissionId = commission._id || commission.id;
                 if (customerId && commissionId) {
-                    await createCommissionRejectedNotification(
+                    await createCommissionDeclinedNotification(
                         customerId,
-                        commission.artist.username,
-                        commissionId
+                        artistId,
+                        'Artist',
+                        commissionId,
+                        'Commission request rejected'
                     );
                 } else {
                     console.error('Could not create commission rejected notification: missing customer or commission ID');

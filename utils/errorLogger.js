@@ -136,7 +136,6 @@ export const logFrontendError = async (frontendErrorData) => {
       },
       { upsert: true } // Create website document if it doesn't exist
     );
-    console.log('Website.updateOne result:', result);
 
     // Optional: Log to console for immediate debugging (in development)
     if (process.env.NODE_ENV !== 'production') {

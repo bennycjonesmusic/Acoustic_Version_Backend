@@ -164,7 +164,7 @@ router.post('/create-cart-checkout-session', authMiddleware, async (req, res) =>
             line_items: line_items,
             mode: 'payment',
             success_url: `${process.env.CLIENT_URL || 'http://localhost:3000'}/success?session_id={CHECKOUT_SESSION_ID}`,
-            cancel_url: `${process.env.CLIENT_URL || 'http://localhost:3000'}/cancel`,
+            cancel_url: `${process.env.CLIENT_URL || 'http://localhost:3000'}/tracks`,
             metadata: {
                 userId: req.userId.toString(),
                 purchaseType: 'cart',
@@ -287,7 +287,7 @@ router.post('/create-checkout-session', authMiddleware, async (req, res) => {
                 },
             ],            mode: 'payment',
             success_url: `${process.env.CLIENT_URL || 'http://localhost:3000'}/success?session_id={CHECKOUT_SESSION_ID}`,
-            cancel_url: `${process.env.CLIENT_URL || 'http://localhost:3000'}/cancel`,
+            cancel_url: `${process.env.CLIENT_URL || 'http://localhost:3000'}/tracks`,
             payment_intent_data: {
                 application_fee_amount: platformFee, // platform receives this
                 transfer_data: {

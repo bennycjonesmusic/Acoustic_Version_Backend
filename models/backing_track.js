@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { getCommissionRateForUser } from '../utils/commission.js';
+import { getCommissionRateForUser, calculateCustomerPrice } from '../utils/commission.js';
 import User from './User.js';
 
 // Define the schema for the backing track
@@ -93,7 +93,7 @@ const backingTrackSchema = new mongoose.Schema({
 
   vocalRange: {
     type: String,
-    enum: ["Soprano", "Mezzo-Soprano", "Contralto", "Countertenor", "Tenor", "Baritone", "Bass"],
+    enum: ["Soprano", "Mezzo-Soprano", "Alto", "Contralto", "Countertenor", "Tenor", "Baritone", "Bass"],
   },
 
   genre: {
@@ -381,7 +381,6 @@ backingTrackSchema.set('toJSON', {
       }
       return ret;
     } catch (err) {
-      console.error('Error in BackingTrack toJSON transform:', err, { ret, options });
       return ret;
     }
   }
@@ -425,18 +424,9 @@ backingTrackSchema.index({
 
 // Pre-validate hook to set customerPrice
 backingTrackSchema.pre('validate', async function(next) {
-  // Dynamically set customerPrice as price + commission (rounded to 2 decimals)
-  if (typeof this.price === 'number' && this.user) {
-    try {
-      const user = await User.findById(this.user).lean();
-      const commissionRate = getCommissionRateForUser(user);
-      const commission = Math.round(this.price * commissionRate * 100) / 100;
-      this.customerPrice = Math.round((this.price + commission) * 100) / 100;
-    } catch (err) {
-      // fallback to 12% if user lookup fails
-      const commission = Math.round(this.price * 0.12 * 100) / 100;
-      this.customerPrice = Math.round((this.price + commission) * 100) / 100;
-    }
+  // Use new pricing model: artist price + 10% commission + 20p stripe fee
+  if (typeof this.price === 'number') {
+    this.customerPrice = calculateCustomerPrice(this.price);
   }
   next();
 });
