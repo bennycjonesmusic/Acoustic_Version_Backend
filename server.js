@@ -22,7 +22,6 @@ import adminEmails from './utils/admins.js'; // Import adminEmails
 import { deleteUnusedAvatars } from './utils/deleteUnusedAvatars.js'; // Import the function to delete unused avatars
 import { deleteCron } from './utils/deleteCron.js'; // Import the function to delete soft-deleted tracks
 import helmet from 'helmet'; // Import helmet middleware
-import compression from 'compression'; // Import compression middleware
 import stripeSubscriptionsRouter from './routes/stripe_subscriptions.js'; // Import the new Stripe subscriptions router
 import { recalculateAllUserStorage } from './utils/recalculateUserStorage.js'; // Import the storage recalculation utility
 import reportRoutes from './routes/report.js'; // Import reportRoutes
@@ -237,7 +236,6 @@ app.use('/webhook/stripe', webhookRoutes); // <-- Change to match Stripe CLI for
 app.use(express.json({ limit: '100mb' })); // Increased limit for file uploads
 app.use(express.urlencoded({ extended: true, limit: '100mb' })); // Increased limit for file uploads
 app.use(helmet()); // Use helmet middleware to set secure HTTP headers
-app.use(compression()); // Enable gzip compression for all responses
 
 // Mount the stripe reconcile router at /stripe-reconcile
 app.use('/stripe-reconcile', stripeReconcileRouter);
