@@ -1,6 +1,17 @@
 // utils/trackSummary.js
 // Utility to map a list of BackingTrack documents to summary objects
 
+// Helper to calculate customer price for tracks (same formula as commissions)
+function calculateCustomerPrice(artistPrice) {
+  const platformCommissionRate = 0.10; // 10% platform fee
+  const stripeProcessingFee = 0.20; // 20p Stripe processing fee
+  if (typeof artistPrice === 'number' && artistPrice > 0) {
+    const platformFee = artistPrice * platformCommissionRate;
+    return Math.round((artistPrice + platformFee + stripeProcessingFee) * 100) / 100;
+  }
+  return 0;
+}
+
 export function toTrackSummary(tracks) {
   try {    console.log('[toTrackSummary] Input:', JSON.stringify(tracks, null, 2));
     return tracks.map(track => ({
@@ -16,7 +27,7 @@ export function toTrackSummary(tracks) {
         
          } : track.user, // fallback to ObjectId if not populated
       originalArtist: track.originalArtist,
-      customerPrice: track.customerPrice || track.price, // Use customerPrice if available, fallback to price
+      customerPrice: track.customerPrice || calculateCustomerPrice(track.price), // Calculate if missing
       previewUrl: track.previewUrl,
       guideTrackUrl: track.guideTrackUrl,
       youtubeGuideUrl: track.youtubeGuideUrl,
