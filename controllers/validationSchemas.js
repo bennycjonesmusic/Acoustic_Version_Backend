@@ -7,27 +7,44 @@ const safeStringSchema = (min = 1, max = 100) =>
   Joi.string()
     .min(min)
     .max(max)
-    .pattern(/^[^<>'"&]*$/, 'safe characters') // Block basic HTML/XSS chars
+    .pattern(/^[^<>&]*$/, 'safe characters') // Block HTML/XSS chars but allow quotes and apostrophes
+    .trim();
+
+// More permissive schema for descriptions and longer text
+const safeDescriptionSchema = (min = 1, max = 500) => 
+  Joi.string()
+    .min(min)
+    .max(max)
+    .pattern(/^[^<>]*$/, 'safe characters') // Only block < and > (HTML tags), allow most punctuation
     .trim();
 
 const safeOptionalStringSchema = (max = 500) => 
   Joi.string()
     .max(max)
-    .pattern(/^[^<>'"&]*$/, 'safe characters')
+    .pattern(/^[^<>&]*$/, 'safe characters')
+    .allow('')
+    .trim()
+    .optional();
+
+// More permissive optional schema for longer text fields
+const safeOptionalDescriptionSchema = (max = 1000) => 
+  Joi.string()
+    .max(max)
+    .pattern(/^[^<>]*$/, 'safe characters') // Only block < and > (HTML tags)
     .allow('')
     .trim()
     .optional();
 
 export const uploadTrackSchema = Joi.object({
   title: safeStringSchema(1, 100).required(),
-  description: safeStringSchema(1, 500).required(),
+  description: safeDescriptionSchema(1, 500).required(),
   price: Joi.number().min(0).max(999999).required(), // Add reasonable max price
   originalArtist: safeStringSchema(1, 100).required(),
   type: Joi.string().valid('Backing Track', 'Jam Track', 'Acoustic Instrumental Version').required(),  backingTrackType: Joi.string().valid('Acoustic Guitar', 'Piano', 'Full Arrangement Track', 'Other').required(),
   genre: Joi.string().valid('Pop', 'Rock', 'Folk', 'Jazz', 'Classical', 'Musical Theatre', 'Country', 'Other').optional(),
-  vocalRange: Joi.string().valid('Soprano', 'Mezzo-Soprano', 'Contralto', 'Countertenor', 'Tenor', 'Baritone', 'Bass').optional(),
+  vocalRange: Joi.string().valid('Soprano', 'Mezzo-Soprano', 'Alto', 'Contralto', 'Countertenor', 'Tenor', 'Baritone', 'Bass').optional(),
   keySignature: safeOptionalStringSchema(10), // Key signatures are short
-  instructions: safeOptionalStringSchema(1000),
+  instructions: safeOptionalDescriptionSchema(1000),
   youtubeGuideUrl: Joi.string().uri().max(500).allow('').optional(),
   guideTrackUrl: Joi.string().uri().max(500).allow('').optional(),
   licenseStatus: Joi.string().valid('unlicensed', 'licensed', 'not_required').default('not_required').optional(),
@@ -49,7 +66,7 @@ export const editTrackSchema = Joi.object({
   description: Joi.string().max(500).allow('').optional(),
   price: Joi.number().min(0).optional(),
   originalArtist: Joi.string().min(1).max(100).optional(),  backingTrackType: Joi.string().valid('Acoustic Guitar', 'Piano', 'Full Arrangement Track', 'Other').optional(),  genre: Joi.string().valid('Pop', 'Rock', 'Folk', 'Jazz', 'Classical', 'Musical Theatre', 'Country', 'Other').optional(),
-  vocalRange: Joi.string().valid('Soprano', 'Mezzo-Soprano', 'Contralto', 'Countertenor', 'Tenor', 'Baritone', 'Bass').optional(),
+  vocalRange: Joi.string().valid('Soprano', 'Mezzo-Soprano', 'Alto', 'Contralto', 'Countertenor', 'Tenor', 'Baritone', 'Bass').optional(),
   keySignature: Joi.string().allow('').optional(), // Optional key signature for editing
   instructions: Joi.string().max(1000).allow('').optional(),
   youtubeGuideUrl: Joi.string().uri().allow('').optional(),
