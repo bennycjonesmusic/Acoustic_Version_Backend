@@ -29,7 +29,7 @@ export const verifyEmail = async (req, res) => {
         }
 
         // If the user is already verified, redirect to the success page
-        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3002';
+        const frontendUrl = process.env.CLIENT_URL || 'http://localhost:3002';
         if (user.verified) {
             return res.redirect(`${frontendUrl}/email-verified`);
         }

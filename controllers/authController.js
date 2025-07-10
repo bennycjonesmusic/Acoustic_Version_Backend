@@ -315,7 +315,7 @@ export const deleteAccount = async(req, res) => {
 
    // Trigger frontend revalidation to clear cached data
    try {
-       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
+       const frontendUrl = process.env.CLIENT_URL || 'http://localhost:3002';
        await fetch(`${frontendUrl}/api/revalidate`, {
            method: 'POST',
            headers: {
