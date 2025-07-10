@@ -281,13 +281,25 @@ export const getFeaturedTracks = async (req, res) => {
     console.log('[getFeaturedTracks] totalTracks:', totalTracks);    if (excludeIds.length >= totalTracks) {
         const featured = [...popularTracks, ...recentTracks];
         const filtered = featured.filter(Boolean);
+        
+        // Deduplicate tracks by ID
+        const uniqueTracks = [];
+        const seenIds = new Set();
+        for (const track of filtered) {
+            const trackId = track._id.toString();
+            if (!seenIds.has(trackId)) {
+                seenIds.add(trackId);
+                uniqueTracks.push(track);
+            }
+        }
+        
         // Debug: Check if user data is populated in early return
-        console.log('[getFeaturedTracks] Early return - Sample track user data:', filtered[0]?.user);
-        const summary = toTrackSummary(filtered);
+        console.log('[getFeaturedTracks] Early return - Sample track user data:', uniqueTracks[0]?.user);
+        const summary = toTrackSummary(uniqueTracks);
         // Debug: Check summary output in early return
         console.log('[getFeaturedTracks] Early return - Sample summary user data:', summary[0]?.user);
         cache.set('featuredTracks', summary);
-        console.log('[getFeaturedTracks] returning early, filtered.length:', filtered.length);
+        console.log('[getFeaturedTracks] returning early, uniqueTracks.length:', uniqueTracks.length);
         return res.status(200).json(summary);
     }
     // isPrivate:false must be inside $match
@@ -832,6 +844,16 @@ export const getTrack = async (req, res) => {
             console.error('Error populating track data:', populateError);
             // Continue with unpopulated track data
         }
+        // Fix missing tracks in uploadedTracks array
+        if (user && track.user.toString() === user._id.toString()) {
+            const trackId = track._id.toString();
+            if (!user.uploadedTracks.some(id => id.toString() === trackId)) {
+                console.log(`[getTrack] Adding missing track ${trackId} to user's uploadedTracks array`);
+                user.uploadedTracks.push(track._id);
+                await user.save();
+            }
+        }
+
         // Return both id and _id for maximum compatibility
         const trackObj = track.toObject({ virtuals: true });
         trackObj.id = trackObj._id?.toString();
@@ -889,3 +911,10 @@ function calculateCustomerCommissionPrice(commissionPrice, subscriptionTier = 'f
 }
 
 // --- PATCH: Fix customerCommissionPrice only if 0 for summary endpoints ---
+
+// Debug endpoint to clear featured tracks cache
+export const clearFeaturedTracksCache = async (req, res) => {
+    cache.del('featuredTracks');
+    console.log('[clearFeaturedTracksCache] Cache cleared');
+    return res.status(200).json({ message: 'Featured tracks cache cleared' });
+};

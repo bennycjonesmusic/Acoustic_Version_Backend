@@ -341,7 +341,8 @@ export const uploadTrack = async (req, res) => {
         const isFirstUpload = Artist.uploadedTracks.length === 0;
         
         Artist.numOfUploadedTracks = Artist.uploadedTracks.length + 1;
-        await Artist.save(); //not Sure why I wrote the code below seeing as it is basically redundant with Artist. could just use Artist instead        await User.findByIdAndUpdate(req.userId, { $inc: { storageUsed: req.file.size }, $push: { uploadedTracks: newTrack._id || newTrack.id } });
+        await Artist.save(); //not Sure why I wrote the code below seeing as it is basically redundant with Artist. could just use Artist instead        
+        await User.findByIdAndUpdate(req.userId, { $inc: { storageUsed: req.file.size }, $push: { uploadedTracks: newTrack._id || newTrack.id } });
         
         // Send congratulations notification for first upload
         if (isFirstUpload) {
