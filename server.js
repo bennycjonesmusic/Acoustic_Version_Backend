@@ -234,8 +234,8 @@ app.use(cors({
 }));
 // Register the webhook route BEFORE any body parsers!
 app.use('/webhook/stripe', webhookRoutes); // <-- Change to match Stripe CLI forwarding
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '100mb' })); // Increased limit for file uploads
+app.use(express.urlencoded({ extended: true, limit: '100mb' })); // Increased limit for file uploads
 app.use(helmet()); // Use helmet middleware to set secure HTTP headers
 app.use(compression()); // Enable gzip compression for all responses
 

@@ -16,6 +16,8 @@ import adminEmails from '../utils/admins.js';
 import makeAdmin from '../middleware/make_admin.js';
 import { sanitizeFileName } from '../utils/regexSanitizer.js';
 import { logError } from '../utils/errorLogger.js'; // Import error logging
+import dotenv from 'dotenv';
+import cache from '../utils/cache.js';
 
 //Create...
 export const register = async (req, res) => {
@@ -664,6 +666,25 @@ export const updateProfile = async (req, res) => {
 
     Object.assign(user, updates);
     await user.save();
+    
+    // If this is an artist updating their profile, invalidate featured artists cache
+    if (user.role === 'artist') {
+        try {
+            cache.del('featuredArtists');
+            console.log('Featured artists cache invalidated after artist profile update');
+            
+            // Trigger frontend revalidation for featured artists
+            const frontendUrl = process.env.CLIENT_URL || 'http://localhost:3002';
+            await fetch(`${frontendUrl}/api/revalidate?path=/&secret=${process.env.REVALIDATION_SECRET || 'default-secret'}`, {
+                method: 'POST'
+            });
+            console.log('Frontend revalidation triggered after artist profile update');
+        } catch (revalidationError) {
+            console.error('Failed to invalidate cache or trigger frontend revalidation:', revalidationError);
+            // Don't fail the profile update if cache invalidation fails
+        }
+    }
+    
     // Ensure customerCommissionPrice is included in the response
     const userObj = user.toObject();
     userObj.customerCommissionPrice = user.customerCommissionPrice;

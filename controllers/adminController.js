@@ -8,6 +8,7 @@ import { Parser } from 'json2csv';
 import path from 'path';
 import fs from 'fs';
 import contactForm from '../models/contact_form.js';
+import cache from '../utils/cache.js';
 
 export const clearS3 = async (req, res) => {
     try {
@@ -257,6 +258,23 @@ export const approveArtist = async (req, res) => {
         }
         artist.profileStatus = 'approved';
         await artist.save();
+        
+        // Invalidate featured artists cache since a new artist was approved
+        try {
+            cache.del('featuredArtists');
+            console.log('Featured artists cache invalidated after artist approval');
+            
+            // Trigger frontend revalidation for featured artists
+            const frontendUrl = process.env.CLIENT_URL || 'http://localhost:3002';
+            await fetch(`${frontendUrl}/api/revalidate?path=/&secret=${process.env.REVALIDATION_SECRET || 'default-secret'}`, {
+                method: 'POST'
+            });
+            console.log('Frontend revalidation triggered after artist approval');
+        } catch (revalidationError) {
+            console.error('Failed to invalidate cache or trigger frontend revalidation:', revalidationError);
+            // Don't fail the approval if cache invalidation fails
+        }
+        
           // Create approval notification for the artist
         try {
             // Defensive coding: handle both _id and id fields
@@ -287,6 +305,23 @@ export const rejectArtist = async (req, res) => {
         }
         artist.profileStatus = 'rejected';
         await artist.save();
+        
+        // Invalidate featured artists cache since an artist was rejected
+        try {
+            cache.del('featuredArtists');
+            console.log('Featured artists cache invalidated after artist rejection');
+            
+            // Trigger frontend revalidation for featured artists
+            const frontendUrl = process.env.CLIENT_URL || 'http://localhost:3002';
+            await fetch(`${frontendUrl}/api/revalidate?path=/&secret=${process.env.REVALIDATION_SECRET || 'default-secret'}`, {
+                method: 'POST'
+            });
+            console.log('Frontend revalidation triggered after artist rejection');
+        } catch (revalidationError) {
+            console.error('Failed to invalidate cache or trigger frontend revalidation:', revalidationError);
+            // Don't fail the rejection if cache invalidation fails
+        }
+        
           // Create rejection notification for the artist
         try {
             // Defensive coding: handle both _id and id fields
