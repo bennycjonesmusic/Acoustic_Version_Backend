@@ -23,7 +23,6 @@ async function configureCORS() {
           AllowedOrigins: [
             'http://localhost:3002',
             'http://localhost:3003', 
-            'https://acoustic-version.com',
             'https://www.acoustic-version.com'
           ],
           AllowedMethods: ['GET', 'HEAD'],
