@@ -21,6 +21,9 @@ import cache from '../utils/cache.js';
 
 //Create...
 export const register = async (req, res) => {
+    // Convert username and email to lowercase for normalization
+    if (req.body.username) req.body.username = req.body.username.toLowerCase();
+    if (req.body.email) req.body.email = req.body.email.toLowerCase();
     // Validate input using Joi schema
     const { error } = registerSchema.validate(req.body);
     if (error) {
@@ -29,7 +32,6 @@ export const register = async (req, res) => {
             message: `Registration validation failed: ${error.details[0].message}`,
             errorType: 'validation'
         }, req, 400);
-        
         return res.status(400).json({ message: error.details[0].message });
     }
     try {
@@ -43,7 +45,8 @@ export const register = async (req, res) => {
         if (role === 'artist' && (about === undefined || about === null || about === '')) {
             return res.status(400).json({ message: "About section is required for artists." });
         }
-        const existingUser = await User.findOne({ $or: [ {email } , { username } ] });
+        // Always compare lowercase for existing users
+        const existingUser = await User.findOne({ $or: [ { email: email.toLowerCase() }, { username: username.toLowerCase() } ] });
         if (existingUser) {
             return res.status(400).json({ message: "User already exists!" });
         }
@@ -71,7 +74,7 @@ export const register = async (req, res) => {
         
         // Validate email format and availability
         try {
-            const isEmailValid = await validateEmail(email);
+            const isEmailValid = await validateEmail(email.toLowerCase());
             if (!isEmailValid) {
                 return res.status(400).json({message: "Invalid email format. Please enter a valid email address."});
             }
@@ -154,6 +157,8 @@ export const register = async (req, res) => {
 
 //Read... need more read functions such as displaying your profile details e.t.c
 export const login = async (req, res) => {
+    // Convert login (username/email) to lowercase for normalization
+    if (req.body.login) req.body.login = req.body.login.toLowerCase();
     // Validate input using Joi schema
     const { error } = loginSchema.validate(req.body);
     if (error) {
@@ -162,7 +167,7 @@ export const login = async (req, res) => {
     try {
         const { login, password } = req.body;
         // Only select needed fields, including approval and ban status
-        const user = await User.findOne({$or: [{email: login}, {username: login}]})
+        const user = await User.findOne({$or: [{email: login.toLowerCase()}, {username: login.toLowerCase()}]})
             .select('password role hasLoggedInBefore banned username hasBoughtCommission email profileStatus verified');
         if (!user) {
             return res.status(400).json({ message: "Invalid username or password" });
