@@ -69,8 +69,8 @@ export const setCommissionGuideTrackForSinger = async (req, res) => {
         let guideTrackForSingerUrl = '';
 
         if (youtubeUrl) {
-            // Validate YouTube URL
-            const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com\/(watch\?v=|embed\/)|youtu\.be\/)[\w-]+/;
+            // Validate YouTube URL (allow query params, timestamps, etc.)
+            const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com\/(watch\?v=|embed\/)|youtu\.be\/)[\w-]+([\w\-\?&=%.]*)?$/i;
             if (!youtubeRegex.test(youtubeUrl)) {
                 return res.status(400).json({ message: 'Invalid YouTube URL format.' });
             }
