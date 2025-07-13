@@ -69,20 +69,22 @@ export const setCommissionGuideTrackForSinger = async (req, res) => {
         let guideTrackForSingerUrl = '';
 
         if (youtubeUrl) {
-            // Validate YouTube URL (allow query params, timestamps, etc.)
-            const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com\/(watch\?v=|embed\/)|youtu\.be\/)[\w-]+([\w\-\?&=%.]*)?$/i;
-            if (!youtubeRegex.test(youtubeUrl)) {
-                return res.status(400).json({ message: 'Invalid YouTube URL format.' });
+            // Relaxed YouTube URL validation: allow any youtube.com or youtu.be link, block script tags
+            const safeUrl = youtubeUrl.trim();
+            if (!/^https?:\/\/(www\.)?(youtube\.com|youtu\.be)\//i.test(safeUrl)) {
+                return res.status(400).json({ message: 'Only YouTube links are allowed.' });
             }
-
-            // Profanity check on YouTube URL
-            if (profanity.isProfane(youtubeUrl)) {
+            // Block script injection attempts
+            if (/<script|javascript:/i.test(safeUrl)) {
+                return res.status(400).json({ message: 'Invalid characters in URL.' });
+            }
+            // Profanity check on YouTube URL (optional, can be removed if too strict)
+            if (profanity.isProfane(safeUrl)) {
                 return res.status(400).json({ 
                     message: "Please avoid using inappropriate language in the YouTube URL." 
                 });
             }
-
-            guideTrackForSingerUrl = youtubeUrl;
+            guideTrackForSingerUrl = safeUrl;
         } else {
             // Handle file upload
             // Validate file type (MP3 files only)

@@ -99,38 +99,38 @@ export const uploadGuideTrack = async (req, res) => {
 
         // Handle YouTube URL case
         if (youtubeUrl) {
-            // Validate YouTube URL format
-            const youtubeUrlPattern = /^(https?:\/\/)?(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/)[a-zA-Z0-9_-]{11}$/;
-            if (!youtubeUrlPattern.test(youtubeUrl)) {
-                return res.status(400).json({ 
-                    message: 'Invalid YouTube URL format.' 
-                });
+            // Relaxed YouTube URL validation: allow any youtube.com or youtu.be link, block script tags
+            const safeUrl = youtubeUrl.trim();
+            if (!/^https?:\/\/(www\.)?(youtube\.com|youtu\.be)\//i.test(safeUrl)) {
+                return res.status(400).json({ message: 'Only YouTube links are allowed.' });
             }
-
-            // Profanity check on YouTube URL
-            if (profanity.isProfane(youtubeUrl)) {
+            // Block script injection attempts
+            if (/<script|javascript:/i.test(safeUrl)) {
+                return res.status(400).json({ message: 'Invalid characters in URL.' });
+            }
+            // Profanity check on YouTube URL (optional, can be removed if too strict)
+            if (profanity.isProfane(safeUrl)) {
                 return res.status(400).json({ 
                     message: "Please avoid using inappropriate language in the YouTube URL." 
                 });
             }
-
             // Set YouTube URL as guide track
             if ('guideTrackForSingerUrl' in track) {
-                track.guideTrackForSingerUrl = youtubeUrl;
+                track.guideTrackForSingerUrl = safeUrl;
             } else if ('guideTrackUrl' in track) {
-                track.guideTrackUrl = youtubeUrl;
+                track.guideTrackUrl = safeUrl;
             }
             await track.save();
 
             console.log('YouTube guide track set successfully:', {
                 trackId: track._id,
-                guideTrackUrl: youtubeUrl,
+                guideTrackUrl: safeUrl,
                 userId: req.userId
             });
 
             return res.status(200).json({ 
                 message: 'YouTube guide track set successfully!',
-                guideTrackUrl: youtubeUrl
+                guideTrackUrl: safeUrl
             });
         }
 
