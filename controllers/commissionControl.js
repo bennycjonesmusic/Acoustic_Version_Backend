@@ -985,6 +985,7 @@ export const getArtistCommissions = async (req, res) => {
                 avatar: c.artist.avatar || ''
             } : null,
             price: c.price,
+            commissionPrice: c.artistPrice || (c.artist && c.artist.commissionPrice) || undefined,
             status: c.status,
             requirements: c.requirements,
             stripeSessionId: c.stripeSessionId,

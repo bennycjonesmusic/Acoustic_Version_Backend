@@ -38,6 +38,15 @@ export const verifyEmail = async (req, res) => {
         user.verified = true;
         await user.save();
 
+        // Send confirmation email after successful verification
+        try {
+            const { sendEmailVerifiedConfirmationEmail } = await import('../utils/emailAuthentication.js');
+            await sendEmailVerifiedConfirmationEmail(user.email);
+        } catch (emailError) {
+            console.error('Failed to send post-verification confirmation email:', emailError);
+            // Do not block user if email fails
+        }
+
         // Redirect to the success page after verification
         return res.redirect(`${frontendUrl}/email-verified`);
 

@@ -36,8 +36,9 @@ export const sendFollowersNewTrack = async (userEmail, artist, newTrack) => {
 
 
 export const sendCommissionPreviewEmail = async (customerEmail, artist, commission) => {
-  // Direct link to the preview file (assuming a frontend route for preview)
-  const previewUrl = `${process.env.CLIENT_URL}/commission/preview/${commission._id}`;
+  // Direct link to the login page
+  const previewUrl = `${process.env.CLIENT_URL}/login`;
+  const previewUrl2 = `${process.env.CLIENT_URL}/my-commission-requests`;
 
   const mailOptions = {
     from: `AcousticVersion <${process.env.EMAIL_USER}>`,
@@ -47,8 +48,11 @@ export const sendCommissionPreviewEmail = async (customerEmail, artist, commissi
       <h2>Your commission preview is ready!</h2>
       <p><strong>Artist:</strong> ${artist.username}</p>
       <p><strong>Commission:</strong> ${commission.requirements || 'Custom Backing Track'}</p>
-      <p>Click below to listen to your preview and approve or request changes:</p>
+      <p>Click below to login</p>
       <a href="${previewUrl}">${previewUrl}</a>
+      <p>After logging in, go to My Profile and then My Commission Requests to view your commission.</p>
+      <p>Alternatively, if you are already logged in, you can go directly to:</p>
+      <a href="${previewUrl2}">${previewUrl2}</a>
       <br><br>
       <small>You will receive the full track link after you confirm you are happy with the preview.</small>
     `,
