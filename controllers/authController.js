@@ -128,20 +128,38 @@ export const register = async (req, res) => {
 
         // If artist or admin, remind to upload at least one example (for admin, show similar message)
         if (role === 'artist' || userData.role === 'admin') {
-            return res.status(201).json({
-                message: `${userData.role.charAt(0).toUpperCase() + userData.role.slice(1)} registered. Please upload at least one playing example. Your profile will remain hidden and pending approval until reviewed (for artists).`,
-                userId: newUser._id,
-                profileStatus: newUser.profileStatus
+            // Copy login logic for token and makeAdmin
+            await makeAdmin(req, res, async () => {
+                const userId = newUser._id || newUser.id;
+                const token = jwt.sign({ id: userId, email: newUser.email, role: newUser.role }, process.env.JWT_SECRET, { expiresIn: '2h' });
+                return res.status(201).json({
+                    token,
+                    userId: newUser._id,
+                    profileStatus: newUser.profileStatus,
+                    message: `${userData.role.charAt(0).toUpperCase() + userData.role.slice(1)} registered. Please upload at least one playing example. Your profile will remain hidden and pending approval until reviewed (for artists).`
+                });
             });
+            return;
         }
 
-        const token = jwt.sign(
-        { userId: newUser._id },
-         process.env.EMAIL_VERIFICATION_SECRET,
-        { expiresIn: '1d' }
+        // For regular users, send verification email and log in immediately
+        const verificationToken = jwt.sign(
+            { userId: newUser._id },
+            process.env.EMAIL_VERIFICATION_SECRET,
+            { expiresIn: '1d' }
         );
-        await sendVerificationEmail(email, token);
-        res.status(201).json({ message: "User has been registered!" });
+        await sendVerificationEmail(email, verificationToken);
+
+        // Copy login logic for token and makeAdmin
+        await makeAdmin(req, res, async () => {
+            const userId = newUser._id || newUser.id;
+            const token = jwt.sign({ id: userId, email: newUser.email, role: newUser.role }, process.env.JWT_SECRET, { expiresIn: '2h' });
+            return res.status(201).json({
+                token,
+                message: "User has been registered!"
+            });
+        });
+        return;
     } catch (error) {
         console.error('Error checking for existing user:', error);
         
@@ -177,15 +195,15 @@ export const login = async (req, res) => {
         }
         // TEST MODE: Automatically verify user for testing
      
-        if (!user.verified) {
+        //if (!user.verified) {
             // In test environment, auto-verify user for easier testing
-            if (process.env.NODE_ENV === 'test') {
-                user.verified = true;
-                await user.save();
-            } else {
-                return res.status(403).json({ message: "Please verify your email before logging in." });
-            }
-        }
+            //if (process.env.NODE_ENV === 'test') {
+              //  user.verified = true;
+                //await user.save();
+            //} else {
+              //  return res.status(403).json({ message: "Please verify your email before logging in." });
+            //}
+        //}
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
             return res.status(400).json({ message: "Invalid username or password" });
