@@ -1,3 +1,10 @@
+// Public get all track IDs (for sitemap, etc)
+import { getAllIds } from '../controllers/tracksController.js';
+
+// ...existing code...
+
+// Public route to get all track IDs
+
 import express from 'express';
 import { searchTracks, queryTracks, queryUsers, getTrack, getFeaturedTracks, getFeaturedArtists, searchUserByName, getUserDetails, getLicenseInformation } from '../controllers/publicController.js';
 import publicMiddleware from '../middleware/public_auth.js';
@@ -20,6 +27,10 @@ console.log('[ROUTE] Registering /public/tracks/featured');
 // Public get featured tracks
 router.get('/tracks/featured', publicMiddleware, asyncHandler(getFeaturedTracks));
 
+
+// Public get all track IDs (for sitemap, etc)
+router.get('/all-ids', publicMiddleware, getAllIds);
+
 // Public get single track by id
 router.get('/tracks/:id', publicMiddleware, getTrack);
 
@@ -31,6 +42,7 @@ router.get('/users/search', publicMiddleware, searchUserByName);
 
 // Public get user details by id
 router.get('/users/:id', publicMiddleware, getUserDetails);
+
 
 // Public get license information for a track
 router.get('/tracks/:trackId/license-info', publicMiddleware, asyncHandler(getLicenseInformation));
