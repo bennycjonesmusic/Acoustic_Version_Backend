@@ -58,7 +58,7 @@ async function processPayouts() {
     const platformStripeAccountId = process.env.PLATFORM_STRIPE_ACCOUNT_ID;
     const usersWithMoneyOwed = await User.find({
       'moneyOwed.0': { $exists: true }, // Has at least one money owed entry
-      stripeAccountId: { $exists: true, $ne: null, $ne: platformStripeAccountId },
+      stripeAccountId: { $exists: true, $ne: null },
       stripePayoutsEnabled: true
     });
 
@@ -92,7 +92,6 @@ async function processPayouts() {
       
       for (const owed of user.moneyOwed) {
         totalProcessed++;
-
         try {
           let commission = null;
           // If this is a commission payout, ensure commission is cron_pending before paying out
@@ -128,7 +127,46 @@ async function processPayouts() {
             continue;
           }
 
-          // Create transfer to artist
+          // If this is the platform owner, skip Stripe payout but update commission, user, and artist as if successful
+          if (user.stripeAccountId === platformStripeAccountId) {
+            console.log(`[CRON PAYOUT] ⚠️  Platform owner account detected, skipping Stripe payout but updating commission and user fields.`);
+            if (commission) {
+              try {
+                commission.status = 'completed';
+                commission.stripeTransferId = 'PLATFORM-OWNER-NO-TRANSFER';
+                const artist = await User.findById(commission.artist);
+                const userDoc = await User.findById(commission.customer);
+                let commissionPurchase = userDoc.purchasedTracks.find(pt => pt.track?.toString() === commission._id.toString());
+                if (commissionPurchase && (!commissionPurchase.track || commissionPurchase.track === null)) {
+                  commissionPurchase.track = commission._id;
+                  commissionPurchase.commission = commission._id;
+                  await userDoc.save();
+                } else if (!commissionPurchase) {
+                  userDoc.purchasedTracks.push({
+                    track: commission._id,
+                    commission: commission._id,
+                    paymentIntentId: commission.stripePaymentIntentId || 'commission',
+                    purchasedAt: new Date(),
+                    price: commission.price || 0,
+                    refunded: false
+                  });
+                  await userDoc.save();
+                }
+                artist.numOfCommissions = (artist.numOfCommissions || 0) + 1;
+                await artist.save();
+                await commission.save();
+                console.log(`[CRON PAYOUT] ✅ Updated commission ${owed.commissionId} status to 'completed' (platform owner)`);
+              } catch (commissionError) {
+                console.error(`[CRON PAYOUT] ⚠️  Failed to update commission ${owed.commissionId} status:`, commissionError.message);
+              }
+            }
+            remainingBalance -= transferAmount;
+            totalSuccessful++;
+            // Don't add to remainingOwed - this payout was successful (removes from moneyOwed)
+            continue;
+          }
+
+          // Create transfer to artist (normal case)
           const transfer = await stripeClient.transfers.create({
             amount: transferAmount,
             currency: 'gbp',
@@ -139,7 +177,6 @@ async function processPayouts() {
               source: owed.source,
               originalAmount: owed.amount.toString(),
               createdAt: owed.createdAt.toISOString(),
-              // Ensure all metadata values are strings for Stripe
               ...Object.fromEntries(
                 Object.entries(owed.metadata || {}).map(([key, value]) => [
                   key, 
@@ -156,27 +193,26 @@ async function processPayouts() {
             try {
               commission.status = 'completed';
               commission.stripeTransferId = transfer.id;
-              
               const artist = await User.findById(commission.artist);
-              const user = await User.findById(commission.customer);
-              let commissionPurchase = user.purchasedTracks.find(pt => pt.track?.toString() === commission._id.toString());
+              const userDoc = await User.findById(commission.customer);
+              let commissionPurchase = userDoc.purchasedTracks.find(pt => pt.track?.toString() === commission._id.toString());
               if (commissionPurchase && (!commissionPurchase.track || commissionPurchase.track === null)) {
-                  commissionPurchase.track = commission._id;
-                  commissionPurchase.commission = commission._id; // Set commission ref if missing
-                  await user.save();
+                commissionPurchase.track = commission._id;
+                commissionPurchase.commission = commission._id;
+                await userDoc.save();
               } else if (!commissionPurchase) {
-                  user.purchasedTracks.push({
-                      track: commission._id, // Always use commission._id as BackingTrack ref
-                      commission: commission._id, // Set commission ref
-                      paymentIntentId: commission.stripePaymentIntentId || 'commission',
-                      purchasedAt: new Date(),
-                      price: commission.price || 0,
-                      refunded: false
-                  });
-                  await user.save();
+                userDoc.purchasedTracks.push({
+                  track: commission._id,
+                  commission: commission._id,
+                  paymentIntentId: commission.stripePaymentIntentId || 'commission',
+                  purchasedAt: new Date(),
+                  price: commission.price || 0,
+                  refunded: false
+                });
+                await userDoc.save();
               }
-              artist.numOfCommissions = (artist.numOfCommissions || 0) + 1; 
-              await artist.save();// Increment artist's commission count
+              artist.numOfCommissions = (artist.numOfCommissions || 0) + 1;
+              await artist.save();
               await commission.save();
               console.log(`[CRON PAYOUT] ✅ Updated commission ${owed.commissionId} status to 'completed'`);
             } catch (commissionError) {
@@ -188,7 +224,6 @@ async function processPayouts() {
           // Deduct from our remaining balance
           remainingBalance -= transferAmount;
           totalSuccessful++;
-
           // Don't add to remainingOwed - this payout was successful
 
         } catch (error) {
