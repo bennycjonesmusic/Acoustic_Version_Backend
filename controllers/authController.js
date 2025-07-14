@@ -131,9 +131,16 @@ export const register = async (req, res) => {
         if (role === 'artist' || userData.role === 'admin') {
             const userId = newUser._id || newUser.id;
             const token = jwt.sign({ id: userId, email: newUser.email, role: newUser.role }, process.env.JWT_SECRET, { expiresIn: '2h' });
+            res.cookie('authToken', token, {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'lax',
+                maxAge: 2 * 60 * 60 * 1000 // 2 hours
+            });
             return res.status(201).json({
                 token,
-                userId: newUser._id,
+                hasBoughtCommission: newUser.hasBoughtCommission,
+                banned: newUser.banned,
                 profileStatus: newUser.profileStatus,
                 message: `${userData.role.charAt(0).toUpperCase() + userData.role.slice(1)} registered. Please upload at least one playing example. Your profile will remain hidden and pending approval until reviewed (for artists).`
             });
@@ -149,8 +156,17 @@ export const register = async (req, res) => {
 
         const userId = newUser._id || newUser.id;
         const token = jwt.sign({ id: userId, email: newUser.email, role: newUser.role }, process.env.JWT_SECRET, { expiresIn: '2h' });
+        res.cookie('authToken', token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            maxAge: 2 * 60 * 60 * 1000 // 2 hours
+        });
         return res.status(201).json({
             token,
+            hasBoughtCommission: newUser.hasBoughtCommission,
+            banned: newUser.banned,
+            profileStatus: newUser.profileStatus,
             message: "User has been registered!"
         });
     } catch (error) {
