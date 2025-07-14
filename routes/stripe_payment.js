@@ -314,12 +314,34 @@ router.post('/create-checkout-session', authMiddleware, async (req, res) => {
 
 router.get('/dashboard-data', authMiddleware, async (req, res) => {
 
-    try {
 
-        const user = await User.findById(req.userId).select('stripeAccountId stripeAccountStatus stripePayoutsEnabled stripeOnboardingComplete totalIncome amountOfTracksSold numOfCommissions');
+    try {
+        // Select moneyOwed array as well
+        const user = await User.findById(req.userId).select('stripeAccountId stripeAccountStatus stripePayoutsEnabled stripeOnboardingComplete totalIncome amountOfTracksSold numOfCommissions moneyOwed');
 
         if (!user) {
             return res.status(404).json({ error: "The user has not been found or does not exist."});
+        }
+
+        // Calculate internal pending amount from moneyOwed array (sum of all amounts)
+        let internalPendingAmount = 0;
+        if (Array.isArray(user.moneyOwed)) {
+            internalPendingAmount = user.moneyOwed.reduce((sum, item) => sum + (item.amount || 0), 0);
+        }
+
+        let stripePending = 0;
+        let stripeAvailable = 0;
+        if (user.stripeAccountId) {
+            try {
+                const balance = await stripeClient.balance.retrieve({ stripeAccount: user.stripeAccountId });
+                // Stripe returns an array of balances per currency
+                const gbpPending = (balance.pending || []).find(b => b.currency === 'gbp');
+                const gbpAvailable = (balance.available || []).find(b => b.currency === 'gbp');
+                stripePending = gbpPending ? gbpPending.amount / 100 : 0;
+                stripeAvailable = gbpAvailable ? gbpAvailable.amount / 100 : 0;
+            } catch (stripeErr) {
+                console.error('Error fetching Stripe balance:', stripeErr);
+            }
         }
 
         return res.status(200).json({
@@ -330,14 +352,12 @@ router.get('/dashboard-data', authMiddleware, async (req, res) => {
             totalIncome: user.totalIncome || 0,
             amountOfTracksSold: user.amountOfTracksSold || 0,
             numOfCommissions: user.numOfCommissions || 0,
-            hasStripeAccount: !!user.stripeAccountId
-
-        })
-
-
-
+            hasStripeAccount: !!user.stripeAccountId,
+            pendingAmount: stripePending,
+            availableBalance: stripeAvailable,
+            internalPendingAmount: internalPendingAmount
+        });
     } catch (error) {
-
         console.error('Error fetching stripe dashboard data:', error);
         return res.status(500).json({ error: 'Failed to fetch Stripe dashboard' });
     }
