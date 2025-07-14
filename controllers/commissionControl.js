@@ -336,6 +336,11 @@ export const approveCommissionAndPayout = async (req, res) => {
         }
 
         artist.moneyOwed.push(moneyOwedEntry);
+        // Increment totalIncome for commissions
+        if (typeof artist.totalIncome !== 'number') {
+            artist.totalIncome = 0;
+        }
+        artist.totalIncome += artistPrice;
         await artist.save();
 
         // Set commission to cron_pending since it's now queued
