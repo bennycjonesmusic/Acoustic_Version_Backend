@@ -18,7 +18,7 @@ router.get('/analytics', artistAuthMiddleware, async (req, res) => {  try {
         path: 'uploadedTracks',
         select: 'title price purchaseCount averageRating numOfRatings createdAt downloadCount'
       })
-      .select('totalIncome amountOfTracksSold numOfCommissions createdAt');
+      .select('totalIncome amountOfTracksSold numOfCommissions createdAt moneyOwed');
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
@@ -35,6 +35,8 @@ router.get('/analytics', artistAuthMiddleware, async (req, res) => {  try {
     const totalSales = user.amountOfTracksSold || 0;
     const totalRevenue = user.totalIncome || 0;
     const totalCommissions = commissions.length;
+    // Calculate total money owed (sum of all moneyOwed.amount)
+    const totalMoneyOwed = (user.moneyOwed || []).reduce((sum, entry) => sum + (entry.amount || 0), 0);
 
     // Track performance metrics
     const trackPerformance = tracks.map(track => ({
@@ -113,7 +115,8 @@ router.get('/analytics', artistAuthMiddleware, async (req, res) => {  try {
         totalCommissions,
         averageTrackRating: tracks.length > 0 
           ? parseFloat((tracks.reduce((sum, t) => sum + (t.averageRating || 0), 0) / tracks.length).toFixed(1))
-          : 0
+          : 0,
+        totalMoneyOwed: parseFloat(totalMoneyOwed.toFixed(2))
       },
       trackPerformance,
       topTracks,
