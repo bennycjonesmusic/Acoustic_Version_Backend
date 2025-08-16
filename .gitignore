@@ -51,3 +51,13 @@ test-assets/
 
 # Misc
 toDo.txt
+
+# Large audio files
+*.wav
+*.mp3
+*.flac
+*.aac
+
+# Large trace/debug files
+Trace-*.json
+**/Trace-*.json
