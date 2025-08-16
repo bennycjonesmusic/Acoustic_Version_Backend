@@ -13,18 +13,18 @@ router.post('/track/:trackId/hit', trackBackingTrackHit);
 // Route to get totalHits for all tracks uploaded by a user
 router.get('/user/total-hits', authMiddleware, getUserTotalHits);
 // Route to get most viewed, least viewed, and total overall track hits
-router.get('/track/view-stats', getTrackViewStats);
+router.get('/track/view-stats', authMiddleware, getTrackViewStats);
 // Route to get all pageHits (page URLs and their hit counts)
-router.get('/page-hits', getAllPageHits);
+router.get('/page-hits', authMiddleware, getAllPageHits);
 // Route to get total website views per week
-router.get('/weekly-hits', getWeeklyWebsiteHits);
+router.get('/weekly-hits', authMiddleware, getWeeklyWebsiteHits);
 // Route to get total track views per week for a user (artist)
 router.get('/user/track-weekly-hits', authMiddleware, getUserTrackWeeklyHits);
 // Route to get last 30 days daily site hits
-router.get('/daily-hits-last30', getDailyHitsLast30);
+router.get('/daily-hits-last30', authMiddleware, getDailyHitsLast30);
 // Route to get most visited track
-router.get('/track/most-visited', getMostVisitedTrack);
+router.get('/track/most-visited', authMiddleware, getMostVisitedTrack);
 // Route to get least visited track
-router.get('/track/least-visited', getLeastVisitedTrack);
+router.get('/track/least-visited', authMiddleware, getLeastVisitedTrack);
 
 export default router;

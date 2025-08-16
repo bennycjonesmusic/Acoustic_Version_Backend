@@ -14,7 +14,7 @@ async function testConnection() {
       console.log('Testing login endpoint...');
       const loginResponse = await axios.post('http://localhost:3000/auth/login', {
         login: 'sarahandbenduo@gmail.com',
-        password: 'Moobslikejabba123456'
+        password: 'test-password-123'
       });
       console.log('Login successful, server is running!');
       return loginResponse.data.token;

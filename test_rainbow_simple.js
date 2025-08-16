@@ -18,7 +18,7 @@ async function testOverTheRainbowUpload() {
     console.log('🔐 Logging in...');
     const loginResponse = await axios.post(`${BASE_URL}/auth/login`, {
       login: 'sarahandbenduo@gmail.com',
-      password: 'Moobslikejabba123456'
+      password: 'test-password-123'
     });
     
     if (!loginResponse.data.token) {

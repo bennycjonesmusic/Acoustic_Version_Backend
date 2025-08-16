@@ -7,7 +7,7 @@ import axios from 'axios';
 
 const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
 const ADMIN_EMAIL = process.env.OWNER_EMAIL;
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Moobslikejabba123456';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'test-password-123';
 
 async function getAdminToken() {
   const res = await axios.post(`${BASE_URL}/auth/login`, {

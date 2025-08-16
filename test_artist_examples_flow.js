@@ -15,12 +15,12 @@ import User from './models/User.js';
 
 const BASE_URL = 'http://localhost:3000';
 const TEST_EMAIL = `artist@example.com`;
-const TEST_PASSWORD = 'Moobslikejabba123456'; 
+const TEST_PASSWORD = 'test-password-123'; 
 const ADMIN_EMAIL = 'acousticversionuk@gmail.com';
-    const ADMIN_PASSWORD = 'Moobslikejabba123456';
+    const ADMIN_PASSWORD = 'test-admin-password-123';
 
 const CUSTOMER_EMAIL = "sarahandbenduo@gmail.com";
-const CUSTOMER_PASSWORD = "Moobslikejabba123456";
+const CUSTOMER_PASSWORD = "test-customer-password-123";
 let artistToken, artistId, exampleId, customerId, adminUploadedTrackId, artistUploadedTrackId, adminToken;
 
 async function login(email, password) {

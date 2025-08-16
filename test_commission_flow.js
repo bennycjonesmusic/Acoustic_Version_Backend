@@ -9,9 +9,9 @@ dotenv.config();
 const BASE_URL = 'http://localhost:3000';
 
 const CUSTOMER_EMAIL = 'acousticversionuk@gmail.com';
-const CUSTOMER_PASSWORD = 'Moobslikejabba123456'; 
+const CUSTOMER_PASSWORD = 'test-customer-password-123'; 
 const ARTIST_EMAIL = 'sarahandbenduo@gmail.com';
-const ARTIST_PASSWORD = 'Moobslikejabba123456';
+const ARTIST_PASSWORD = 'test-artist-password-123';
 
 async function login(email, password) {
 
@@ -68,7 +68,7 @@ async function main() {
 
   // --- Ensure admin user is deleted and re-registered for a clean test ---
   const ADMIN_EMAIL = 'admin@acousticversion.co.uk';
-  const ADMIN_PASSWORD = 'Moobslikejabba123456';
+  const ADMIN_PASSWORD = 'test-admin-password-123';
   try {
     // Use the new test-only endpoint to delete the admin user, authenticating as acousticversionuk@gmail.com (who is an admin)
     const adminToken = await login(CUSTOMER_EMAIL, CUSTOMER_PASSWORD);

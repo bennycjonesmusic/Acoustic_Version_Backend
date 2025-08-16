@@ -231,6 +231,76 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Cache-Control'],
   credentials: true // Allow cookies to be sent with requests
 }));
+// Block common PHP/WordPress probe URLs and .env file access attempts
+// --- Suspicious activity notification setup ---
+// Replace this with your real email sending logic (e.g., nodemailer, SendGrid, etc.)
+function notifyAdminOfSuspiciousActivity({ ip, url, userAgent }) {
+  // Example: send an email, push notification, or log to external service
+  // For now, just log to console (replace with real implementation)
+  console.log(`[ALERT] Suspicious activity detected! IP: ${ip}, URL: ${url}, User-Agent: ${userAgent}`);
+  // TODO: Integrate with email or alerting system
+}
+
+const blockedPatterns = [
+  /wp-admin/i,
+  /wp-login/i,
+  /wp-config/i,
+  /wp-content/i,
+  /wp-includes/i,
+  /wp-json/i,
+  /wp-cron/i,
+  /wp-.*\.php/i,
+  /wordpress/i,
+  /wordpress.*/i,
+  /setup-config\.php/i,
+  /phpmyadmin/i,
+  /admin\.php/i,
+  /adminpanel/i,
+  /adminarea/i,
+  /administrator/i,
+  /admincp/i,
+  /\.php(\?.*)?$/i,
+  /\.env/i,
+  /\.git/i,
+  /\.htaccess/i,
+  /\.DS_Store/i,
+  /composer\.json/i,
+  /composer\.lock/i,
+  /config\.php/i,
+  /xmlrpc\.php/i,
+  /adminer/i,
+  /id_rsa/i
+];
+app.use((req, res, next) => {
+  const url = req.url || '';
+  // Allow analytics endpoints to always pass through
+  if (url.startsWith('/analytics')) {
+    return next();
+  }
+  for (const pattern of blockedPatterns) {
+    if (pattern.test(url)) {
+      console.warn(`[SECURITY] Blocked suspicious request: ${url} from IP: ${req.ip}`);
+      notifyAdminOfSuspiciousActivity({
+        ip: req.ip,
+        url: req.url,
+        userAgent: req.headers['user-agent'] || 'unknown'
+      });
+      return res.status(403).send(`
+        <html>
+          <head><title>I'm watching you ;)</title></head>
+          <body style="font-family: sans-serif; background: #fffbe6; color: #222; text-align: center; padding-top: 10vh;">
+            <h1 style="font-size:3em;">👁️ I'm watching you ;)</h1>
+            <p style="font-size:1.5em;">Your activity has been logged.</p>
+            <hr style="margin: 2em auto; width: 50%;">
+            <p style="color: #888; font-size: 0.9em;">Your IP: ${req.ip}</p>
+          </body>
+        </html>
+      `);
+    }
+  }
+  next();
+});
+
 // Register the webhook route BEFORE any body parsers!
 app.use('/webhook/stripe', webhookRoutes); // <-- Change to match Stripe CLI forwarding
 app.use(express.json({ limit: '100mb' })); // Increased limit for file uploads

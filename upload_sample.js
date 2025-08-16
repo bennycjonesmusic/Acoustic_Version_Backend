@@ -11,7 +11,7 @@ async function main() {
   // 1. Login to get JWT
   const loginRes = await axios.post(`${BASE_URL}/auth/login`, {
     login: "sarahandbenduo@gmail.com",
-    password: "Moobslikejabba123456",
+    password: "test-password-123",
   });
   const token = loginRes.data.token;
   if (!token) throw new Error('Login failed, no token returned');

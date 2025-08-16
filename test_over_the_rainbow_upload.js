@@ -99,7 +99,7 @@ async function main() {
     log('=' .repeat(60), 'cyan');
     
     // Login as Sarahandbenduo
-    const token = await loginArtist('sarahandbenduo@gmail.com', 'Moobslikejabba123456');    // Track data for Over The Rainbow
+    const token = await loginArtist('sarahandbenduo@gmail.com', 'test-password-123');    // Track data for Over The Rainbow
     const trackData = {
       title: 'Over The Rainbow Debug Filename Test',
       originalArtist: 'Judy Garland',

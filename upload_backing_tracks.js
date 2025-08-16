@@ -120,17 +120,17 @@ const artistCredentials = [
   {
     username: 'sarahandbenduo',
     email: 'sarahandbenduo@gmail.com',
-    password: 'moobslikejabba123456'
+    password: 'test-password-123'
   },
   {
     username: 'bennycjonesmusic',
     email: 'bennycjonesmusic@gmail.com', 
-    password: 'moobslikejabba123456'
+    password: 'test-password-123'
   },
   {
     username: 'bespokeacousticguitar',
     email: 'bespokeacousticguitarbackingtracks@gmail.com',
-    password: 'moobslikejabba123456'
+    password: 'test-password-123'
   }
 ];
 

@@ -5,7 +5,10 @@ import User from '../models/User.js';
 // Controller to increment unique visitors and total hits
 export const trackSiteVisit = async (req, res) => {
   try {
-    const ip = req.body?.ip || req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+    const ip = (req.body?.ip)
+      || (req.headers['x-forwarded-for'] ? req.headers['x-forwarded-for'].split(',')[0].trim() : undefined)
+      || req.ip
+      || req.connection.remoteAddress;
     let pageUrl = req.body?.pageUrl || null;
     let unique = false;
     
@@ -112,7 +115,7 @@ export const getTrackViewStats = async (req, res) => {
   try {
     const tracks = await BackingTrack.find({}, 'analytics.totalHits title');
     if (!tracks || tracks.length === 0) {
-      return res.status(200).json({ mostViewed: null, leastViewed: null, totalHits: 0 });
+      return res.status(200).json({ mostViewed: null, leastViewed: null, totalHits: 0, top10: [] });
     }
     let totalHits = 0;
     tracks.forEach(track => {
@@ -122,10 +125,21 @@ export const getTrackViewStats = async (req, res) => {
     const sorted = tracks.slice().sort((a, b) => (a.analytics?.totalHits || 0) - (b.analytics?.totalHits || 0));
     const leastViewed = sorted[0];
     const mostViewed = sorted[sorted.length - 1];
+    // Top 10 most viewed tracks (descending order)
+    const top10 = tracks
+      .slice()
+      .sort((a, b) => (b.analytics?.totalHits || 0) - (a.analytics?.totalHits || 0))
+      .slice(0, 10)
+      .map(track => ({
+        id: track._id,
+        title: track.title,
+        totalHits: track.analytics?.totalHits || 0
+      }));
     return res.status(200).json({
       mostViewed: { id: mostViewed._id, title: mostViewed.title, totalHits: mostViewed.analytics?.totalHits || 0 },
       leastViewed: { id: leastViewed._id, title: leastViewed.title, totalHits: leastViewed.analytics?.totalHits || 0 },
-      totalHits
+      totalHits,
+      top10
     });
   } catch (error) {
     console.error('Error getting track view stats:', error);

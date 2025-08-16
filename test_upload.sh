@@ -10,7 +10,7 @@ echo "=================================================================="
 echo "🔐 Logging in as sarahandbenduo@gmail.com..."
 LOGIN_RESPONSE=$(curl -s -X POST "$BASE_URL/auth/login" \
   -H "Content-Type: application/json" \
-  -d '{"login":"sarahandbenduo@gmail.com","password":"Moobslikejabba123456"}')
+  -d '{"login":"sarahandbenduo@gmail.com","password":"test-password-123"}')
 
 TOKEN=$(echo "$LOGIN_RESPONSE" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
 

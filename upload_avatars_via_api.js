@@ -32,19 +32,19 @@ const avatarMappings = [
   {
     username: 'Sarahandbenduo',
     email: 'sarahandbenduo@gmail.com',
-    password: 'Moobslikejabba123456',
+    password: 'test-password-123',
     filename: 'Sarahandbenduo.jpg'
   },
   {
     username: 'Bennycjonesmusic', 
     email: 'bennycjonesmusic@gmail.com',
-    password: 'Moobslikejabba123456',
+    password: 'test-password-123',
     filename: 'bennycjonesmusiclogo.jpg'
   },
   {
     username: 'bespokeacousticguitar',
     email: 'bespokeacousticguitarbackingtracks@gmail.com',
-    password: 'Moobslikejabba123456',
+    password: 'test-password-123',
     filename: 'bespokeacousticguitarbackingtracks.jpg'
   }
 ];

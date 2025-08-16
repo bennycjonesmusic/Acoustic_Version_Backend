@@ -23,21 +23,21 @@ const ARTISTS_TO_REGISTER = [
   {
     username: 'Sarahandbenduo',
     email: 'sarahandbenduo@gmail.com',
-    password: 'Moobslikejabba123456',
+    password: 'test-password-123',
     role: 'artist',
     about: 'Sarah and Ben Duo - Professional acoustic musicians creating beautiful backing tracks'
   },
   {
     username: 'Bennycjonesmusic',
     email: 'bennycjonesmusic@gmail.com', 
-    password: 'Moobslikejabba123456',
+    password: 'test-password-123',
     role: 'artist',
     about: 'Benny C Jones Music - Creating quality acoustic guitar backing tracks'
   },
   {
     username: 'bespokeacousticguitar',
     email: 'bespokeacousticguitarbackingtracks@gmail.com',
-    password: 'Moobslikejabba123456', 
+    password: 'test-password-123', 
     role: 'artist',
     about: 'Bespoke Acoustic Guitar Backing Tracks - Custom acoustic arrangements'
   }

@@ -13,9 +13,9 @@ import CommissionRequest from './models/CommissionRequest.js';
 
 const BASE_URL = 'http://localhost:3000';
 const CUSTOMER_EMAIL = 'acousticversionuk@gmail.com';
-const CUSTOMER_PASSWORD = 'Moobslikejabba123456';
+const CUSTOMER_PASSWORD = 'test-customer-password-123';
 const ARTIST_EMAIL = 'sarahandbenduo@gmail.com';
-const ARTIST_PASSWORD = 'Moobslikejabba123456';
+const ARTIST_PASSWORD = 'test-artist-password-123';
 
 async function login(email, password) {
     const response = await axios.post(`${BASE_URL}/auth/login`, {

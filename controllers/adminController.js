@@ -480,7 +480,8 @@ export const getWebsiteAnalytics = async (req, res) => {
     // Fetch analytics from Website schema
     let website = await Website.findOne();
     if (!website) {
-      website = await Website.create({}); // Create with defaults
+    website = await Website.create({}); // Create with defaults
+    console.log('[ADMIN] Created new Website analytics document via getWebsiteAnalytics endpoint');
     }
     if (!website.analytics) {
       return res.status(404).json({ message: 'No website analytics found.' });

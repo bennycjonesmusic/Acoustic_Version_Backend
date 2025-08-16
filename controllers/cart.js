@@ -50,11 +50,11 @@ export const addToCart = async (req, res) => {
         }
 
         // 🔒 Security: Check if track is already in cart (use 'track' field, not 'trackId')
-        if (!user.cart.some(item => item.track.toString() === trackId)) {
-            user.cart.push({ track: trackId }); // addedAt will be set automatically
-            await user.save();
+        if (user.cart.some(item => item.track.toString() === trackId)) {
+            return res.status(409).json({ message: "Track is already in cart" });
         }
-
+        user.cart.push({ track: trackId }); // addedAt will be set automatically
+        await user.save();
         return res.status(200).json({ message: "Track added to cart successfully" });
 
     } catch (error) {
